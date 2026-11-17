@@ -28,7 +28,15 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         let folderMd = dir.appendingPathComponent("x.md")
         try FileManager.default.createDirectory(at: folderMd, withIntermediateDirectories: true)
-        await #expect(throws: PreviewError.self) { try await MarkdownPreviewRenderer().render(folderMd) }
+        do {
+            _ = try await MarkdownPreviewRenderer().render(folderMd)
+            Issue.record("expected .unreadable")
+        } catch {
+            guard case .unreadable = error else {
+                Issue.record("expected .unreadable, got \(error)")
+                return
+            }
+        }
     }
 
     @Test func rendersDocumentWithBaseAndCSP() async throws {
@@ -39,7 +47,11 @@ import Testing
         let text = "# Hi\n![p](<pics/ä b.png>)"
         try text.write(to: file, atomically: true, encoding: .utf8)
         let result = try await MarkdownPreviewRenderer().render(file)
-        #expect(result.html.contains("Content-Security-Policy"))
+        let meta =
+            "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src &#39;none&#39;; img-src mcpreview: https: data:; style-src &#39;unsafe-inline&#39;; font-src mcpreview: data:\">"
+        let metaRange = try #require(result.html.range(of: meta))
+        let baseRange = try #require(result.html.range(of: "<base "))
+        #expect(metaRange.lowerBound < baseRange.lowerBound)
         #expect(result.html.contains("<base href=\"mcpreview://local/"))
         #expect(result.html.contains("My%20Docs/\">"))
         #expect(result.html.contains("<h1 id=\"hi\">Hi</h1>"))
@@ -72,6 +84,10 @@ import Testing
         let result = try await MarkdownPreviewRenderer().render(file)
         #expect(result.source == "Grüße")
         #expect(result.html.contains("Grüße"))
+        // 0x81 is undefined in CP1252, so this reaches the ISO Latin-1 branch.
+        let raw = dir.appendingPathComponent("raw.md")
+        try Data([0x47, 0x81, 0xFC]).write(to: raw)
+        #expect(try await MarkdownPreviewRenderer.sourceText(of: raw) == "G\u{81}ü")
     }
 
     @Test func utf8BomAndUTF16() async throws {
@@ -94,5 +110,60 @@ import Testing
         let start = ContinuousClock.now
         _ = try await MarkdownPreviewRenderer().render(file)
         #expect(ContinuousClock.now - start < .seconds(3))
+    }
+
+    @Test func truncationDoesNotSplitUTF8Character() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("emoji.md")
+        // The 4-byte emoji starts at byte 4,999,998, so the 5,000,000 cut lands inside it.
+        let pad = String(repeating: "a", count: 4_999_998)
+        try Data((pad + "😀 tail").utf8).write(to: file)
+        let text = try await MarkdownPreviewRenderer.sourceText(of: file)
+        #expect(text == pad + "\n… (truncated)")
+        #expect(!text.contains("ð") && !text.contains("\u{FFFD}"))
+    }
+
+    @Test func truncationDoesNotSplitUTF16SurrogatePair() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("u16.md")
+        // BOM (2 bytes) + 2,499,998 units = 4,999,998 bytes, then a surrogate pair cut after its high half.
+        let pad = String(repeating: "a", count: 2_499_998)
+        try (Data([0xFF, 0xFE]) + (pad + "😀 tail").data(using: .utf16LittleEndian)!).write(to: file)
+        let text = try await MarkdownPreviewRenderer.sourceText(of: file)
+        #expect(text == pad + "\n… (truncated)")
+    }
+
+    @Test func symlinkedMarkdownRendersWithLinkFolderAsBase() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let target = dir.appendingPathComponent("r.md")
+        try "# Linked".write(to: target, atomically: true, encoding: .utf8)
+        let sub = dir.appendingPathComponent("links")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        let link = sub.appendingPathComponent("README.md")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let result = try await MarkdownPreviewRenderer().render(link)
+        #expect(result.html.contains("<h1 id=\"linked\">Linked</h1>"))
+        #expect(result.baseURL.absoluteString.hasSuffix("/links/"))
+        #expect(try await MarkdownPreviewRenderer.sourceText(of: link) == "# Linked")
+    }
+
+    @Test func danglingSymlinkIsUnreadable() async throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let link = dir.appendingPathComponent("gone.md")
+        try FileManager.default.createSymbolicLink(
+            at: link, withDestinationURL: dir.appendingPathComponent("missing.md"))
+        do {
+            _ = try await MarkdownPreviewRenderer().render(link)
+            Issue.record("expected .unreadable")
+        } catch {
+            guard case .unreadable = error else {
+                Issue.record("expected .unreadable, got \(error)")
+                return
+            }
+        }
     }
 }

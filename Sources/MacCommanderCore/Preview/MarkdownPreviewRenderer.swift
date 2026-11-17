@@ -59,6 +59,8 @@ public struct MarkdownPreviewRenderer: PreviewRenderer {
     @concurrent
     private static func readSource(_ file: URL, failIfTooLarge: Bool) async throws(PreviewError) -> String {
         let size: Int64
+        // Symlinks are followed: the regular-file and size checks apply to the target.
+        let file = file.resolvingSymlinksInPath()
         do {
             let values = try file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true else {
@@ -83,7 +85,7 @@ public struct MarkdownPreviewRenderer: PreviewRenderer {
     }
 
     /// Decoding order: UTF-8 (BOM stripped; when the data was cut mid-file, up to 3 trailing bytes of a
-    /// split character are dropped), then UTF-16 when it has a BOM, then Windows-1252, then ISO Latin-1,
+    /// split character are dropped), then UTF-16 when it has a BOM (same trailing trim, up to 3 bytes), then Windows-1252, then ISO Latin-1,
     /// which accepts every byte sequence.
     static func decode(_ data: Data, truncatedAtEnd: Bool = false) -> String {
         var bytes = data
@@ -94,10 +96,11 @@ public struct MarkdownPreviewRenderer: PreviewRenderer {
                 if let s = String(data: bytes.dropLast(cut), encoding: .utf8) { return s }
             }
         }
-        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]),
-            let s = String(data: data, encoding: .utf16)
-        {
-            return s
+        if data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF]) {
+            // When cut, the end may split a code unit (odd length) or a surrogate pair: drop up to 3 bytes.
+            for cut in 0...(truncatedAtEnd ? 3 : 0) where data.count > cut {
+                if let s = String(data: data.dropLast(cut), encoding: .utf16) { return s }
+            }
         }
         if let s = String(data: data, encoding: .windowsCP1252) { return s }
         return String(data: data, encoding: .isoLatin1) ?? ""
