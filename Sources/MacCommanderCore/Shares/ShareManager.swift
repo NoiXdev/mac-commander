@@ -29,7 +29,9 @@ public enum ConnectOutcome: Equatable, Sendable {
 ///   it until `signIn`, `connectAsGuest` or an edit (`clearSignInFlag`).
 /// - At most one mount attempt per share is in flight; later callers await the same attempt.
 /// - While any share is unreachable, everything is re-checked every 60 s.
-/// - A share the user disconnected isn't auto-reconnected again until the user connects it.
+/// - A share disconnected in the app isn't auto-reconnected for the rest of the session unless the user
+///   connects it; one ejected elsewhere (for example in Finder) waits for the next network change or wake.
+/// - Auto-reconnect mounts run in the background; a refresh pass never waits for them.
 @MainActor @Observable
 public final class ShareManager {
     /// Posted on `NotificationCenter.default` whenever a share becomes connected, by any path.
@@ -57,10 +59,14 @@ public final class ShareManager {
     @ObservationIgnored private var mountPoints: [UUID: URL] = [:]
     /// The mounted volumes as of the latest listing.
     @ObservationIgnored private var lastMounted: [MountedShare] = []
-    /// Shares the user disconnected; not auto-reconnected until the user connects them again.
+    /// Shares disconnected in the app; not auto-reconnected for the rest of the session unless the user
+    /// connects them again.
     @ObservationIgnored private var userDisconnected: Set<UUID> = []
-    /// Bumped whenever a connect or disconnect changes a share, so a refresh pass that started earlier
-    /// doesn't overwrite the newer state with its older observations.
+    /// Connected shares that were unmounted outside the app (for example ejected in Finder) while their server
+    /// answered; not auto-reconnected until the next network change (or wake), or until the user connects them.
+    @ObservationIgnored private var ejectedElsewhere: Set<UUID> = []
+    /// Bumped whenever something changes a share's state (connect, disconnect, a re-match of the mounts, a
+    /// refresh pass), so a pass that started earlier doesn't overwrite newer state with older observations.
     @ObservationIgnored private var generation: [UUID: Int] = [:]
     /// External mounts already offered in this session (compared with `matches`).
     @ObservationIgnored private var prompted: [ShareURL] = []
@@ -102,8 +108,10 @@ public final class ShareManager {
 
     // MARK: Refresh
 
-    /// Lists the mounted volumes once, probes every share's server (concurrently, once per host and port),
-    /// classifies each share, then auto-reconnects the available ones.
+    /// Probes every share's server (concurrently, once per host and port), then lists the mounted volumes
+    /// once, classifies each share and starts auto-reconnecting the available ones. It doesn't wait for those
+    /// mounts: a slow one must not hold up the next pass; their results are applied when they finish.
+    /// A share whose state changed while the pass was running is left alone.
     public func refreshAll() async {
         let shares = store.shares
         for share in shares where status[share.id] == nil {
@@ -111,8 +119,8 @@ public final class ShareManager {
         }
         let generations = generation
 
-        let mounted = await volumes.mountedShares()
         let reachable = await probe(shares)
+        let mounted = await volumes.mountedShares()
 
         lastMounted = mounted
         let ids = Set(store.shares.map(\.id))
@@ -124,12 +132,19 @@ public final class ShareManager {
         }
         updatePrompts(mounted)
         updateTimer()
-        await autoReconnect()
+        autoReconnect()
     }
 
-    /// Network path change: a refresh, coalesced so that at most one runs and one more is queued.
+    /// Network path change (also sent on wake): a refresh, coalesced so that at most one runs and one more is
+    /// queued. Shares ejected outside the app become eligible for auto-reconnect again.
     public func networkChanged() async {
+        ejectedElsewhere.removeAll()
         await requestRefresh().value
+    }
+
+    /// Waits until no mount attempt is in flight (tests).
+    func waitForPendingAttempts() async {
+        while let running = inFlight.values.first { _ = await running.value }
     }
 
     /// A volume was mounted or unmounted: re-match the mounts without probing any server.
@@ -140,6 +155,7 @@ public final class ShareManager {
         for share in store.shares {
             guard generation[share.id] == generations[share.id], let current = status[share.id] else { continue }
             let match = mounted.first { $0.url.matches(share.url) }
+            let before = (status[share.id], mountPoints[share.id])
             switch (current, match) {
             case (.unreachable, let match?):
                 // Server known to be gone: stays unreachable; remember where it is for Disconnect.
@@ -148,11 +164,14 @@ public final class ShareManager {
             case (_, let match?):
                 markConnected(share.id, at: match.mountPoint)
             case (.connected, nil):
+                // Unmounted elsewhere while the server answered: the user's choice, not a dropped link.
                 mountPoints[share.id] = nil
+                ejectedElsewhere.insert(share.id)
                 status[share.id] = .available(needsSignIn: needsSignIn[share.id] ?? false)
             case (_, nil):
                 mountPoints[share.id] = nil
             }
+            if before != (status[share.id], mountPoints[share.id]) { bump(share.id) }
         }
         updatePrompts(mounted)
         updateTimer()
@@ -202,6 +221,8 @@ public final class ShareManager {
     }
 
     private func classify(_ share: SavedShare, mounted: [MountedShare], reachable: Bool) {
+        let before = (status[share.id], mountPoints[share.id])
+        defer { if before != (status[share.id], mountPoints[share.id]) { bump(share.id) } }
         let match = mounted.first { $0.url.matches(share.url) }
         mountPoints[share.id] = match?.mountPoint
         if let match { edit(share.id) { $0.lastMountPath = match.mountPoint.path } }
@@ -214,15 +235,16 @@ public final class ShareManager {
         }
     }
 
-    private func autoReconnect() async {
+    /// Starts (without waiting) a mount for every available auto-reconnect share.
+    private func autoReconnect() {
         let candidates = store.shares.filter { share in
             share.autoReconnect && status[share.id] == .available(needsSignIn: false)
                 && needsSignIn[share.id] != true && !userDisconnected.contains(share.id)
+                && !ejectedElsewhere.contains(share.id)
         }
-        let attempts = candidates.map { share in
+        for share in candidates {
             attempt(share.id) { manager, share in await manager.mountWithSavedMethods(share) }
         }
-        for task in attempts { _ = await task.value }
     }
 
     // MARK: Timer
@@ -249,13 +271,16 @@ public final class ShareManager {
     /// User click: probes the server, then mounts with the saved methods.
     public func connect(_ id: UUID) async -> ConnectOutcome {
         userDisconnected.remove(id)
+        ejectedElsewhere.remove(id)
         if case .connected(let mountPoint) = status[id] { return .connected(mountPoint) }
         return await attempt(id) { manager, share in
             guard await manager.probe(share) else {
                 manager.markUnreachable(share.id)
                 return .unreachable
             }
-            return await manager.mountWithSavedMethods(share)
+            let outcome = await manager.mountWithSavedMethods(share)
+            manager.settleAfterFailure(id, outcome)
+            return outcome
         }.value
     }
 
@@ -263,11 +288,13 @@ public final class ShareManager {
     /// is saved and becomes the share's method.
     public func signIn(_ id: UUID, username: String, password: String, remember: Bool) async -> ConnectOutcome {
         userDisconnected.remove(id)
+        ejectedElsewhere.remove(id)
         await waitForAttempt(id)
         let credentials = ShareCredentials(username: username, password: password)
         return await attempt(id) { manager, share in
             let outcome = await manager.mountOnce(share, with: credentials)
             if outcome == .needsSignIn { manager.markNeedsSignIn(id) }
+            manager.settleAfterFailure(id, outcome)
             guard case .connected = outcome else { return outcome }
             var saved = false
             if remember {
@@ -286,10 +313,12 @@ public final class ShareManager {
 
     public func connectAsGuest(_ id: UUID) async -> ConnectOutcome {
         userDisconnected.remove(id)
+        ejectedElsewhere.remove(id)
         await waitForAttempt(id)
         return await attempt(id) { manager, share in
             let outcome = await manager.mountOnce(share, with: .asGuest)
             if outcome == .needsSignIn { manager.markNeedsSignIn(id) }
+            manager.settleAfterFailure(id, outcome)
             if case .connected = outcome { manager.edit(id) { $0.lastAuth = .guest } }
             return outcome
         }.value
@@ -331,6 +360,7 @@ public final class ShareManager {
     }
 
     /// Runs `body` as the share's single in-flight attempt, or returns the attempt already running.
+    @discardableResult
     private func attempt(
         _ id: UUID, _ body: @escaping @MainActor (ShareManager, SavedShare) async -> ConnectOutcome
     ) -> Task<ConnectOutcome, Never> {
@@ -344,6 +374,19 @@ public final class ShareManager {
         }
         inFlight[id] = task
         return task
+    }
+
+    /// A user attempt that failed for another reason than credentials or reachability: the server answered,
+    /// so a share that had no status yet is available.
+    private func settleAfterFailure(_ id: UUID, _ outcome: ConnectOutcome) {
+        guard case .failed = outcome, share(id) != nil else { return }
+        switch status[id] {
+        case nil, .checking?:
+            bump(id)
+            status[id] = .available(needsSignIn: needsSignIn[id] ?? false)
+        default:
+            break
+        }
     }
 
     private func waitForAttempt(_ id: UUID) async {
@@ -389,10 +432,9 @@ public final class ShareManager {
             guard self.share(share.id) != nil else { return .connected(mountPoint) }
             bump(share.id)
             userDisconnected.remove(share.id)
+            ejectedElsewhere.remove(share.id)
             lastMounted.removeAll { $0.mountPoint == mountPoint }
             lastMounted.append(MountedShare(mountPoint: mountPoint, url: share.url))
-            // Whatever worked, the share evidently doesn't need a sign-in any more.
-            needsSignIn[share.id] = nil
             markConnected(share.id, at: mountPoint)
             updateTimer()
             return .connected(mountPoint)
@@ -426,7 +468,9 @@ public final class ShareManager {
         updateTimer()
     }
 
+    /// Also clears the needs-sign-in flag: however it got mounted, the share evidently doesn't need one.
     private func markConnected(_ id: UUID, at mountPoint: URL) {
+        needsSignIn[id] = nil
         let previous = status[id]
         status[id] = .connected(mountPoint: mountPoint)
         mountPoints[id] = mountPoint
@@ -468,33 +512,45 @@ public final class ShareManager {
     // MARK: Removing and lookups
 
     /// Removes the share from the sidebar. It stays mounted, and its Keychain item is kept (the user may still
-    /// use it in Finder).
+    /// use it in Finder). It isn't offered as "Remember this share?" again in this session.
     public func remove(_ id: UUID) async {
+        if let share = share(id), !prompted.contains(where: { $0.matches(share.url) }) {
+            prompted.append(share.url)
+        }
         store.remove(id)
         status[id] = nil
         needsSignIn[id] = nil
         mountPoints[id] = nil
         inFlight[id] = nil
         userDisconnected.remove(id)
+        ejectedElsewhere.remove(id)
         generation[id] = nil
         updateTimer()
     }
 
-    /// The saved share whose mount point contains `url`: the current mount point, or for a share that isn't
-    /// mounted now its last one. Compares standardized paths only (no file-system access); the longest
-    /// mount point wins.
+    /// The saved share whose mount point contains `url`. Current mount points are checked first; only if none
+    /// contains `url` are the last mount points of shares that aren't mounted now. Compares standardized paths
+    /// only (no file-system access); within each group the longest mount point wins.
     public func mountPoint(containing url: URL) -> (share: SavedShare, mountPoint: URL)? {
         let path = url.standardizedFileURL.path
-        var best: (share: SavedShare, mountPoint: URL, length: Int)?
-        for share in store.shares {
-            let candidate = mountPoints[share.id] ?? share.lastMountPath.map { URL(fileURLWithPath: $0) }
-            guard let candidate else { continue }
-            let root = candidate.standardizedFileURL.path
-            let contained = path == root || path.hasPrefix(root.hasSuffix("/") ? root : root + "/")
-            guard contained, root.count > (best?.length ?? -1) else { continue }
-            best = (share, candidate, root.count)
+        func longest(_ candidates: [(SavedShare, URL)]) -> (share: SavedShare, mountPoint: URL)? {
+            var best: (share: SavedShare, mountPoint: URL, length: Int)?
+            for (share, candidate) in candidates {
+                let root = candidate.standardizedFileURL.path
+                let contained = path == root || path.hasPrefix(root.hasSuffix("/") ? root : root + "/")
+                guard contained, root.count > (best?.length ?? -1) else { continue }
+                best = (share, candidate, root.count)
+            }
+            return best.map { ($0.share, $0.mountPoint) }
         }
-        return best.map { ($0.share, $0.mountPoint) }
+        let shares = store.shares
+        let current = shares.compactMap { share in mountPoints[share.id].map { (share, $0) } }
+        if let hit = longest(current) { return hit }
+        let previous = shares.compactMap { share -> (SavedShare, URL)? in
+            guard mountPoints[share.id] == nil, let last = share.lastMountPath else { return nil }
+            return (share, URL(fileURLWithPath: last))
+        }
+        return longest(previous)
     }
 
     // MARK: Helpers

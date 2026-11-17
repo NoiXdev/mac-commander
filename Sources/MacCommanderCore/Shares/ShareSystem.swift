@@ -17,6 +17,17 @@ public struct ShareCredentials: Sendable, Equatable {
     public static let asGuest = ShareCredentials(guest: true)
 }
 
+extension ShareCredentials: CustomStringConvertible, CustomDebugStringConvertible {
+    /// Never shows the password.
+    public var description: String {
+        let password = password == nil ? "nil" : "<redacted>"
+        return "ShareCredentials(username: \(username.map { "\"\($0)\"" } ?? "nil"), password: \(password), "
+            + "guest: \(guest))"
+    }
+
+    public var debugDescription: String { description }
+}
+
 public enum MountError: Error, Equatable, Sendable {
     case authenticationFailed, unreachable, cancelled, failed(String)
 }

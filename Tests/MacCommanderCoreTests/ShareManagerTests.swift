@@ -31,9 +31,15 @@ private actor FakeVolumes: MountedVolumeLister {
     func add(_ mount: MountedShare) { mounts.append(mount) }
     func remove(_ mountPoint: URL) { mounts.removeAll { $0.mountPoint == mountPoint } }
 
+    private var gate: MountGate?
+    func setGate(_ gate: MountGate?) { self.gate = gate }
+
+    /// Returns the mounts as of the call, even when the gate holds the answer back.
     func mountedShares() async -> [MountedShare] {
         listCount += 1
-        return mounts
+        let snapshot = mounts
+        if let gate { await gate.wait() }
+        return snapshot
     }
 }
 
@@ -208,6 +214,12 @@ private final class Harness {
     }
 
     func saved(_ id: UUID) -> SavedShare? { store.shares.first { $0.id == id } }
+
+    /// A refresh pass plus the auto-reconnect mounts it started.
+    func refresh() async {
+        await manager.refreshAll()
+        await manager.waitForPendingAttempts()
+    }
 }
 
 private func url(_ string: String) throws -> ShareURL { try #require(ShareURL(string)) }
@@ -224,7 +236,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.prober.set("nas", reachable: true)
         await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: try url("smb://nas/A"))])
 
-        await h.manager.refreshAll()
+        await h.refresh()
 
         #expect(h.manager.status[a.id] == .connected(mountPoint: volume("/Volumes/A")))
         #expect(h.manager.status[b.id] == .available(needsSignIn: false))
@@ -243,7 +255,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.prober.set("nas", reachable: true)
         let gate = MountGate()
         await h.prober.setGate(gate)
-        let first = Task { await h.manager.refreshAll() }
+        let first = Task { await h.refresh() }
         #expect(await eventually { await h.prober.probeCount == 1 })
         #expect(h.manager.status[a.id] == .checking)
         await gate.release()
@@ -253,7 +265,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         let gate2 = MountGate()
         await h.prober.setGate(gate2)
         await h.prober.set("nas", reachable: false)
-        let second = Task { await h.manager.refreshAll() }
+        let second = Task { await h.refresh() }
         #expect(await eventually { await h.prober.probeCount == 2 })
         #expect(h.manager.status[a.id] == .available(needsSignIn: false))  // no flicker
         await gate2.release()
@@ -267,7 +279,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.prober.set("nas", reachable: true)
         await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/Media-1"), url: try url("smb://NAS/media"))])
 
-        await h.manager.refreshAll()
+        await h.refresh()
 
         #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/Media-1")))
         #expect(h.saved(share.id)?.lastMountPath == "/Volumes/Media-1")
@@ -295,7 +307,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
             return .success(URL(fileURLWithPath: "/Volumes/\(url.shareName)"))
         }
 
-        await h.manager.refreshAll()
+        await h.refresh()
 
         let calls = await h.mounter.mounts
         func creds(_ name: String) -> [ShareCredentials] {
@@ -315,7 +327,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(h.saved(guest.id)?.lastMountPath == "/Volumes/Guest")
 
         // Mounted now: the next pass mounts nothing.
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(await h.mounter.mounts.count == calls.count)
     }
 
@@ -325,12 +337,12 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.prober.set("nas", reachable: true)
         await h.mounter.setHandler { _, _ in .failure(.authenticationFailed) }
 
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(await h.mounter.mounts.count == 1)
         #expect(h.manager.status[share.id] == .available(needsSignIn: true))
 
-        await h.manager.refreshAll()
-        await h.manager.refreshAll()
+        await h.refresh()
+        await h.refresh()
         #expect(await h.mounter.mounts.count == 1)
         #expect(h.manager.status[share.id] == .available(needsSignIn: true))
 
@@ -341,7 +353,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         h.manager.clearSignInFlag(share.id)
         #expect(h.manager.status[share.id] == .available(needsSignIn: false))
         let before = await h.mounter.mounts.count
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(await h.mounter.mounts.count == before + 1)
     }
 
@@ -353,7 +365,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
             creds.password == "right"
                 ? .success(URL(fileURLWithPath: "/Volumes/\(url.shareName)")) : .failure(.authenticationFailed)
         }
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(await h.manager.connect(share.id) == .needsSignIn)
         #expect(h.manager.status[share.id] == .available(needsSignIn: true))
 
@@ -387,7 +399,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.mounter.setHandler { url, creds in
             creds.guest ? .success(URL(fileURLWithPath: "/Volumes/\(url.shareName)")) : .failure(.authenticationFailed)
         }
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(await h.manager.connect(share.id) == .needsSignIn)
 
         #expect(await h.manager.connectAsGuest(share.id) == .connected(volume("/Volumes/Public")))
@@ -488,7 +500,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(h.manager.rememberPrompts == [x, y])
         #expect(await h.prober.probeCount == 0)
         await h.manager.volumesChanged()
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(h.manager.rememberPrompts == [x, y])
 
         h.manager.decline(y)
@@ -528,7 +540,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         let h = try Harness()
         let share = try h.share("smb://nas/A", autoReconnect: false)
         await h.prober.set("nas", reachable: true)
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(h.manager.status[share.id] == .available(needsSignIn: false))
 
         await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
@@ -547,7 +559,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         let share = try h.share("smb://nas/Keep", username: "bob", lastAuth: .password)
         await h.credentials.store("pw", for: share.url, username: "bob")
         await h.prober.set("nas", reachable: true)
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/Keep")))
 
         await h.manager.remove(share.id)
@@ -558,9 +570,10 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(await h.credentials.deletes == 0)
         #expect(await h.mounter.unmounts.isEmpty)
         #expect(h.manager.mountPoint(containing: volume("/Volumes/Keep/a")) == nil)
-        // Still mounted, but now unsaved: offered once like any external mount.
+        // Still mounted, but the user just removed it: not offered as "Remember this share?" this session.
         await h.manager.volumesChanged()
-        #expect(h.manager.rememberPrompts.map(\.mountPoint) == [volume("/Volumes/Keep")])
+        await h.refresh()
+        #expect(h.manager.rememberPrompts.isEmpty)
     }
 
     @Test func mountedButServerGoneIsUnreachableAndForceUnmounts() async throws {
@@ -573,7 +586,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
             MountedShare(mountPoint: volume("/Volumes/Here"), url: here.url),
         ])
 
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(h.manager.status[gone.id] == .unreachable)
         #expect(h.manager.status[here.id] == .connected(mountPoint: volume("/Volumes/Here")))
         #expect(h.manager.mountPoint(containing: volume("/Volumes/Gone/x"))?.share.id == gone.id)
@@ -598,13 +611,171 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         let h = try Harness()
         let share = try h.share("smb://nas/A")
         await h.prober.set("nas", reachable: true)
-        await h.manager.refreshAll()
+        await h.refresh()
         #expect(await h.mounter.mounts.count == 1)
         try await h.manager.disconnect(share.id)
-        await h.manager.refreshAll()
+        await h.refresh()
+        await h.manager.networkChanged()  // an in-app Disconnect holds for the whole session
+        await h.manager.waitForPendingAttempts()
         #expect(await h.mounter.mounts.count == 1)
         #expect(h.manager.status[share.id] == .available(needsSignIn: false))
         #expect(await h.manager.connect(share.id) == .connected(volume("/Volumes/A")))
+    }
+
+    @Test func ejectElsewhereWaitsForNetworkChange() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A")
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+
+        // Ejected in Finder while the server answers: treated as the user's choice.
+        await h.volumes.set([])
+        await h.manager.volumesChanged()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+        await h.refresh()
+        #expect(await h.mounter.mounts.isEmpty)
+
+        // A network change (or wake) makes it eligible again.
+        await h.manager.networkChanged()
+        await h.manager.waitForPendingAttempts()
+        #expect(await h.mounter.mounts.count == 1)
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+    }
+
+    @Test func stalePassDoesNotOverwriteNewerMountState() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+
+        // A pass whose probe answer is stale: the server was "down" when probed...
+        await h.prober.set("nas", reachable: false)
+        let gate = MountGate()
+        await h.prober.setGate(gate)
+        let pass = Task { await h.manager.refreshAll() }
+        #expect(await eventually { await h.prober.probeCount == 2 })
+        // ...but meanwhile the share got mounted elsewhere.
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.manager.volumesChanged()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+        await gate.release()
+        await pass.value
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+    }
+
+    @Test func staleVolumeListDoesNotOverwriteNewerState() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+
+        // volumesChanged gets a listing that still shows A mounted...
+        let gate = MountGate()
+        await h.volumes.setGate(gate)
+        var notified = 0
+        let token = NotificationCenter.default.addObserver(
+            forName: ShareManager.didConnectNotification, object: h.manager, queue: nil
+        ) { _ in MainActor.assumeIsolated { notified += 1 } }
+        defer { NotificationCenter.default.removeObserver(token) }
+        let rematch = Task { await h.manager.volumesChanged() }
+        #expect(await eventually { await h.volumes.listCount == 2 })
+        // ...while the user disconnects it in the app.
+        try await h.manager.disconnect(share.id)
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+        await gate.release()
+        await rematch.value
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+        #expect(notified == 0)
+    }
+
+    @Test func slowAutoReconnectDoesNotHoldRefreshes() async throws {
+        let h = try Harness()
+        let slow = try h.share("smb://nas/Slow")
+        let other = try h.share("smb://far/Other", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.prober.set("far", reachable: true)
+        let gate = MountGate()
+        await h.mounter.setGate(gate)
+        let manager = h.manager
+
+        let first = Task { await manager.networkChanged() }
+        #expect(await eventually { await h.mounter.mounts.count == 1 })
+        #expect(await eventually { h.manager.status[other.id] == .available(needsSignIn: false) })
+
+        await h.prober.set("far", reachable: false)
+        let second = Task { await manager.networkChanged() }
+        let secondPassDone = await eventually { h.manager.status[other.id] == .unreachable }
+        await gate.release()
+        #expect(secondPassDone)
+        await first.value
+        await second.value
+        await h.manager.waitForPendingAttempts()
+        #expect(await h.mounter.mounts.count == 1)
+        #expect(h.manager.status[slow.id] == .connected(mountPoint: volume("/Volumes/Slow")))
+    }
+
+    @Test func otherFailureOnFirstConnectMarksAvailable() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/Odd", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.mounter.setHandler { _, _ in .failure(.failed("boom")) }
+        #expect(await h.manager.connect(share.id) == .failed("boom"))
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+
+        let other = try h.share("smb://nas/Cancel", autoReconnect: false)
+        await h.mounter.setHandler { _, _ in .failure(.cancelled) }
+        guard case .failed = await h.manager.connectAsGuest(other.id) else {
+            Issue.record("expected .failed")
+            return
+        }
+        #expect(h.manager.status[other.id] == .available(needsSignIn: false))
+    }
+
+    @Test func externalMountClearsSignInFlag() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/Locked")
+        await h.prober.set("nas", reachable: true)
+        await h.mounter.setHandler { _, _ in .failure(.authenticationFailed) }
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: true))
+
+        // Mounted in Finder with the right password, then ejected there again.
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/Locked"), url: share.url)])
+        await h.manager.volumesChanged()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/Locked")))
+        await h.volumes.set([])
+        await h.manager.volumesChanged()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+    }
+
+    @Test func mountPointPrefersCurrentMounts() async throws {
+        let h = try Harness()
+        // B was last mounted at /Volumes/Data, which A now occupies, nested lookups included.
+        var b = try h.share("smb://old/Data", autoReconnect: false)
+        b.lastMountPath = "/Volumes/Data/inner"
+        h.store.update(b)
+        let a = try h.share("smb://nas/Data", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/Data"), url: a.url)])
+        await h.refresh()
+
+        let hit = h.manager.mountPoint(containing: volume("/Volumes/Data/inner/file"))
+        #expect(hit?.share.id == a.id)
+        #expect(hit?.mountPoint == volume("/Volumes/Data"))
+        #expect(h.manager.mountPoint(containing: volume("/Volumes/Other")) == nil)
+    }
+
+    @Test func credentialsDescriptionRedactsPassword() {
+        let credentials = ShareCredentials(username: #"CORP\daniel"#, password: "hunter2")
+        #expect(!String(describing: credentials).contains("hunter2"))
+        #expect(!String(reflecting: credentials).contains("hunter2"))
+        #expect(String(describing: credentials).contains("<redacted>"))
+        #expect(!String(describing: ShareCredentials.automatic).contains("<redacted>"))
     }
 
     @Test func connectReportsUnreachableWithoutMounting() async throws {
@@ -640,10 +811,10 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         }
         defer { NotificationCenter.default.removeObserver(token) }
 
-        await h.manager.refreshAll()  // auto-reconnect
+        await h.refresh()  // auto-reconnect
         #expect(box.infos.count == 1)
         #expect(box.infos.first?["mountPoint"] as? URL == volume("/Volumes/Note"))
-        await h.manager.refreshAll()  // still connected: no repeat
+        await h.refresh()  // still connected: no repeat
         #expect(box.infos.count == 1)
 
         try await h.mounter.unmount(volume("/Volumes/Note"), force: false)
