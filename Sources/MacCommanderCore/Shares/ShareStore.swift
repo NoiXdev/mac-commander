@@ -18,6 +18,9 @@ public final class ShareStore {
     public private(set) var shares: [SavedShare] = []
     /// "Not Now" answers to the remember prompt.
     public private(set) var declinedRemountURLs: Set<ShareURL> = []
+    /// Entries of the file's share list that couldn't be read (for example an address this version doesn't
+    /// accept), kept as they were and written back after the readable shares, so they are never lost.
+    @ObservationIgnored private var unreadableShares: [JSONValue] = []
 
     /// Set when the file couldn't be read or moved aside; nothing is written for the rest of the session so the
     /// original is never overwritten.
@@ -85,20 +88,44 @@ public final class ShareStore {
         init(from decoder: Decoder) throws { value = try? T(from: decoder) }
     }
 
+    /// One element of the file's share list: a share, or the raw JSON of one that couldn't be decoded.
+    private enum ShareEntry: Codable {
+        case share(SavedShare)
+        case unreadable(JSONValue)
+
+        init(from decoder: Decoder) throws {
+            if let share = try? SavedShare(from: decoder) {
+                self = .share(share)
+            } else {
+                self = .unreadable(try JSONValue(from: decoder))
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            switch self {
+            case .share(let share): try share.encode(to: encoder)
+            case .unreadable(let raw): try raw.encode(to: encoder)
+            }
+        }
+    }
+
     private struct FileModel: Decodable {
         var shares: [SavedShare]
+        var unreadableShares: [JSONValue]
         var declined: [ShareURL]
         init(from decoder: Decoder) throws {
             enum Key: String, CodingKey { case shares, declined }
             let c = try decoder.container(keyedBy: Key.self)
-            shares = (try c.decodeIfPresent([Lossy<SavedShare>].self, forKey: .shares) ?? []).compactMap(\.value)
+            let entries = (try c.decodeIfPresent([Lossy<ShareEntry>].self, forKey: .shares) ?? []).compactMap(\.value)
+            shares = entries.compactMap { if case .share(let share) = $0 { share } else { nil } }
+            unreadableShares = entries.compactMap { if case .unreadable(let raw) = $0 { raw } else { nil } }
             declined = (try c.decodeIfPresent([Lossy<ShareURL>].self, forKey: .declined) ?? []).compactMap(\.value)
         }
     }
 
     private struct FileOutput: Encodable {
         let version = 1
-        let shares: [SavedShare]
+        let shares: [ShareEntry]
         let declined: [ShareURL]
     }
 
@@ -115,6 +142,7 @@ public final class ShareStore {
         do {
             let model = try JSONDecoder().decode(FileModel.self, from: data)
             shares = model.shares
+            unreadableShares = model.unreadableShares
             declinedRemountURLs = Set(model.declined)
         } catch {
             moveCorruptFileAside()
@@ -142,7 +170,8 @@ public final class ShareStore {
 
     private func persist() {
         guard persistenceError == nil else { return }
-        let output = FileOutput(shares: shares, declined: declinedRemountURLs.sorted { $0.url.absoluteString < $1.url.absoluteString })
+        let output = FileOutput(
+            shares: shares.map(ShareEntry.share) + unreadableShares.map(ShareEntry.unreadable), declined: declinedRemountURLs.sorted { $0.url.absoluteString < $1.url.absoluteString })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(output) else { return }
@@ -159,5 +188,48 @@ public final class ShareStore {
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
+    }
+}
+
+/// Any JSON value, for keeping a file entry this version can't read exactly as it was.
+enum JSONValue: Codable, Equatable, Sendable {
+    case null
+    case bool(Bool)
+    case integer(Int64)
+    case number(Double)
+    case string(String)
+    case array([JSONValue])
+    case object([String: JSONValue])
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null
+        } else if let value = try? container.decode(Bool.self) {
+            self = .bool(value)
+        } else if let value = try? container.decode(Int64.self) {
+            self = .integer(value)
+        } else if let value = try? container.decode(Double.self) {
+            self = .number(value)
+        } else if let value = try? container.decode(String.self) {
+            self = .string(value)
+        } else if let value = try? container.decode([JSONValue].self) {
+            self = .array(value)
+        } else {
+            self = .object(try container.decode([String: JSONValue].self))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let value): try container.encode(value)
+        case .integer(let value): try container.encode(value)
+        case .number(let value): try container.encode(value)
+        case .string(let value): try container.encode(value)
+        case .array(let value): try container.encode(value)
+        case .object(let value): try container.encode(value)
+        }
     }
 }

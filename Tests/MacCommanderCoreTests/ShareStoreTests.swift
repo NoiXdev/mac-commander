@@ -81,6 +81,39 @@ import Testing
         #expect(store.declinedRemountURLs.count == 1)
     }
 
+    @Test func unreadableSharesAreKeptOnSave() async throws {
+        let dir = try TemporaryDirectory()
+        let json = """
+            {"version":1,"shares":[
+              {"url":"smb://nas/Media"},
+              {"url":"ftp://bad/x","name":"Old FTP","extra":[1,2.5,null,{"deep":true}]},
+              {"nonsense":true}
+            ],"declined":[]}
+            """
+        let file = try dir.file("shares.json", contents: json)
+        let store = ShareStore(fileURL: file)
+        #expect(store.shares.count == 1)
+
+        store.add(try #require(ShareURL("smb://nas/New")), username: nil)
+        await store.flush()
+
+        let data = try Data(contentsOf: file)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let entries = try #require(object["shares"] as? [[String: Any]])
+        #expect(entries.count == 4)
+        let ftp = try #require(entries.first { $0["url"] as? String == "ftp://bad/x" })
+        #expect(ftp["name"] as? String == "Old FTP")
+        #expect((ftp["extra"] as? [Any])?.count == 4)
+        #expect(entries.contains { $0["nonsense"] as? Bool == true })
+        // Read again: still two readable shares, the unreadable ones still kept.
+        let again = ShareStore(fileURL: file)
+        #expect(again.shares.map(\.url.shareName) == ["Media", "New"])
+        again.remove(again.shares[0].id)
+        await again.flush()
+        let after = try JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any]
+        #expect((after?["shares"] as? [Any])?.count == 3)
+    }
+
     @Test func noPasswordInFile() async throws {
         let dir = try TemporaryDirectory()
         let file = fileURL(dir)
