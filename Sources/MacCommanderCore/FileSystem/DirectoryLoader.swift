@@ -10,6 +10,8 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
     case archiveIncorrectPassword(URL)
     /// The archive can't be listed; the string is bsdtar's message.
     case archiveUnreadable(URL, String)
+    /// The folder is on a saved network share that is no longer connected; the string is the share's name.
+    case shareDisconnected(name: String)
 
     public var message: String {
         switch self {
@@ -27,6 +29,8 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
             String(localized: "The password for “\(url.lastPathComponent)” is incorrect.")
         case .archiveUnreadable(let url, let detail):
             String(localized: "“\(url.lastPathComponent)” can’t be opened: \(detail)")
+        case .shareDisconnected(let name):
+            String(localized: "“\(name)” is no longer connected.")
         }
     }
 }

@@ -12,6 +12,20 @@ public enum NavigationResult: Sendable, Equatable {
     case superseded
 }
 
+/// A saved network share that dropped while one of its folders was shown.
+public struct DisconnectedShare: Equatable, Sendable {
+    public let id: UUID
+    public let name: String
+    /// Where the share was mounted when it dropped; a reconnect may mount it elsewhere (`Media-1`).
+    public let mountPoint: URL
+
+    public init(id: UUID, name: String, mountPoint: URL) {
+        self.id = id
+        self.name = name
+        self.mountPoint = mountPoint
+    }
+}
+
 /// Per-window view model: the current folder, its sorted items, selection and navigation.
 ///
 /// `init` does not touch the disk; the UI calls `reload()` once when the window appears. Nothing here
@@ -33,6 +47,12 @@ public final class BrowserModel {
     public private(set) var archiveLocation: ArchiveLocation?
     public private(set) var loadError: DirectoryLoadError?
     public private(set) var isLoading = false
+    /// Set together with `loadError = .shareDisconnected`: the share whose folder is shown but gone.
+    public private(set) var disconnectedShare: DisconnectedShare?
+    /// The saved network share containing a path, if any: a pure main-actor lookup without file-system
+    /// access (the UI wires it to `ShareManager.mountPoint(containing:)`). A vanished folder on such a share
+    /// shows `.shareDisconnected` instead of falling back to an ancestor.
+    @ObservationIgnored public var shareResolver: (@MainActor (URL) -> (id: UUID, name: String, mountPoint: URL)?)?
     public var selection: Set<URL> = []
     /// Set after a create; the list starts inline editing for it, then sets it back to nil.
     public var pendingRename: URL?
@@ -76,6 +96,8 @@ public final class BrowserModel {
     @ObservationIgnored private var unmountObservation: NotificationObservation?
     /// Removes the folders-changed observer when the model goes away.
     @ObservationIgnored private var foldersObservation: NotificationObservation?
+    /// Removes the share-connected observer when the model goes away.
+    @ObservationIgnored private var shareObservation: NotificationObservation?
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
     @ObservationIgnored var afterListingHook: (@MainActor (URL) async -> Void)?
 
@@ -113,6 +135,7 @@ public final class BrowserModel {
         observeSettings()
         observeUnmounts()
         observeFolderChanges()
+        observeShareConnects()
     }
 
     deinit {
@@ -385,6 +408,10 @@ public final class BrowserModel {
         var target = await resolveLoadTarget(currentURL)
         guard generation == loadGeneration else { return false }
         if target.location == nil, !target.info.exists {
+            // On a saved share that dropped: keep the folder and history, show Disconnected.
+            if let share = shareResolver?(currentURL) {
+                return await showDisconnected(share, generation: generation)
+            }
             let fallback = await queries.nearestExistingFolder(currentURL)
             guard generation == loadGeneration else { return false }
             history.replaceCurrent(with: fallback)
@@ -437,6 +464,7 @@ public final class BrowserModel {
 
         let openFallback = pendingOpenFallback.map { $0.standardizedFileURL == url.standardizedFileURL } ?? false
         pendingOpenFallback = nil
+        disconnectedShare = nil
 
         switch result {
         case .success(let listed):
@@ -487,6 +515,63 @@ public final class BrowserModel {
             Task { await self.directoryDidChange() }
         }
         return true
+    }
+
+    /// The current folder is gone and on a saved share: nothing is listed, the watcher stops (the path is
+    /// dead), and `currentURL` and the history stay as they are, so a reconnect can return to the folder.
+    /// `currentInfo` is cleared, so refresh on focus doesn't stat the dead path again; a reload re-checks once.
+    private func showDisconnected(
+        _ share: (id: UUID, name: String, mountPoint: URL), generation: Int
+    ) async -> Bool {
+        watcher?.cancel()
+        watcher = nil
+        watchedURL = nil
+        watchedIdentity = nil
+        currentInfo = nil
+        canonicalCurrent = nil
+        pendingOpenFallback = nil
+        clearSelection()
+        loadedItems = []
+        loadedURL = nil
+        loadedLocation = nil
+        disconnectedShare = DisconnectedShare(id: share.id, name: share.name, mountPoint: share.mountPoint)
+        loadError = .shareDisconnected(name: share.name)
+        await present(loadGeneration: generation)
+        guard generation == loadGeneration else { return false }
+        isLoading = false
+        inFlightURL = nil
+        // Changes reported while checking concern the dead path; no follow-up load.
+        needsReload = false
+        return true
+    }
+
+    /// The share mounted at `oldMountPoint` is back at `newMountPoint` (possibly another name, e.g.
+    /// `/Volumes/Media-1`): moves the current folder and the back/forward entries below the old mount point
+    /// to the new one, and lists the current folder again. Supersedes pending navigation.
+    public func reconnected(oldMountPoint: URL, newMountPoint: URL) async {
+        _ = beginNavigation()
+        disconnectedShare = nil
+        history.rewritePrefix(from: oldMountPoint, to: newMountPoint)
+        await load()
+    }
+
+    /// A share was connected (`ShareManager.didConnectNotification`, or the UI's connect flow). If this
+    /// window shows that share's Disconnected placeholder, it returns to the same folder under the new
+    /// mount point and returns true. Also true when the current folder is already on that mount point (a
+    /// reconnect handled it first), so the caller doesn't navigate away. False otherwise.
+    @discardableResult
+    public func shareDidConnect(id: UUID, mountPoint: URL) async -> Bool {
+        guard let disconnected = disconnectedShare else { return Self.isPath(currentURL, within: mountPoint) }
+        guard disconnected.id == id, shareResolver?(mountPoint)?.id == id else { return false }
+        await reconnected(oldMountPoint: disconnected.mountPoint, newMountPoint: mountPoint)
+        return true
+    }
+
+    /// By standardized path, without file-system access.
+    private static func isPath(_ url: URL, within root: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        let rootPath = root.standardizedFileURL.path
+        return path == rootPath || path.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
     }
 
     /// The watched folder or archive changed. An archive's cached listing is dropped first.
@@ -704,14 +789,29 @@ public final class BrowserModel {
         unmountObservation = NotificationObservation(center: center, token: token)
     }
 
+    /// Unrelated volumes are ignored. On a saved share, `load()` shows Disconnected instead.
     private func volumeDidUnmount(_ volume: URL?) async {
         if let volume {
-            let volumePath = volume.standardizedFileURL.path
-            let currentPath = currentURL.standardizedFileURL.path
-            let prefix = volumePath.hasSuffix("/") ? volumePath : volumePath + "/"
-            guard currentPath == volumePath || currentPath.hasPrefix(prefix) else { return }
+            guard Self.isPath(currentURL, within: volume) else { return }
         }
         await load()
+    }
+
+    /// A share that reconnects by itself (auto-reconnect) brings back a window showing its placeholder.
+    private func observeShareConnects() {
+        let center = NotificationCenter.default
+        let token = center.addObserver(
+            forName: ShareManager.didConnectNotification, object: nil, queue: nil
+        ) { [weak self] note in
+            guard let mountPoint = note.userInfo?["mountPoint"] as? URL,
+                let id = note.userInfo?["shareID"] as? UUID
+            else { return }
+            Task { @MainActor in
+                guard let self, self.disconnectedShare != nil else { return }
+                await self.shareDidConnect(id: id, mountPoint: mountPoint)
+            }
+        }
+        shareObservation = NotificationObservation(center: center, token: token)
     }
 
     /// Operations and undo post the folders they changed; reload when one is the current folder,

@@ -39,4 +39,24 @@ public struct NavigationHistory: Equatable, Sendable {
     public mutating func replaceCurrent(with url: URL) {
         current = url
     }
+
+    /// Moves every entry (current, back and forward) at or below `old` to the same place below `new`, by
+    /// standardized path; other entries are kept. For a share that came back under another mount point name
+    /// (`/Volumes/Media` → `/Volumes/Media-1`). No file-system access.
+    public mutating func rewritePrefix(from old: URL, to new: URL) {
+        let oldRoot = old.standardizedFileURL.path
+        let newRoot = new.standardizedFileURL.path
+        guard oldRoot != newRoot else { return }
+        let oldPrefix = oldRoot.hasSuffix("/") ? oldRoot : oldRoot + "/"
+        func rewrite(_ url: URL) -> URL {
+            let path = url.standardizedFileURL.path
+            if path == oldRoot { return URL(fileURLWithPath: newRoot, isDirectory: true) }
+            guard path.hasPrefix(oldPrefix) else { return url }
+            let rest = String(path.dropFirst(oldPrefix.count))
+            return URL(fileURLWithPath: newRoot, isDirectory: true).appendingPathComponent(rest)
+        }
+        current = rewrite(current)
+        backStack = backStack.map(rewrite)
+        forwardStack = forwardStack.map(rewrite)
+    }
 }

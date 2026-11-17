@@ -12,6 +12,10 @@ final class FileListController: NSViewController {
     let clipboard: FileClipboard
     /// Opens the info window for a URL (SwiftUI's `openWindow`, supplied by `FileListView`).
     var openInfo: (URL) -> Void
+    /// "Reconnect" for a dropped network share (supplied by `FileListView`); nil hides the button.
+    var reconnect: ((DisconnectedShare) -> Void)? {
+        didSet { if isViewLoaded, case .shareDisconnected? = model.loadError { applyLoadError() } }
+    }
 
     private(set) var outlineView = FileOutlineView()
     let scrollView = NSScrollView()
@@ -298,7 +302,12 @@ final class FileListController: NSViewController {
             scrollView.isHidden = false
             return
         }
-        let errorView = LoadErrorView(error: error) { [weak self] in self?.askForArchivePassword() }
+        var reconnectAction: (() -> Void)?
+        if let reconnect, let share = model.disconnectedShare {
+            reconnectAction = { reconnect(share) }
+        }
+        let errorView = LoadErrorView(
+            error: error, enterPassword: { [weak self] in self?.askForArchivePassword() }, reconnect: reconnectAction)
         if let errorHost {
             errorHost.rootView = errorView
             errorHost.isHidden = false

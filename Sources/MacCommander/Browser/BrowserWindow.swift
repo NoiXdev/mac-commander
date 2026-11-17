@@ -29,6 +29,8 @@ struct BrowserWindow: View {
     @Environment(ViewSettingsStore.self) private var settings
     @Environment(FileOperationCenter.self) private var operations
     @Environment(FileClipboard.self) private var clipboard
+    @Environment(ShareManager.self) private var shareManager
+    @Environment(ShareStore.self) private var shareStore
     @SceneStorage("currentFolderPath") private var storedPath = ""
     /// True while the window is key (or the app's active window); see the refresh on focus below.
     @Environment(\.appearsActive) private var appearsActive
@@ -64,6 +66,10 @@ struct BrowserWindow: View {
         .onAppear {
             guard model == nil else { return }
             let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
+            // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
+            model.shareResolver = { [weak shareManager] url in
+                shareManager?.mountPoint(containing: url).map { ($0.share.id, $0.share.name, $0.mountPoint) }
+            }
             self.model = model
             preview = PreviewController(model: model, settings: settings)
         }
@@ -78,7 +84,15 @@ struct BrowserWindow: View {
                 // The list stays the split view's first child whether or not the pane is shown, so it keeps
                 // its identity (controller, scroll position, selection) when the pane toggles.
                 HSplitView {
-                    FileListView(model: model, settings: settings, clipboard: clipboard)
+                    FileListView(
+                        model: model, settings: settings, clipboard: clipboard,
+                        reconnect: { [shareStore, shareManager, shareSheets] disconnected in
+                            Task {
+                                await ShareActions.reconnect(
+                                    disconnected, store: shareStore, manager: shareManager, model: model,
+                                    sheets: shareSheets)
+                            }
+                        })
                         .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
                     if settings.settings.showPreview {
                         PreviewPane(controller: preview)

@@ -7,30 +7,53 @@ struct FileListView: NSViewControllerRepresentable {
     let model: BrowserModel
     let settings: ViewSettingsStore
     let clipboard: FileClipboard
+    /// "Reconnect" in the Disconnected placeholder of a dropped network share.
+    var reconnect: ((DisconnectedShare) -> Void)? = nil
     @Environment(\.openWindow) private var openWindow
 
     func makeNSViewController(context: Context) -> FileListController {
-        FileListController(
+        let controller = FileListController(
             model: model, settings: settings, clipboard: clipboard,
             openInfo: { [openWindow] url in openWindow(id: "info", value: url) })
+        controller.reconnect = reconnect
+        return controller
     }
 
     func updateNSViewController(_ controller: FileListController, context: Context) {
         // The controller observes the model and settings itself.
         controller.openInfo = { [openWindow] url in openWindow(id: "info", value: url) }
+        controller.reconnect = reconnect
     }
 }
 
 /// Shown instead of the list when the folder can't be read. An encrypted archive gets an
-/// "Enter Password…" button, which runs `enterPassword`.
+/// "Enter Password…" button, which runs `enterPassword`; a dropped network share shows "Disconnected"
+/// with a "Reconnect" button, which runs `reconnect`.
 struct LoadErrorView: View {
     let error: DirectoryLoadError
     var enterPassword: (() -> Void)? = nil
+    var reconnect: (() -> Void)? = nil
 
     private static let privacySettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
 
     var body: some View {
+        if case .shareDisconnected = error {
+            ContentUnavailableView {
+                Label(String(localized: "Disconnected"), systemImage: "network.slash")
+            } description: {
+                Text(error.message)
+            } actions: {
+                if let reconnect {
+                    Button(String(localized: "Reconnect"), action: reconnect)
+                }
+            }
+        } else {
+            unreadableView
+        }
+    }
+
+    private var unreadableView: some View {
         ContentUnavailableView {
             Label(error.message, systemImage: isPermissionError || needsPassword ? "lock" : "exclamationmark.triangle")
         } actions: {

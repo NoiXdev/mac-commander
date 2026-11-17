@@ -24,14 +24,27 @@ enum ShareActions {
         await handle(outcome, for: share, manager: manager, model: model, sheets: sheets)
     }
 
-    /// Connected: the window goes to the mount point. Needs sign-in: the sign-in sheet. Unreachable: the
-    /// "can’t be reached" alert, whose Retry connects again. Failed: an alert with the message.
+    /// "Reconnect" in a window's Disconnected placeholder: the same flow as a click on the share. Once
+    /// connected, the window returns to the folder it showed (see `handle`).
+    static func reconnect(
+        _ disconnected: DisconnectedShare, store: ShareStore, manager: ShareManager, model: BrowserModel,
+        sheets: ShareSheets
+    ) async {
+        guard let share = store.shares.first(where: { $0.id == disconnected.id }) else { return }
+        await connect(share, manager: manager, model: model, sheets: sheets)
+    }
+
+    /// Connected: a window showing the share's Disconnected placeholder returns to the same folder under the
+    /// (possibly renamed) mount point via `BrowserModel.reconnected`; a window already showing a folder on
+    /// that mount point stays there; otherwise the window goes to the mount point. Needs sign-in: the sign-in
+    /// sheet. Unreachable: the "can’t be reached" alert, whose Retry connects again. Failed: an alert with the message.
     static func handle(
         _ outcome: ConnectOutcome, for share: SavedShare, manager: ShareManager, model: BrowserModel,
         sheets: ShareSheets
     ) async {
         switch outcome {
         case .connected(let mountPoint):
+            guard await !model.shareDidConnect(id: share.id, mountPoint: mountPoint) else { return }
             await model.navigate(to: mountPoint)
         case .needsSignIn:
             await waitForSheetToClose(sheets.window.window)

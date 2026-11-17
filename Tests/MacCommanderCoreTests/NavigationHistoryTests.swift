@@ -52,3 +52,26 @@ struct NavigationHistoryTests {
         #expect(h.goBack() == a)
     }
 }
+
+struct NavigationHistoryRewriteTests {
+    @Test func rewritePrefixRewritesAllEntriesUnderTheOldRoot() {
+        var h = NavigationHistory(start: URL(fileURLWithPath: "/Users/me"))
+        h.visit(URL(fileURLWithPath: "/Volumes/Media"))
+        h.visit(URL(fileURLWithPath: "/Volumes/Media/a"))
+        h.visit(URL(fileURLWithPath: "/Volumes/MediaX"))
+        h.visit(URL(fileURLWithPath: "/Volumes/Media/a/b"))
+        _ = h.goBack()
+        _ = h.goBack()
+        // back: /Users/me, /Volumes/Media; current: /Volumes/Media/a; forward: /Volumes/Media/a/b, /Volumes/MediaX
+
+        h.rewritePrefix(from: URL(fileURLWithPath: "/Volumes/Media"), to: URL(fileURLWithPath: "/Volumes/Media-1"))
+
+        #expect(h.current.path == "/Volumes/Media-1/a")
+        #expect(h.goForward()?.path == "/Volumes/MediaX")
+        #expect(h.goForward()?.path == "/Volumes/Media-1/a/b")
+        _ = h.goBack()
+        _ = h.goBack()
+        #expect(h.goBack()?.path == "/Volumes/Media-1")
+        #expect(h.goBack()?.path == "/Users/me")
+    }
+}
