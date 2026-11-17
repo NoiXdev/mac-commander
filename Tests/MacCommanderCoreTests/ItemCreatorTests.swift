@@ -20,4 +20,12 @@ import Foundation
         let size = try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int
         #expect(size == 0)
     }
+
+    @Test func createEmptyFileNeverOverwrites() throws {
+        let dir = try TemporaryDirectory()
+        let existing = try dir.file("untitled.txt", contents: "keep")
+        let url = try ItemCreator.createEmptyFile(in: dir.url)
+        #expect(url.lastPathComponent == "untitled 2.txt")
+        #expect(try String(contentsOf: existing, encoding: .utf8) == "keep")
+    }
 }

@@ -9,11 +9,18 @@ public enum ItemCreator {
     }
 
     public static func createEmptyFile(in directory: URL) throws -> URL {
-        let name = NameGenerator.uniqueName(base: "untitled", pathExtension: "txt", in: directory)
-        let url = directory.appendingPathComponent(name)
-        guard FileManager.default.createFile(atPath: url.path, contents: Data()) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: url.path])
+        while true {
+            let name = NameGenerator.uniqueName(base: "untitled", pathExtension: "txt", in: directory)
+            let url = directory.appendingPathComponent(name)
+            // O_EXCL: never overwrite a file that appeared after the name was chosen.
+            let fd = open(url.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
+            if fd >= 0 {
+                close(fd)
+                return url
+            }
+            let code = errno
+            if code == EEXIST { continue }
+            throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO)
         }
-        return url
     }
 }
