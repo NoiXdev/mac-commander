@@ -32,15 +32,19 @@ public struct KeychainCredentialStore: CredentialStore {
 
     // MARK: Blocking implementations (call off main)
 
+    /// Never shows UI: reads run in the background (auto-reconnect), where an "allow access" prompt would pop
+    /// up out of nowhere. When the item needs the user's permission (`errSecInteractionNotAllowed`) there is no
+    /// password; the share then falls back to the automatic method, and signing in works as usual.
     static func passwordNow(for url: ShareURL, username: String) -> String? {
         for server in storedServers(for: url, username: username) {
             guard var query = baseQuery(for: url, username: username, server: server) else { return nil }
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             query[kSecReturnData as String] = true
+            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
             var item: CFTypeRef?
-            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data,
-                let password = String(data: data, encoding: .utf8)
-            {
+            let status = SecItemCopyMatching(query as CFDictionary, &item)
+            if status == errSecInteractionNotAllowed { return nil }
+            if status == errSecSuccess, let data = item as? Data, let password = String(data: data, encoding: .utf8) {
                 return password
             }
         }
