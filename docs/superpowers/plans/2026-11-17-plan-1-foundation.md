@@ -21,7 +21,7 @@
 ## Global Constraints
 - macOS 15 (Sequoia) minimum; Swift 6 language mode; no App Sandbox.
 - Must build and test with **Command Line Tools only** (no Xcode). Run tests via `scripts/test.sh`. Plain `swift test` fails under CLT because the Swift Testing macro plugin isn't on the default path. XCTest is **not** available, so use Swift Testing (`import Testing`) everywhere.
-- Bundle identifier: `dev.dginx.MacCommander`, defined only in `Resources/Info.plist`.
+- Bundle identifier: `dev.noix.MacCommander`, defined only in `Resources/Info.plist`.
 - No third-party dependencies in this plan.
 - Never enumerate directories on the main thread; folders with 50,000 items must stay responsive.
 - Only list view exists. View settings are **global** and change only through explicit user action. Never write `.DS_Store` or other Finder metadata.
@@ -116,7 +116,7 @@ let package = Package(
 `SmokeTests.swift`: `@Test func temporaryDirectoryCreatesFiles()` creates `a.txt` with contents `"hi"` and `#expect`s that the file exists and its contents equal `"hi"`.
 Run: `scripts/test.sh`. Expected: `✔ Test run with 1 test … passed`.
 
-- [ ] **Step 4: Write `Resources/Info.plist`**. Keys: `CFBundleIdentifier` = `dev.dginx.MacCommander`, `CFBundleName`/`CFBundleDisplayName` = `MacCommander`, `CFBundleExecutable` = `MacCommander`, `CFBundlePackageType` = `APPL`, `CFBundleShortVersionString` = `0.1.0`, `CFBundleVersion` = `1`, `LSMinimumSystemVersion` = `15.0`, `NSHighResolutionCapable` = true, `LSApplicationCategoryType` = `public.app-category.productivity`. Usage strings, each with the value `MacCommander needs access to show and manage your files.`: `NSDesktopFolderUsageDescription`, `NSDocumentsFolderUsageDescription`, `NSDownloadsFolderUsageDescription`, `NSRemovableVolumesUsageDescription`, `NSNetworkVolumesUsageDescription`.
+- [ ] **Step 4: Write `Resources/Info.plist`**. Keys: `CFBundleIdentifier` = `dev.noix.MacCommander`, `CFBundleName`/`CFBundleDisplayName` = `MacCommander`, `CFBundleExecutable` = `MacCommander`, `CFBundlePackageType` = `APPL`, `CFBundleShortVersionString` = `0.1.0`, `CFBundleVersion` = `1`, `LSMinimumSystemVersion` = `15.0`, `NSHighResolutionCapable` = true, `LSApplicationCategoryType` = `public.app-category.productivity`. Usage strings, each with the value `MacCommander needs access to show and manage your files.`: `NSDesktopFolderUsageDescription`, `NSDocumentsFolderUsageDescription`, `NSDownloadsFolderUsageDescription`, `NSRemovableVolumesUsageDescription`, `NSNetworkVolumesUsageDescription`.
 
 - [ ] **Step 5: Write a minimal `MacCommanderApp.swift`**: an `@main struct MacCommanderApp: App` with `WindowGroup { Text("MacCommander") }`.
 
@@ -128,7 +128,7 @@ Run: `scripts/test.sh`. Expected: `✔ Test run with 1 test … passed`.
   5. With `--open`, `open build/MacCommander.app`.
 
 - [ ] **Step 7: Verify**
-Run: `scripts/build-app.sh --open`. Expected: a window titled "MacCommander" appears. `codesign -dv build/MacCommander.app` reports `Identifier=dev.dginx.MacCommander`.
+Run: `scripts/build-app.sh --open`. Expected: a window titled "MacCommander" appears. `codesign -dv build/MacCommander.app` reports `Identifier=dev.noix.MacCommander`.
 Run: `MC_SIGN_IDENTITY="Developer ID Application: Agentur3B GmbH (6RH6HM2A9J)" scripts/build-app.sh -c release`. Expected: `codesign --verify --strict --verbose=2 build/MacCommander.app` prints `valid on disk` and `satisfies its Designated Requirement`. (Notarization is not run in this plan; it is verified when the first release is cut.)
 
 - [ ] **Step 8: Commit** `feat: scaffold package, build and test scripts`
