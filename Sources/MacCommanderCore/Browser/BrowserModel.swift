@@ -28,6 +28,10 @@ public final class BrowserModel {
     @ObservationIgnored private var sortGeneration = 0
     @ObservationIgnored private var observedSettings: ViewSettings
     @ObservationIgnored private var watcher: DirectoryWatcher?
+    /// Removes the unmount observer when the model goes away.
+    @ObservationIgnored private var unmountObservation: NotificationObservation?
+    /// Test hook: runs after a listing finishes, before its result is checked for staleness.
+    @ObservationIgnored var afterListingHook: (@MainActor (URL) async -> Void)?
 
     public init(
         start: URL,
@@ -41,9 +45,11 @@ public final class BrowserModel {
         self.opener = opener
         observedSettings = settings.settings
         observeSettings()
+        observeUnmounts()
     }
 
     deinit {
+        // The unmount observer is removed by `NotificationObservation.deinit`.
         watcher?.cancel()
     }
 
@@ -100,31 +106,40 @@ public final class BrowserModel {
 
     public func createFolder(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
+        let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createFolder(in: parent) }
-        return await didCreate(created, in: parent)
+        return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }
 
     public func createEmptyFile(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
+        let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createEmptyFile(in: parent) }
-        return await didCreate(created, in: parent)
+        return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }
 
+    /// Returns the URL as spelled in `items` when the item is in the current folder and no
+    /// navigation happened meanwhile; otherwise the renamed URL as is.
     public func rename(_ url: URL, to name: String) async throws(RenameError) -> URL {
+        let historyAtStart = history
         let renamed = try await Self.rename(url, to: name)
         let oldPath = Self.canonicalPath(url)
         if let selected = selection.first(where: { Self.canonicalPath($0) == oldPath }) {
             selection.remove(selected)
             selection.insert(renamed)
         }
-        guard isCurrentDirectory(url.deletingLastPathComponent()) else { return renamed }
-        await load()
+        guard await reloadIfStillShowing(url.deletingLastPathComponent(), since: historyAtStart) else {
+            return renamed
+        }
         return itemURL(matching: renamed)
     }
 
     // MARK: - Loading
 
-    private func load() async {
+    /// Returns whether this load was still the newest one when it finished, i.e. `items` now
+    /// reflect its listing.
+    @discardableResult
+    private func load() async -> Bool {
         loadGeneration += 1
         let generation = loadGeneration
 
@@ -143,7 +158,8 @@ public final class BrowserModel {
         } catch {
             result = .failure(error)
         }
-        guard generation == loadGeneration else { return }
+        await afterListingHook?(url)
+        guard generation == loadGeneration else { return false }
 
         switch result {
         case .success(let raw):
@@ -151,14 +167,15 @@ public final class BrowserModel {
             loadError = nil
         case .failure(.notFound) where !FileManager.default.fileExists(atPath: url.path):
             // Vanished between the existence check and the listing: fall back again.
-            await load()
-            return
+            return await load()
         case .failure(let error):
             loadedItems = []
             loadError = error
         }
         await present(loadGeneration: generation)
-        if generation == loadGeneration { isLoading = false }
+        guard generation == loadGeneration else { return false }
+        isLoading = false
+        return true
     }
 
     /// Sorts `loadedItems` off the main actor and publishes them, unless something newer started.
@@ -179,8 +196,16 @@ public final class BrowserModel {
         let directory = currentURL.resolvingSymlinksInPath().path
         var byName: [String: URL] = [:]
         for item in items { byName[item.url.lastPathComponent] = item.url }
+        // Selected entries usually share a few parents: resolve each parent once, not per entry.
+        var resolvedParents: [String: String] = [:]
         let pruned = Set(selection.compactMap { url -> URL? in
-            if url.deletingLastPathComponent().resolvingSymlinksInPath().path == directory {
+            let parent = url.deletingLastPathComponent()
+            let resolved = resolvedParents[parent.path] ?? {
+                let value = parent.resolvingSymlinksInPath().path
+                resolvedParents[parent.path] = value
+                return value
+            }()
+            if resolved == directory {
                 return byName[url.lastPathComponent]
             }
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
@@ -188,17 +213,27 @@ public final class BrowserModel {
         if pruned != selection { selection = pruned }
     }
 
-    /// Reloads if needed, then selects the new item and requests its rename. Returns the URL as
-    /// spelled in `items`, so it matches the list's identifiers.
-    private func didCreate(_ created: URL, in parent: URL) async -> URL {
+    /// Selects the new item and requests its rename. In the current folder it reloads first and
+    /// returns the URL as spelled in `items`. If the user navigated away meanwhile, it returns the
+    /// created URL and leaves selection and `pendingRename` alone.
+    private func didCreate(_ created: URL, in parent: URL, historyAtStart: NavigationHistory) async -> URL {
+        guard history == historyAtStart else { return created }
         var url = created
         if isCurrentDirectory(parent) {
-            await load()
+            guard await reloadIfStillShowing(parent, since: historyAtStart) else { return created }
             url = itemURL(matching: created)
         }
         selection = [url]
         pendingRename = url
         return url
+    }
+
+    /// Reloads when `directory` is the current folder and no navigation happened since
+    /// `historyAtStart`. Returns true only if `items` now show that folder's fresh listing.
+    private func reloadIfStillShowing(_ directory: URL, since historyAtStart: NavigationHistory) async -> Bool {
+        guard history == historyAtStart, isCurrentDirectory(directory) else { return false }
+        guard await load() else { return false }
+        return history == historyAtStart && isCurrentDirectory(directory)
     }
 
     /// For a URL in the current folder: the matching item's URL, or `url` if there is none.
@@ -217,6 +252,31 @@ public final class BrowserModel {
         watcher = DirectoryWatcher(url: url) { [weak self] in
             Task { @MainActor in await self?.reload() }
         }
+    }
+
+    // MARK: - Volumes
+
+    /// The watcher doesn't report an ejected volume, so reload when the volume holding the
+    /// current folder unmounts; `load()` then falls back to the nearest existing ancestor.
+    private func observeUnmounts() {
+        let center = NSWorkspace.shared.notificationCenter
+        let token = center.addObserver(
+            forName: NSWorkspace.didUnmountNotification, object: nil, queue: nil
+        ) { [weak self] note in
+            let volume = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL
+            Task { @MainActor in await self?.volumeDidUnmount(volume) }
+        }
+        unmountObservation = NotificationObservation(center: center, token: token)
+    }
+
+    private func volumeDidUnmount(_ volume: URL?) async {
+        if let volume {
+            let volumePath = volume.standardizedFileURL.path
+            let currentPath = currentURL.standardizedFileURL.path
+            let prefix = volumePath.hasSuffix("/") ? volumePath : volumePath + "/"
+            guard currentPath == volumePath || currentPath.hasPrefix(prefix) else { return }
+        }
+        await load()
     }
 
     // MARK: - Settings
@@ -272,4 +332,18 @@ public final class BrowserModel {
     private static func rename(_ url: URL, to name: String) async throws(RenameError) -> URL {
         try ItemRenamer.rename(url, to: name)
     }
+}
+
+/// Removes a block-based notification observer when released.
+private final class NotificationObservation: @unchecked Sendable {
+    // @unchecked: both properties are immutable, and NotificationCenter is thread-safe.
+    private let center: NotificationCenter
+    private let token: any NSObjectProtocol
+
+    init(center: NotificationCenter, token: any NSObjectProtocol) {
+        self.center = center
+        self.token = token
+    }
+
+    deinit { center.removeObserver(token) }
 }

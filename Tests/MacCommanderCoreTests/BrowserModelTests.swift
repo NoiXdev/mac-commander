@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 
@@ -24,7 +25,22 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
 }
 
 @MainActor
+private final class Flag {
+    var isSet = false
+}
+
+@MainActor
 @Suite struct BrowserModelTests {
+    /// Makes the first listing of `folder` stale by navigating to `other` before it is checked.
+    private func navigateAwayDuringNextListing(of folder: URL, to other: URL, in model: BrowserModel) {
+        let fired = Flag()
+        model.afterListingHook = { [weak model] url in
+            guard !fired.isSet, samePath(url, folder), let model else { return }
+            fired.isSet = true
+            await model.navigate(to: other)
+        }
+    }
+
     private func makeStore() -> ViewSettingsStore {
         ViewSettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
     }
@@ -295,5 +311,88 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
         await model.open(try #require(model.items.first { $0.url.lastPathComponent == "target" }))
         #expect(samePath(model.currentURL, target))
         #expect(recorder.opened.isEmpty)
+    }
+
+    @Test func navigatingAwayDuringCreateReloadLeavesSelectionAlone() async throws {
+        let dir = try TemporaryDirectory()
+        let first = try dir.folder("first")
+        let other = try dir.folder("other")
+        try dir.file("other/untitled.txt")
+        let model = BrowserModel(start: first, settings: makeStore())
+        await model.reload()
+        navigateAwayDuringNextListing(of: first, to: other, in: model)
+
+        let url = try await model.createEmptyFile()
+
+        #expect(samePath(url.deletingLastPathComponent(), first))
+        #expect(samePath(model.currentURL, other))
+        #expect(model.pendingRename == nil)
+        #expect(model.selection.isEmpty)
+        #expect(names(model) == ["untitled.txt"])
+    }
+
+    @Test func navigatingAwayDuringRenameReloadReturnsRenamedURL() async throws {
+        let dir = try TemporaryDirectory()
+        let first = try dir.folder("first")
+        let old = try dir.file("first/a.txt")
+        let other = try dir.folder("other")
+        try dir.file("other/b.txt")
+        let model = BrowserModel(start: first, settings: makeStore())
+        await model.reload()
+        navigateAwayDuringNextListing(of: first, to: other, in: model)
+
+        let renamed = try await model.rename(old, to: "b.txt")
+
+        #expect(samePath(renamed.deletingLastPathComponent(), first))
+        #expect(samePath(model.currentURL, other))
+        #expect(!model.selection.contains { model.items.map(\.url).contains($0) })
+    }
+
+    @Test func pruningKeepsManySelectedEntriesSharingOneParent() async throws {
+        let dir = try TemporaryDirectory()
+        for i in 0..<2000 { try dir.file("f\(i).txt") }
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        // Spelled differently from the loader's URLs (e.g. /var vs /private/var).
+        model.selection = Set((0..<2000).map { dir.url.appendingPathComponent("f\($0).txt") })
+
+        try FileManager.default.removeItem(at: dir.url.appendingPathComponent("f7.txt"))
+        let start = ContinuousClock.now
+        await model.reload()
+
+        #expect(ContinuousClock.now - start < .seconds(2))
+        #expect(model.selection.count == 1999)
+        #expect(model.selection == Set(model.items.map(\.url)))
+    }
+
+    @Test func deletedCurrentFolderFallsBackViaWatcher() async throws {
+        let dir = try TemporaryDirectory()
+        let a = try dir.folder("a")
+        let b = try dir.folder("a/b")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        await model.navigate(to: b)
+
+        try FileManager.default.removeItem(at: b)
+
+        #expect(await waitUntil { samePath(model.currentURL, a) })
+        #expect(model.loadError == nil)
+    }
+
+    @Test func unmountOfCurrentVolumeFallsBack() async throws {
+        let dir = try TemporaryDirectory()
+        let volume = try dir.folder("volume")
+        let inner = try dir.folder("volume/inner")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        await model.navigate(to: inner)
+
+        // Moving the parent away doesn't notify the watcher on `inner`; only the unmount does.
+        try FileManager.default.moveItem(at: volume, to: dir.url.appendingPathComponent("moved"))
+        NSWorkspace.shared.notificationCenter.post(
+            name: NSWorkspace.didUnmountNotification, object: nil,
+            userInfo: [NSWorkspace.volumeURLUserInfoKey: volume])
+
+        #expect(await waitUntil { samePath(model.currentURL, dir.url) })
     }
 }
