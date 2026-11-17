@@ -42,4 +42,13 @@ public enum ArchivePath {
             $0.appendingPathComponent(String($1), isDirectory: false)
         }
     }
+
+    /// The inner path of `url` inside `archive`, by path prefix only (no file-system access, cheap enough
+    /// for building menus and actions on the main actor); nil for the archive itself or a URL outside it.
+    public static func inner(of url: URL, in archive: URL) -> String? {
+        let prefix = archive.standardizedFileURL.path + "/"
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(prefix), path.count > prefix.count else { return nil }
+        return String(path.dropFirst(prefix.count))
+    }
 }

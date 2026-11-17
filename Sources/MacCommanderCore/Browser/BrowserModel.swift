@@ -587,12 +587,14 @@ public final class BrowserModel {
 
     /// Lists `location` from the catalog. An inner folder missing from the index falls back to
     /// its deepest existing ancestor ("" always exists); the result says which folder was listed.
+    /// Off the main actor: the walk is a dictionary lookup per component, but the index can be large.
+    @concurrent
     private static func listArchive(
         _ location: ArchiveLocation, catalog: ArchiveCatalog, includeHidden: Bool
     ) async throws(ArchiveError) -> ListedItems {
         let index = try await catalog.index(of: location.archive)
         var components = location.inner.split(separator: "/").map(String.init)
-        while !components.isEmpty, index.entries(in: components.joined(separator: "/")) == nil {
+        while !components.isEmpty, !index.containsFolder(components.joined(separator: "/")) {
             components.removeLast()
         }
         let inner = components.joined(separator: "/")

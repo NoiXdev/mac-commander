@@ -145,4 +145,21 @@ struct ArchiveIndexTests {
         #expect(index.entries(in: "folder7")?.count == 100)
         #expect(elapsed < .seconds(1))
     }
+
+    @Test func containsFolder() {
+        let listing = """
+            drwxr-xr-x  0 daniel staff       0 Nov 17 17:41 ./sub/
+            -rw-r--r--  0 daniel staff       3 Nov 17 17:42 ./sub/deep/a.txt
+            -rw-r--r--  0 daniel staff       3 Nov 17 17:42 ./b.txt
+
+            """
+        let index = ArchiveIndex(listing: listing, now: now)
+        #expect(index.containsFolder(""))
+        #expect(index.containsFolder("sub"))
+        #expect(index.containsFolder("sub/deep"))
+        #expect(index.containsFolder("/sub/deep/"))
+        #expect(!index.containsFolder("b.txt"))
+        #expect(!index.containsFolder("sub/deep/a.txt"))
+        #expect(!index.containsFolder("missing"))
+    }
 }

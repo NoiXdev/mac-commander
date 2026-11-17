@@ -160,7 +160,8 @@ enum FileContextMenu {
     }
 
     /// For an archive file (outside an archive), after Open: Extract All Here and Open with Archive Utility for
-    /// pure archives; Browse Contents for containers such as `.docx` (pure archives browse on Open).
+    /// pure archives; Browse Contents for containers such as `.docx` (pure archives browse on Open), but not
+    /// for packages (e.g. a `.pages` or `.key` document saved as a folder).
     private static func addArchiveFileActions(
         to menu: NSMenu, file: FileItem, model: BrowserModel, window: NSWindow?
     ) {
@@ -174,7 +175,7 @@ enum FileContextMenu {
             menu.addItem(ActionMenuItem(String(localized: "Open with Archive Utility")) {
                 FileActions.openWithArchiveUtility(url)
             })
-        } else if ArchiveFormats.isBrowsable(url) {
+        } else if ArchiveFormats.isBrowsable(url), !file.isPackage {
             menu.addItem(ActionMenuItem(String(localized: "Browse Contents")) {
                 Task { @MainActor in await model.browseContents(file) }
             })
@@ -186,19 +187,21 @@ enum FileContextMenu {
     private static func addExtractEntriesActions(
         to menu: NSMenu, entries items: [FileItem], archive: URL, model: BrowserModel, window: NSWindow?
     ) {
-        let entries = PathUtilities.topLevel(items.map(\.url)).compactMap { ArchivePath.split($0)?.inner }
+        // Computed when chosen, not while the menu is built (pure string work on the paths).
+        let urls = items.map(\.url)
+        let entries = { PathUtilities.topLevel(urls).compactMap { ArchivePath.inner(of: $0, in: archive) } }
         let parent = archive.deletingLastPathComponent()
         let parentName = FileManager.default.displayName(atPath: parent.path)
         menu.addItem(ActionMenuItem(String(localized: "Extract to “\(parentName)”")) {
             Task { @MainActor in
-                await FileActions.extract(entries, from: archive, into: parent, model: model, window: window)
+                await FileActions.extract(entries(), from: archive, into: parent, model: model, window: window)
             }
         })
         menu.addItem(ActionMenuItem(String(localized: "Extract To…")) {
             Task { @MainActor in
                 guard let destination = await FileActions.chooseExtractionFolder(startingAt: parent, window: window)
                 else { return }
-                await FileActions.extract(entries, from: archive, into: destination, model: model, window: window)
+                await FileActions.extract(entries(), from: archive, into: destination, model: model, window: window)
             }
         })
     }

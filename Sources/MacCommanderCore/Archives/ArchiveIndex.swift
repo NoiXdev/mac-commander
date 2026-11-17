@@ -47,6 +47,12 @@ public struct ArchiveIndex: Sendable {
         return folders[key]?.values.sorted { $0.path < $1.path }
     }
 
+    /// True when `folder` ("" = root) is a folder of the archive. A dictionary lookup, unlike `entries(in:)`,
+    /// which sorts the folder's entries.
+    public func containsFolder(_ folder: String) -> Bool {
+        folders[Self.key(folder.split(separator: "/").joined(separator: "/"))] != nil
+    }
+
     /// Number of distinct entries, including synthesized folders.
     public var entryCount: Int {
         folders.values.reduce(0) { $0 + $1.count }

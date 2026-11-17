@@ -35,8 +35,8 @@ extension FileListController {
         guard showsCurrentFolder, let archive = model.archiveLocation?.archive else { return }
         // A symlink would be followed out of the cache by the panel.
         let files = selectedItems.filter { !$0.isDirectory && !$0.isSymlink }
-        // Cheap stats only (`ArchivePath.split`).
-        let entries = files.compactMap { ArchivePath.split($0.url)?.inner }
+        // Pure string work, no file-system access.
+        let entries = files.compactMap { ArchivePath.inner(of: $0.url, in: archive) }
         guard !entries.isEmpty, entries.count == files.count else {
             NSSound.beep()
             return

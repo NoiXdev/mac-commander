@@ -101,10 +101,7 @@ extension FileListController: NSOutlineViewDataSource {
     /// The inner path of a row's virtual URL inside `archive` (by path prefix, no file-system access);
     /// nil for the archive itself or a URL outside it.
     static func entryPath(of url: URL, in archive: URL) -> String? {
-        let prefix = archive.standardizedFileURL.path + "/"
-        let path = url.standardizedFileURL.path
-        guard path.hasPrefix(prefix), path.count > prefix.count else { return nil }
-        return String(path.dropFirst(prefix.count))
+        ArchivePath.inner(of: url, in: archive)
     }
 
     // MARK: Drop target

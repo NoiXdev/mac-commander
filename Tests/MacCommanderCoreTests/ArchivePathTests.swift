@@ -64,4 +64,14 @@ struct ArchivePathTests {
         #expect(result.path == tmp.url.standardizedFileURL.path)
         #expect(PathUtilities.nearestExistingAncestor(of: file).path == tmp.url.standardizedFileURL.path)
     }
+
+    /// Pure string work: no file-system access, so it also works for archives that don't exist.
+    @Test func innerOfURLInArchive() {
+        let archive = URL(fileURLWithPath: "/nowhere/a.zip")
+        #expect(ArchivePath.inner(of: URL(fileURLWithPath: "/nowhere/a.zip/img/x.png"), in: archive) == "img/x.png")
+        #expect(ArchivePath.inner(of: URL(fileURLWithPath: "/nowhere/a.zip/img/", isDirectory: true), in: archive) == "img")
+        #expect(ArchivePath.inner(of: archive, in: archive) == nil)
+        #expect(ArchivePath.inner(of: URL(fileURLWithPath: "/nowhere/a.zipper/x"), in: archive) == nil)
+        #expect(ArchivePath.inner(of: URL(fileURLWithPath: "/elsewhere/x"), in: archive) == nil)
+    }
 }
