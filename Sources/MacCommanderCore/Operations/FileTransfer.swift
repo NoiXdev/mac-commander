@@ -392,7 +392,7 @@ public enum FileTransfer {
     // MARK: - Paths
 
     /// Folder path with every symlink resolved.
-    private static func canonicalPath(_ url: URL) -> String {
+    static func canonicalPath(_ url: URL) -> String {
         url.resolvingSymlinksInPath().standardizedFileURL.path
     }
 
@@ -406,7 +406,7 @@ public enum FileTransfer {
     }
 
     /// True if the destination folder is `source` or lies inside it.
-    private static func isSourceContaining(_ destination: URL, source: URL) -> Bool {
+    static func isSourceContaining(_ destination: URL, source: URL) -> Bool {
         let destinationPath = canonicalPath(destination)
         if isPath(destinationPath, inside: entryPath(source)) { return true }
         return isRealDirectory(source) && hasAncestorOrSelf(URL(fileURLWithPath: destinationPath), sameAs: source)
