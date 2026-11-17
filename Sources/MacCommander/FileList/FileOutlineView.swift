@@ -76,7 +76,13 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
     }
 
     /// File ▸ Open (⌘O), sent through the responder chain.
+    /// Not while this window is merely main (a sheet or another window is key): `sendAction` falls back
+    /// to the main window's chain.
     @objc func openSelectedItems(_ sender: Any?) {
+        guard let window, window.isKeyWindow, window.attachedSheet == nil else {
+            NSSound.beep()
+            return
+        }
         onOpenSelection?()
     }
 
@@ -121,11 +127,15 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
     /// Enables the AppKit menu items (Edit ▸ Copy, Cut, Paste, Undo) and names Undo after its operation.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         guard let action = menuItem.action, let command = Self.commandSelectors[action] else { return true }
-        guard let commandHandler, commandHandler.canPerform(command) else { return false }
-        if command == .undo, let title = commandHandler.undoTitle {
-            menuItem.title = String(localized: "Undo \(title)")
+        let enabled = commandHandler?.canPerform(command) ?? false
+        if command == .undo {
+            if enabled, let title = commandHandler?.undoTitle {
+                menuItem.title = String(localized: "Undo \(title)")
+            } else {
+                menuItem.title = String(localized: "Undo")
+            }
         }
-        return true
+        return enabled
     }
 
     override func keyDown(with event: NSEvent) {

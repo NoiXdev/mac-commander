@@ -36,16 +36,20 @@ enum FileActions {
         let mode = clipboard.pasteMode(forceMove: forceMove)
         // Spend the cut before the transfer runs, so a second ⌘V meanwhile copies instead of moving again.
         clipboard.didPaste(mode: mode)
-        await transfer(urls, into: destination, mode: mode, model: model, window: window)
+        let result = await transfer(urls, into: destination, mode: mode, model: model, window: window)
+        // The moved items' old URLs are gone: a further ⌘V copies them from their new place.
+        if mode == .move { clipboard.didMove(to: result.completed.map(\.destination)) }
     }
 
     /// Copies or moves `urls` into `destination`, asking about conflicts on `window`, then selects the results.
+    @discardableResult
     static func transfer(_ urls: [URL], into destination: URL, mode: TransferMode, model: BrowserModel, window: NSWindow?)
-        async
+        async -> TransferResult
     {
         let resolver = ConflictPrompter.shared.resolver(for: window)
         let result = await model.operations.transfer(urls, into: destination, mode: mode, resolver: resolver)
         await finish(result, mode: mode, model: model, window: window)
+        return result
     }
 
     static func duplicate(_ items: [FileItem], model: BrowserModel, window: NSWindow? = nil) async {

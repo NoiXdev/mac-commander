@@ -9,7 +9,11 @@ extension FileListController: FileCommandHandler {
     var undoTitle: String? { model.operations.undo.undoTitle }
 
     func canPerform(_ command: FileCommand) -> Bool {
-        guard showsCurrentFolder, !isEditingText else { return false }
+        // Only in the key window without a sheet: `sendAction` also tries the main window, which stays main
+        // under a sheet (e.g. Go to Folder), and ⌘⌫ there must not trash the list's selection.
+        guard let window = outlineView.window, window.isKeyWindow, window.attachedSheet == nil,
+            showsCurrentFolder, !isEditingText
+        else { return false }
         switch command {
         case .copy, .cut, .duplicate, .moveToTrash, .getInfo, .copyPath:
             return !outlineView.selectedRowIndexes.isEmpty

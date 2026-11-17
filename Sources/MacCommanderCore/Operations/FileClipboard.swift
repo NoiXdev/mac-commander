@@ -6,6 +6,9 @@ import Observation
     @ObservationIgnored private let pasteboard: NSPasteboard
     /// `changeCount` right after this app's cut; any later pasteboard write invalidates it.
     @ObservationIgnored private var cutChangeCount: Int?
+    /// `changeCount` when the items now being moved were put on the pasteboard (cut) or pasted
+    /// (move-paste); `didMove(to:)` rewrites the pasteboard only while it still matches.
+    @ObservationIgnored private var moveChangeCount: Int?
 
     public init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard
@@ -14,11 +17,13 @@ import Observation
     public func copy(_ urls: [URL]) {
         write(urls)
         cutChangeCount = nil
+        moveChangeCount = nil
     }
 
     public func cut(_ urls: [URL]) {
         write(urls)
         cutChangeCount = pasteboard.changeCount
+        moveChangeCount = cutChangeCount
     }
 
     /// File URLs on the pasteboard, also those put there by Finder.
@@ -37,7 +42,20 @@ import Observation
 
     /// After a move-paste the cut is spent (Finder: cut is one-shot).
     public func didPaste(mode: TransferMode) {
-        if mode == .move { cutChangeCount = nil }
+        guard mode == .move else { return }
+        cutChangeCount = nil
+        moveChangeCount = pasteboard.changeCount
+    }
+
+    /// After a move-paste: the moved items' old URLs are gone, so the pasteboard now holds their new
+    /// places as a copy (a further paste copies them). Does nothing if anything was written to the
+    /// pasteboard since the cut or paste (e.g. a newer copy by the user).
+    public func didMove(to destinations: [URL]) {
+        guard let moveChangeCount, moveChangeCount == pasteboard.changeCount else { return }
+        self.moveChangeCount = nil
+        guard !destinations.isEmpty else { return }
+        write(destinations)
+        cutChangeCount = nil
     }
 
     private func write(_ urls: [URL]) {

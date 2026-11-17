@@ -39,7 +39,8 @@ struct OperationsStrip: View {
         .task(id: center.operations.map(\.id)) { await trackOperations() }
     }
 
-    /// Records new operations, forgets ended ones, and wakes up when the next hidden row is due.
+    /// Records new operations, forgets ended ones, and wakes up each time a hidden row becomes due,
+    /// until every row is shown. (A change in the set of operations restarts this task.)
     private func trackOperations() async {
         let date = Date()
         let ids = Set(center.operations.map(\.id))
@@ -47,10 +48,14 @@ struct OperationsStrip: View {
         for id in ids where seen[id] == nil { seen[id] = date }
         firstSeen = seen
         now = date
-        guard let due = seen.values.map({ $0.addingTimeInterval(Self.delay) }).filter({ $0 > date }).min()
-        else { return }
-        try? await Task.sleep(for: .seconds(due.timeIntervalSince(date)))
-        if !Task.isCancelled { now = max(Date(), due) }
+        while !Task.isCancelled {
+            let current = now
+            guard let due = seen.values.map({ $0.addingTimeInterval(Self.delay) }).filter({ $0 > current }).min()
+            else { return }
+            try? await Task.sleep(for: .seconds(due.timeIntervalSince(Date())))
+            if Task.isCancelled { return }
+            now = max(Date(), due)
+        }
     }
 }
 
