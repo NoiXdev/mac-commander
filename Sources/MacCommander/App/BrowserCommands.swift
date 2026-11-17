@@ -59,7 +59,8 @@ struct BrowserCommands: Commands {
                 .disabled(goToFolder == nil)
             Button(String(localized: "Connect to Server…")) { shareSheets?.showConnectToServer = true }
                 .keyboardShortcut("k")
-                .disabled(shareSheets == nil)
+                // Not while another sheet of the window is up (Connect to Server, sign-in, Edit, Go to Folder).
+                .disabled(shareSheets == nil || shareSheets?.isPresentingSheet == true || goToFolder?.wrappedValue == true)
             Button("Home") { go(FileManager.default.homeDirectoryForCurrentUser) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
             Button("Desktop") { go(home("Desktop")) }

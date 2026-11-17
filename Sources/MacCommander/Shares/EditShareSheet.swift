@@ -71,31 +71,44 @@ struct EditShareSheet: View {
         .onChange(of: urlText.wrappedValue) { _, _ in duplicate = false }
     }
 
+    /// Applies the fields the user changed to the share as it is now (re-read from the store: a sign-in or
+    /// connect may have changed it while the sheet was open), so nothing newer is overwritten with the
+    /// snapshot the sheet opened with.
     private func save() {
         guard let newURL = parsedURL else { return }
+        guard let current = store.shares.first(where: { $0.id == share.id }) else {
+            // Removed meanwhile.
+            dismiss()
+            return
+        }
         if store.shares.contains(where: { $0.id != share.id && $0.url.matches(newURL) }) {
             duplicate = true
             return
         }
-        var edited = share
-        edited.url = newURL
+        var edited = current
+        let urlChanged = newURL != share.url
+        if urlChanged { edited.url = newURL }
         let trimmedName = name.wrappedValue.trimmingCharacters(in: .whitespaces)
-        edited.name = trimmedName.isEmpty ? newURL.displayName : trimmedName
-        edited.autoReconnect = reconnect.wrappedValue
-        if guest.wrappedValue {
-            edited.lastAuth = .guest
-            edited.username = nil
-        } else {
+        if trimmedName != share.name || urlChanged {
+            edited.name = trimmedName.isEmpty ? edited.url.displayName : trimmedName
+        }
+        if reconnect.wrappedValue != share.autoReconnect { edited.autoReconnect = reconnect.wrappedValue }
+        if guest.wrappedValue != (share.lastAuth == .guest) {
+            edited.lastAuth = guest.wrappedValue ? .guest : .automatic
+            if guest.wrappedValue { edited.username = nil }
+        }
+        if !guest.wrappedValue {
             let trimmedUser = user.wrappedValue.trimmingCharacters(in: .whitespaces)
-            edited.username = trimmedUser.isEmpty ? nil : trimmedUser
-            if share.lastAuth == .guest { edited.lastAuth = .automatic }
+            if trimmedUser != (share.username ?? "") { edited.username = trimmedUser.isEmpty ? nil : trimmedUser }
         }
         let needsRefresh =
-            newURL != share.url || edited.autoReconnect != share.autoReconnect
-            || edited.lastAuth != share.lastAuth
+            edited.url != current.url || edited.autoReconnect != current.autoReconnect
+            || edited.lastAuth != current.lastAuth
         store.update(edited)
+        // The old address's volume may still be mounted: it isn't offered as "Remember this share?".
+        if edited.url != current.url { manager.addressChanged(from: current.url) }
         manager.clearSignInFlag(share.id)
         dismiss()
-        if needsRefresh { Task { await manager.refreshAll() } }
+        if needsRefresh { manager.requestRefresh() }
     }
 }

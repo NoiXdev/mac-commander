@@ -4,7 +4,8 @@ import SwiftUI
 
 /// Go ▸ Connect to Server… (⌘K): a share URL, checked with `ShareURL` as it is typed, and the recent server
 /// URLs of the saved shares. Connect saves the share (or finds the saved one), closes the sheet and connects;
-/// the outcome is handled like a sidebar click (navigation, sign-in sheet or an alert).
+/// the outcome is handled like a sidebar click (navigation, sign-in sheet or an alert). A user name typed in the
+/// address (`smb://bob@nas/Share`) is kept as the share's user; a password typed there is ignored.
 struct ConnectToServerSheet: View {
     static let recentLimit = 10
 
@@ -69,12 +70,13 @@ struct ConnectToServerSheet: View {
     private func connect() {
         // Return can fire although the button is disabled.
         guard let url = shareURL else { return NSSound.beep() }
+        let username = ShareURL.username(in: text.wrappedValue)
         dismiss()
         let manager = manager
         let model = model
         let sheets = sheets
         Task {
-            let (share, outcome) = await manager.addAndConnect(url)
+            let (share, outcome) = await manager.addAndConnect(url, username: username)
             await ShareActions.handle(outcome, for: share, manager: manager, model: model, sheets: sheets)
         }
     }
