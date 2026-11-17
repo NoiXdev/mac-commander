@@ -12,13 +12,19 @@ public struct SystemVolumeLister: MountedVolumeLister {
     static func mountedSharesNow() -> [MountedShare] {
         let keys: [URLResourceKey] = [.volumeURLForRemountingKey, .volumeIsLocalKey]
         let volumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: []) ?? []
-        return volumes.compactMap { volume in
-            guard let values = try? volume.resourceValues(forKeys: Set(keys)),
-                values.volumeIsLocal == false,
-                let remount = values.volumeURLForRemounting,
+        return shares(from: volumes.map { volume in
+            let values = try? volume.resourceValues(forKeys: Set(keys))
+            return (volume, values?.volumeIsLocal, values?.volumeURLForRemounting)
+        })
+    }
+
+    /// Keeps volumes known to be non-local whose remount URL is a supported share URL.
+    static func shares(from volumes: [(mountPoint: URL, isLocal: Bool?, remount: URL?)]) -> [MountedShare] {
+        volumes.compactMap { volume in
+            guard volume.isLocal == false, let remount = volume.remount,
                 let url = ShareURL(remountURL: remount)
             else { return nil }
-            return MountedShare(mountPoint: volume, url: url)
+            return MountedShare(mountPoint: volume.mountPoint, url: url)
         }
     }
 }

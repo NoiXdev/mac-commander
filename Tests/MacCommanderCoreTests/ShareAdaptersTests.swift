@@ -6,7 +6,7 @@ import Testing
 
 @Suite struct ShareAdaptersTests {
     @Test func mapsMountErrors() {
-        for status: Int32 in [80, 13, -6600, -6650, -6699] {
+        for status: Int32 in [80, 13, -5045, -5046, -5999, -6004] {
             #expect(NetFSMounter.mapMountError(status) == .authenticationFailed, "\(status)")
         }
         for status: Int32 in [51, 65, 60, 61, 64] {
@@ -16,12 +16,18 @@ import Testing
             #expect(NetFSMounter.mapMountError(status) == .cancelled, "\(status)")
         }
         #expect(NetFSMounter.mapMountError(2) == .failed(String(cString: strerror(2))))
-        #expect(NetFSMounter.mapMountError(-6599) == .failed("Error -6599"))
-        #expect(NetFSMounter.mapMountError(-6700) == .failed("Error -6700"))
+        #expect(NetFSMounter.mapMountError(-6600) == .failed("Error -6600 (kNetAuthErrorInternal)"))
+        #expect(NetFSMounter.mapMountError(-6602) == .failed("Error -6602 (kNetAuthErrorMountFailed)"))
+        for status: Int32 in [-6650, -6699, -5000, -1] {
+            #expect(NetFSMounter.mapMountError(status) == .failed("Error \(status)"), "\(status)")
+        }
     }
 
     @Test func proberReachesLocalListener() async throws {
-        let listener = try NWListener(using: .tcp, on: .any)
+        // Loopback only, so the test can't trigger a firewall prompt.
+        let parameters = NWParameters.tcp
+        parameters.requiredInterfaceType = .loopback
+        let listener = try NWListener(using: parameters, on: .any)
         listener.newConnectionHandler = { $0.start(queue: .global()); $0.cancel() }
         let queue = DispatchQueue(label: "test.listener")
         let port: UInt16 = await withCheckedContinuation { continuation in
@@ -59,7 +65,21 @@ import Testing
         #expect(clock.now - start < .seconds(4))
     }
 
-    @Test func volumeListerSeesNoLocalVolumes() async {
+    @Test func volumeListerKeepsOnlyNetworkShares() throws {
+        let file = { (path: String) in URL(fileURLWithPath: path, isDirectory: true) }
+        let shares = SystemVolumeLister.shares(from: [
+            (file("/"), true, nil),
+            (file("/Volumes/USB"), true, URL(string: "smb://nas/Local")),
+            (file("/Volumes/Unknown"), nil, URL(string: "smb://nas/Unknown")),
+            (file("/Volumes/NoRemount"), false, nil),
+            (file("/Volumes/FTP"), false, URL(string: "ftp://host/files")),
+            (file("/Volumes/Media"), false, URL(string: "smb://user@NAS.local/Media")),
+        ])
+        let expected = try #require(ShareURL("smb://nas.local/Media"))
+        #expect(shares == [MountedShare(mountPoint: file("/Volumes/Media"), url: expected)])
+    }
+
+    @Test func volumeListerRuns() async {
         let shares = await SystemVolumeLister().mountedShares()
         #expect(!shares.contains { $0.mountPoint.standardizedFileURL.path == "/" })
     }
@@ -85,6 +105,24 @@ import Testing
 
         await store.delete(for: url, username: username)
         #expect(await store.password(for: url, username: username) == nil)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MC_KEYCHAIN_TESTS"] == "1",
+        "Writes to the login keychain; set MC_KEYCHAIN_TESTS=1"))
+    func keychainItemIsPerServer() async throws {
+        let store = KeychainCredentialStore()
+        let first = try #require(ShareURL("smb://mc-test.invalid/One"))
+        let second = try #require(ShareURL("smb://mc-test.invalid/Two"))
+        let username = #"CORP\tester"#
+        defer { KeychainCredentialStore.deleteNow(for: first, username: username) }
+        await store.delete(for: first, username: username)
+
+        try await store.save(password: "shared", for: first, username: username)
+        #expect(await store.password(for: second, username: username) == "shared")
+        try await store.save(password: "changed", for: second, username: username)
+        #expect(await store.password(for: first, username: username) == "changed")
+        await store.delete(for: second, username: username)
+        #expect(await store.password(for: first, username: username) == nil)
     }
 
     @Test func keychainSkipsNFS() async throws {

@@ -33,20 +33,33 @@ public struct NetFSMounter: ShareMounter {
         }
     }
 
-    /// Maps a NetFS / errno status to a `MountError`. Negative codes outside the known ranges become
-    /// "Error <n>"; positive ones use `strerror`.
+    /// Maps a NetFS / errno status to a `MountError`. Only real credential problems count as authentication
+    /// failures (they stop auto-reconnect until the user signs in); NetAuth's internal and mount-failed codes
+    /// (-6600, -6602) are transient. Other negative codes become "Error <n>" (with the NetFS.h name when known);
+    /// positive ones use `strerror`.
     public static func mapMountError(_ status: Int32) -> MountError {
         switch status {
-        case EAUTH, EACCES, -6699 ... -6600:
+        case EAUTH, EACCES,
+            -5045,  // ENETFSPWDNEEDSCHANGE
+            -5046,  // ENETFSPWDPOLICY
+            -5999,  // ENETFSACCOUNTRESTRICTED
+            -6004:  // kNetAuthErrorGuestNotSupported: the user needs Sign In…
             return .authenticationFailed
         case ENETUNREACH, EHOSTUNREACH, ETIMEDOUT, ECONNREFUSED, EHOSTDOWN:
             return .unreachable
         case ECANCELED, -128:
             return .cancelled
         default:
-            return status < 0 ? .failed("Error \(status)") : .failed(String(cString: strerror(status)))
+            guard status < 0 else { return .failed(String(cString: strerror(status))) }
+            if let name = negativeErrorNames[status] { return .failed("Error \(status) (\(name))") }
+            return .failed("Error \(status)")
         }
     }
+
+    private static let negativeErrorNames: [Int32: String] = [
+        -6600: "kNetAuthErrorInternal",
+        -6602: "kNetAuthErrorMountFailed",
+    ]
 }
 
 /// One mount attempt: bridges `NetFSMountURLAsync`'s callback to a continuation that is resumed exactly once,
@@ -73,13 +86,16 @@ private final class MountRequest: @unchecked Sendable {
         let openOptions = NSMutableDictionary()
         openOptions[kNAUIOptionKey] = kNAUIOptionNoUI
         if credentials.guest { openOptions[kNetFSUseGuestKey] = true }
+        // A guest mount never sends a user or password, whatever the credentials carry.
+        let user = credentials.guest ? nil : credentials.username
+        let password = credentials.guest ? nil : credentials.password
         // kNetFSMountFlagsKey stays unset (0): the default mount point under /Volumes.
         let mountOptions = NSMutableDictionary()
 
         var id: AsyncRequestID?
         let status = NetFSMountURLAsync(
             url.url as CFURL, nil,
-            credentials.username as CFString?, credentials.password as CFString?,
+            user as CFString?, password as CFString?,
             openOptions, mountOptions, &id, queue
         ) { [self] status, _, mountpoints in
             if status != 0 {

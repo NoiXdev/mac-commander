@@ -17,9 +17,11 @@ public struct TCPReachabilityProber: ReachabilityProber {
                 connection.stateUpdateHandler = { state in
                     switch state {
                     case .ready: probe.finish(true)
-                    // `.waiting` means the connect failed for now (refused, no route); NWConnection would retry,
-                    // but a probe wants the current answer.
-                    case .failed, .waiting, .cancelled: probe.finish(false)
+                    case .failed, .cancelled: probe.finish(false)
+                    // A refused or unroutable connect is reported as `.waiting`; that's a definite "no" now.
+                    // Any other `.waiting` (for example no usable path yet) may still succeed when NWConnection
+                    // retries on a path change, so it waits for the timeout.
+                    case .waiting(let error) where Self.failsFast(error): probe.finish(false)
                     default: break
                     }
                 }
@@ -28,6 +30,13 @@ public struct TCPReachabilityProber: ReachabilityProber {
             }
         } onCancel: {
             probe.finish(false)
+        }
+    }
+
+    static func failsFast(_ error: NWError) -> Bool {
+        switch error {
+        case .posix(.ECONNREFUSED), .posix(.EHOSTUNREACH), .posix(.ENETUNREACH): return true
+        default: return false
         }
     }
 }

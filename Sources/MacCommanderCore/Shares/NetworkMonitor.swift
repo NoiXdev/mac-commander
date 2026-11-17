@@ -4,7 +4,7 @@ import Network
 /// Feeds system events to a `ShareManager`: network path changes (debounced 2 s, since a Wi-Fi switch reports
 /// several in a row) and wake call `networkChanged()`; volume mounts and unmounts call `volumesChanged()`.
 /// The first path update after `start()` describes the current network and is ignored: callers do the initial
-/// refresh themselves.
+/// refresh themselves. `stop()` is optional: deinit does the same cleanup.
 @MainActor
 public final class NetworkMonitor {
     private weak var manager: ShareManager?
@@ -17,6 +17,11 @@ public final class NetworkMonitor {
 
     public init(manager: ShareManager) {
         self.manager = manager
+    }
+
+    /// Cleans up even when `stop()` was never called.
+    isolated deinit {
+        stop()
     }
 
     public func start() {
