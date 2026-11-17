@@ -61,7 +61,11 @@ final class ArchiveEntryDragProvider: NSFilePromiseProvider {
             isDirectory
             ? .folder
             : UTType(filenameExtension: (entry as NSString).pathExtension) ?? .data
-        super.init(fileType: type.identifier, delegate: ArchiveDragDelegate.shared)
+        // Not `super.init(fileType:delegate:)`: that convenience initializer calls `init()` on self,
+        // which this subclass doesn't provide, and Swift traps. Set the two properties instead.
+        super.init()
+        fileType = type.identifier
+        delegate = ArchiveDragDelegate.shared
     }
 
     /// The name of the promised item: the entry's last path component.
