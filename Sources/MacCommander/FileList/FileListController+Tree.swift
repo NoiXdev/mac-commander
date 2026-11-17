@@ -202,14 +202,27 @@ extension FileListController {
     @objc func operationFoldersDidChange(_ notification: Notification) {
         let folders = notification.userInfo?["folders"] as? [URL] ?? []
         // Posted on the main actor; re-list on the next turn, after the operation's own updates.
-        Task { @MainActor [weak self] in self?.refreshLoadedSubfolders(matching: folders) }
+        Task { @MainActor [weak self] in await self?.refreshLoadedSubfolders(matching: folders) }
     }
 
     /// Re-lists every loaded subfolder (children cached, expanded or not) whose canonical path is one of
     /// `folders`. Re-listing is done per node rather than by reloading the root, which Observation may skip
-    /// when the root's items didn't change.
-    func refreshLoadedSubfolders(matching folders: [URL]) {
+    /// when the root's items didn't change. The canonical paths are resolved off the main actor (the folders
+    /// may be on a network volume); nodes dropped meanwhile are skipped.
+    func refreshLoadedSubfolders(matching folders: [URL]) async {
         guard !folders.isEmpty, showsCurrentFolder else { return }
+        let candidates = loadedSubfolders().map(\.url)
+        guard !candidates.isEmpty else { return }
+        let matched = Set(await PathQueries.run { PathUtilities.folders(candidates, matching: folders) })
+        // Collected again: the tree may have changed during the lookup.
+        guard showsCurrentFolder else { return }
+        for node in loadedSubfolders() where matched.contains(node.url) {
+            loadChildren(of: node, expand: false)
+        }
+    }
+
+    /// The nodes whose children are loaded (expanded or not), depth first.
+    private func loadedSubfolders() -> [FileNode] {
         var loaded: [FileNode] = []
         func collect(_ nodes: [FileNode]) {
             for node in nodes {
@@ -219,11 +232,7 @@ extension FileListController {
             }
         }
         collect(roots)
-        guard !loaded.isEmpty else { return }
-        let matched = Set(PathUtilities.folders(loaded.map(\.url), matching: folders))
-        for node in loaded where matched.contains(node.url) {
-            loadChildren(of: node, expand: false)
-        }
+        return loaded
     }
 
     func applyingChanges(_ body: () -> Void) {

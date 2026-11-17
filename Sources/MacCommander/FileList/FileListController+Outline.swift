@@ -13,18 +13,19 @@ extension FileListController {
     }
 
     /// Replaces type placeholders by the files' own icons for the visible rows, in batches of 32 loaded off
-    /// the main actor (one batch at a time; on an unresponsive server the placeholders simply stay).
+    /// the main actor (one batch per folder at a time; on an unresponsive server the placeholders simply stay).
     func loadVisibleIcons() {
         iconPassScheduled = false
         // Archive entries have virtual paths: their type icons are final (see `outlineView(_:viewFor:item:)`).
-        guard !isInArchive, !iconBatchInFlight else { return }
+        let folder = model.listedURL
+        guard !isInArchive, folder == nil || iconBatchFolder != folder else { return }
         let urls = visibleNameCells().filter { !$0.cell.hasFileIcon }.prefix(32).map(\.url)
         guard !urls.isEmpty else { return }
-        iconBatchInFlight = true
+        iconBatchFolder = folder
         Task { @MainActor [weak self] in
             guard let self else { return }
             let loaded = await icons.loadFileIcons(for: urls)
-            iconBatchInFlight = false
+            if iconBatchFolder == folder { iconBatchFolder = nil }
             // Rows may have scrolled or been reused meanwhile: apply by URL to what is visible now.
             if !isInArchive {
                 for (cell, url) in visibleNameCells() where !cell.hasFileIcon {
@@ -164,10 +165,17 @@ extension FileListController: NSOutlineViewDataSource {
             return true
         }
         let sources = FileActions.fileURLs(on: info.draggingPasteboard)
-        guard let mode = FileActions.dropMode(for: sources, into: destination) else { return false }
+        guard !sources.isEmpty else { return false }
+        // The keys held at drop time; the policy check runs off the main actor and beeps if it refuses.
+        let modifiers = FileActions.currentDropModifiers()
         let model = model
         let window = outlineView.window
-        Task { await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window) }
+        Task {
+            guard let mode = await FileActions.dropMode(for: sources, into: destination, modifiers: modifiers) else {
+                return NSSound.beep()
+            }
+            await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window)
+        }
         return true
     }
 

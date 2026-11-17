@@ -12,8 +12,12 @@ struct ItemInfo: Sendable {
     var modified: Date?
     var parent: String
 
-    /// One `resourceValues` call; can stall on network volumes, so call it off the main actor.
-    @concurrent static func load(_ url: URL) async -> ItemInfo {
+    /// One `resourceValues` call; can stall on network volumes, so it runs on the blocking-I/O queue.
+    static func load(_ url: URL) async -> ItemInfo {
+        await PathQueries.run { loadNow(url) }
+    }
+
+    private static func loadNow(_ url: URL) -> ItemInfo {
         let values = try? url.resourceValues(forKeys: [
             .localizedNameKey, .localizedTypeDescriptionKey, .isDirectoryKey, .isPackageKey,
             .fileSizeKey, .creationDateKey, .contentModificationDateKey,
@@ -90,8 +94,10 @@ struct InfoWindow: View {
     private func load() async {
         // The generic icon at once (no disk access), the item's own once loaded off the main actor.
         icon = NSWorkspace.shared.icon(for: .item)
-        icon = await Self.fileIcon(url)
+        // Icon and info load concurrently.
+        async let fileIcon = Self.fileIcon(url)
         let loaded = await ItemInfo.load(url)
+        icon = await fileIcon
         info = loaded
         guard loaded.isDirectory else {
             sizeText = loaded.fileSize.map(Self.fileSizeText) ?? "--"
@@ -111,9 +117,8 @@ struct InfoWindow: View {
     }
 
     /// `NSWorkspace.icon(forFile:)` touches the disk (and can stall on network volumes): off the main thread.
-    @concurrent
     private static func fileIcon(_ url: URL) async -> NSImage {
-        NSWorkspace.shared.icon(forFile: url.path)
+        await PathQueries.run { NSWorkspace.shared.icon(forFile: url.path) }
     }
 
     private static func byteString(_ bytes: Int64) -> String {

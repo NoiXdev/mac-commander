@@ -52,6 +52,8 @@ struct GoToFolderSheet: View {
     /// Checks the path off the main actor (it may be on a network volume), then navigates or shows the error.
     /// Typing again or Cancel drops a check still running.
     private func go() {
+        // Return can fire again while a check runs (the disabled button doesn't stop the shortcut everywhere).
+        guard check == nil else { return }
         let path = (text.wrappedValue.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
         guard !path.isEmpty else {
             failed = true

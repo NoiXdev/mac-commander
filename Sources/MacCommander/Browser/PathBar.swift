@@ -73,8 +73,9 @@ private struct PathSegmentLabel: View {
 
     private static let folderIcon = NSWorkspace.shared.icon(for: .folder)
 
-    @concurrent
     private static func resolve(_ url: URL) async -> Resolved {
-        Resolved(url: url, name: await PathQueries.displayName(url), icon: NSWorkspace.shared.icon(forFile: url.path))
+        async let name = PathQueries.displayName(url)
+        let icon = await PathQueries.run { NSWorkspace.shared.icon(forFile: url.path) }
+        return Resolved(url: url, name: await name, icon: icon)
     }
 }

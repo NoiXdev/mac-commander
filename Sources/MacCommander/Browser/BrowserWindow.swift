@@ -138,10 +138,11 @@ struct BrowserWindow: View {
         .task { await model.reload() }
         .onChange(of: model.currentURL, initial: true) { _, url in storedPath = url.path }
         // Refresh on focus: a network folder isn't watched reliably, so it is listed again whenever its window
-        // becomes active. Local folders rely on their watcher. The check uses the last load's cached info.
+        // becomes active. Local folders rely on their watcher. The check uses the last load's cached info, and
+        // a listing already in flight is kept (see `refreshOnFocus`).
         .onChange(of: appearsActive) { _, active in
             guard active, model.isOnNetworkVolume else { return }
-            Task { await model.reload() }
+            Task { await model.refreshOnFocus() }
         }
     }
 

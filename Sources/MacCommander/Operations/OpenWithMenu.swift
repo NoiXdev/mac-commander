@@ -1,4 +1,5 @@
 import AppKit
+import MacCommanderCore
 
 /// The "Open With" submenu for a right-click on files.
 @MainActor
@@ -54,8 +55,12 @@ enum OpenWithMenu {
 
     /// Launch Services is queried once per content type, not per item: a huge selection of a few types
     /// stays cheap. nil with too many types: the menu then offers only "Other…".
-    @concurrent
+    /// On the blocking-I/O queue (`PathQueries.run`), not the cooperative pool.
     private static func applications(for urls: [URL]) async -> Choices? {
+        await PathQueries.run { applicationsNow(for: urls) }
+    }
+
+    nonisolated private static func applicationsNow(for urls: [URL]) -> Choices? {
         guard let samples = samples(of: urls) else { return nil }
         let workspace = NSWorkspace.shared
         var defaultApp = urls.first.flatMap { workspace.urlForApplication(toOpen: $0) }

@@ -160,7 +160,7 @@ public final class FileOperationCenter {
     public func extract(
         _ entries: [String], from archive: URL, into destination: URL, resolver: @escaping ConflictResolver
     ) async throws -> TransferResult {
-        try Self.requireWritableFolder(destination)
+        try await Self.requireWritableFolder(destination)
         let password = await catalog.password(for: archive)
         let names = entries.map { $0.split(separator: "/").last.map(String.init) ?? archive.lastPathComponent }
         return try await runExtraction(title: Self.extractTitle(names), into: destination, resolver: resolver) {
@@ -175,7 +175,7 @@ public final class FileOperationCenter {
     public func extractAll(
         _ archive: URL, into destination: URL, resolver: @escaping ConflictResolver
     ) async throws -> TransferResult {
-        try Self.requireWritableFolder(destination)
+        try await Self.requireWritableFolder(destination)
         let password = await catalog.password(for: archive)
         let folderName = ArchiveFormats.baseName(of: archive)
         return try await runExtraction(
@@ -240,9 +240,10 @@ public final class FileOperationCenter {
         ArchiveExtractor.removeStaging(staging)
     }
 
-    /// Extraction writes only into real folders, never into a folder inside an archive (plain stats only).
-    private static func requireWritableFolder(_ destination: URL) throws {
-        if ArchivePath.split(destination) != nil { throw CocoaError(.fileWriteNoPermission) }
+    /// Extraction writes only into real folders, never into a folder inside an archive. The split runs off the
+    /// main actor (`PathQueries`): the destination may be on a network volume.
+    private static func requireWritableFolder(_ destination: URL) async throws {
+        if await PathQueries.archiveLocation(destination) != nil { throw CocoaError(.fileWriteNoPermission) }
     }
 
     // MARK: - Recording

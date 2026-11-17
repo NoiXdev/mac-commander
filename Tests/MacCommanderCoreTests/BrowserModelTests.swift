@@ -20,6 +20,22 @@ private final class OpenRecorder {
     var opened: [URL] = []
 }
 
+/// Creates many files off the main actor, so the setup of one test doesn't stall the main actor that the
+/// other (parallel) tests' timing depends on.
+@concurrent
+private func createEmptyFiles(_ names: [String], in folder: URL) async {
+    for name in names {
+        FileManager.default.createFile(atPath: folder.appendingPathComponent(name).path, contents: Data())
+    }
+}
+
+/// Removes a big folder off the main actor (`TemporaryDirectory` would remove it in `deinit`, on the main
+/// actor of a `@MainActor` test, stalling the other tests' main-actor work for a noticeable time).
+@concurrent
+private func removeOffMain(_ folder: URL) async {
+    try? FileManager.default.removeItem(at: folder)
+}
+
 private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
     lhs.standardizedFileURL.path == rhs.standardizedFileURL.path
 }
@@ -63,6 +79,49 @@ private struct BlockingPathQueries: PathQueriesProvider {
     @concurrent func canonicalPath(_ url: URL) async -> String { await PathQueries.canonicalPath(url) }
     @concurrent func resolvingSymlink(_ url: URL) async -> URL { await PathQueries.resolvingSymlink(url) }
     @concurrent func entryExists(_ url: URL) async -> Bool { await PathQueries.entryExists(url) }
+}
+
+/// Path queries whose `info` for one path waits until `release()`, like a stat on a stalled share.
+private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendable {
+    // @unchecked: `released` and `waiters` are only touched while holding `lock`.
+    private let stalledPath: String
+    private let lock = NSLock()
+    private var released = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var stalls = 0
+
+    init(stalling url: URL) { stalledPath = url.standardizedFileURL.path }
+
+    var stallCount: Int { lock.withLock { stalls } }
+
+    func release() {
+        let resumed = lock.withLock {
+            released = true
+            defer { waiters = [] }
+            return waiters
+        }
+        resumed.forEach { $0.resume() }
+    }
+
+    func info(_ url: URL) async -> PathInfo {
+        if url.standardizedFileURL.path == stalledPath {
+            await withCheckedContinuation { continuation in
+                let resumeNow = lock.withLock {
+                    stalls += 1
+                    if released { return true }
+                    waiters.append(continuation)
+                    return false
+                }
+                if resumeNow { continuation.resume() }
+            }
+        }
+        return await PathQueries.info(url)
+    }
+    func archiveLocation(_ url: URL) async -> ArchiveLocation? { await PathQueries.archiveLocation(url) }
+    func nearestExistingFolder(_ url: URL) async -> URL { await PathQueries.nearestExistingFolder(url) }
+    func canonicalPath(_ url: URL) async -> String { await PathQueries.canonicalPath(url) }
+    func resolvingSymlink(_ url: URL) async -> URL { await PathQueries.resolvingSymlink(url) }
+    func entryExists(_ url: URL) async -> Bool { await PathQueries.entryExists(url) }
 }
 
 @MainActor
@@ -201,7 +260,7 @@ private struct BlockingPathQueries: PathQueriesProvider {
     @Test func staleLoadDoesNotOverwriteNewerOne() async throws {
         let dir = try TemporaryDirectory()
         let big = try dir.folder("big")
-        for i in 0..<3000 { try dir.file("big/f\(i).txt") }
+        await createEmptyFiles((0..<3000).map { "f\($0).txt" }, in: big)
         let small = try dir.folder("small")
         try dir.file("small/only.txt")
         let model = BrowserModel(start: dir.url, settings: makeStore())
@@ -214,6 +273,7 @@ private struct BlockingPathQueries: PathQueriesProvider {
         #expect(samePath(model.currentURL, small))
         #expect(names(model) == ["only.txt"])
         #expect(model.isLoading == false)
+        await removeOffMain(big)
     }
 
     @Test func createEmptyFileSelectsAndRequestsRename() async throws {
@@ -403,7 +463,7 @@ private struct BlockingPathQueries: PathQueriesProvider {
 
     @Test func pruningKeepsManySelectedEntriesSharingOneParent() async throws {
         let dir = try TemporaryDirectory()
-        for i in 0..<2000 { try dir.file("f\(i).txt") }
+        await createEmptyFiles((0..<2000).map { "f\($0).txt" }, in: dir.url)
         let model = BrowserModel(start: dir.url, settings: makeStore())
         await model.reload()
         // Spelled differently from the loader's URLs (e.g. /var vs /private/var).
@@ -416,6 +476,7 @@ private struct BlockingPathQueries: PathQueriesProvider {
         #expect(ContinuousClock.now - start < .seconds(2))
         #expect(model.selection.count == 1999)
         #expect(model.selection == Set(model.items.map(\.url)))
+        await removeOffMain(dir.url)
     }
 
     @Test func deletedCurrentFolderFallsBackViaWatcher() async throws {
@@ -717,5 +778,47 @@ private struct BlockingPathQueries: PathQueriesProvider {
         await model.reload()
 
         #expect(model.selection == [inner])
+    }
+
+    @Test func lastClickWinsOverStalledOpen() async throws {
+        let dir = try TemporaryDirectory()
+        // A symlink to a folder: `open` checks it off the main actor before it navigates, and that check stalls.
+        let target = try dir.folder("target")
+        let stalled = dir.url.appendingPathComponent("stalled")
+        try FileManager.default.createSymbolicLink(at: stalled, withDestinationURL: target)
+        let home = try dir.folder("home")
+        try dir.file("home/h.txt")
+        let queries = StallingPathQueries(stalling: stalled)
+        let model = BrowserModel(
+            start: dir.url, settings: makeStore(), loader: DirectoryLoader(), pathQueries: queries)
+        await model.reload()
+        let item = try #require(model.items.first { $0.url.lastPathComponent == "stalled" })
+        #expect(!item.isDirectory)
+
+        let opening = Task { await model.open(item) }
+        #expect(await waitUntil { queries.stallCount == 1 })
+        await model.navigate(to: home)
+        #expect(samePath(model.currentURL, home))
+
+        queries.release()
+        await opening.value
+        #expect(samePath(model.currentURL, home))
+        #expect(names(model) == ["h.txt"])
+    }
+
+    @Test func revealThroughSymlinkedFolderSelectsTarget() async throws {
+        let dir = try TemporaryDirectory()
+        let real = try dir.folder("real")
+        try dir.file("real/x.md")
+        let link = dir.url.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+
+        #expect(await model.reveal(link.appendingPathComponent("x.md")))
+
+        #expect(samePath(model.currentURL.resolvingSymlinksInPath(), real.resolvingSymlinksInPath()))
+        let item = try #require(model.items.first { $0.url.lastPathComponent == "x.md" })
+        #expect(model.selection == [item.url])
     }
 }

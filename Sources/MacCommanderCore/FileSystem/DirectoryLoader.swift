@@ -34,20 +34,22 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
 public struct DirectoryLoader: Sendable {
     public init() {}
 
-    /// Lists a folder off the main actor. Results are unsorted.
-    @concurrent
+    /// Lists a folder off the main actor, on the blocking-I/O queue (`PathQueries.run`): a listing of a
+    /// folder on an unresponsive server must not hold a thread of the cooperative pool. Results are unsorted.
     public func contents(of url: URL, includeHidden: Bool) async throws(DirectoryLoadError) -> [FileItem] {
-        let urls: [URL]
-        do {
-            urls = try FileManager.default.contentsOfDirectory(
-                at: url,
-                includingPropertiesForKeys: FileItem.resourceKeys,
-                options: includeHidden ? [] : [.skipsHiddenFiles])
-        } catch {
-            throw Self.map(error, url: url)
+        try await PathQueries.run { () throws(DirectoryLoadError) -> [FileItem] in
+            let urls: [URL]
+            do {
+                urls = try FileManager.default.contentsOfDirectory(
+                    at: url,
+                    includingPropertiesForKeys: FileItem.resourceKeys,
+                    options: includeHidden ? [] : [.skipsHiddenFiles])
+            } catch {
+                throw Self.map(error, url: url)
+            }
+            // Entries that vanish mid-listing are skipped rather than failing the folder.
+            return urls.compactMap { try? FileItem.load($0) }
         }
-        // Entries that vanish mid-listing are skipped rather than failing the folder.
-        return urls.compactMap { try? FileItem.load($0) }
     }
 
     private static func map(_ error: Error, url: URL) -> DirectoryLoadError {

@@ -2,6 +2,16 @@ import AppKit
 import Foundation
 import Observation
 
+/// What a navigation request did.
+public enum NavigationResult: Sendable, Equatable {
+    /// Navigated, or nothing to do (already there, or a file that isn't browsable).
+    case done
+    /// Nothing exists at the requested path.
+    case missing
+    /// A newer navigation request was made while this one checked its target; it was dropped.
+    case superseded
+}
+
 /// Per-window view model: the current folder, its sorted items, selection and navigation.
 ///
 /// `init` does not touch the disk; the UI calls `reload()` once when the window appears. Nothing here
@@ -113,8 +123,17 @@ public final class BrowserModel {
     /// Whether the newest load found the current folder (or archive) on a network volume. Answered from
     /// that load's cached `PathInfo`, without touching the disk; false while unknown.
     public var isOnNetworkVolume: Bool {
-        guard let currentInfo, currentInfo.url == currentURL else { return false }
+        guard let currentInfo, currentInfo.url.standardizedFileURL.path == currentURL.standardizedFileURL.path
+        else { return false }
         return !currentInfo.info.isLocalVolume
+    }
+
+    /// Refresh on focus: lists a network folder again (local folders rely on their watcher). Coalesces with a
+    /// load of this folder already in flight instead of superseding it, so toggling focus on a slow share
+    /// never discards the running listing.
+    public func refreshOnFocus() async {
+        guard isOnNetworkVolume else { return }
+        await directoryDidChange()
     }
 
     // MARK: - Navigation
@@ -123,28 +142,43 @@ public final class BrowserModel {
     /// can't list through a symlink. Also navigates into archives: a pure archive file
     /// (`ArchiveFormats.isArchive`; a symlink to one keeps its own path), and any virtual path
     /// inside an archive (Go to Folder `…/a.zip/img`). Other files and missing paths are ignored.
-    public func navigate(to requested: URL) async {
-        await navigate(to: requested, anyBrowsable: false, openFallback: false)
+    /// Every public navigation takes its place in line when called: one whose off-main checks finish
+    /// after a newer request was made is dropped (`.superseded`), so the last click wins.
+    @discardableResult
+    public func navigate(to requested: URL) async -> NavigationResult {
+        await navigate(to: requested, anyBrowsable: false, openFallback: false, generation: beginNavigation())
+    }
+
+    /// Starts a navigation request; any request started earlier is superseded from now on.
+    private func beginNavigation() -> Int {
+        navigationGeneration += 1
+        return navigationGeneration
     }
 
     /// "Browse Contents": navigates into any browsable file (pure archives and containers such as
     /// `.docx`). Unreadable files show a load error. Items inside an archive are ignored, since
     /// nested archives aren't browsable.
     public func browseContents(_ item: FileItem) async {
-        guard !item.isDirectory, let location = await queries.archiveLocation(item.url), location.inner.isEmpty
+        let generation = beginNavigation()
+        guard !item.isDirectory, let location = await queries.archiveLocation(item.url), location.inner.isEmpty,
+            generation == navigationGeneration
         else { return }
-        await navigate(to: item.url, anyBrowsable: true, openFallback: false)
+        await navigate(to: item.url, anyBrowsable: true, openFallback: false, generation: generation)
     }
 
     /// `anyBrowsable` skips the extension check for an archive file; `openFallback` makes an
     /// unreadable archive go to `opener` instead of showing an error.
-    private func navigate(to requested: URL, anyBrowsable: Bool, openFallback: Bool) async {
+    /// `generation` comes from `beginNavigation()` at the public entry point.
+    @discardableResult
+    private func navigate(
+        to requested: URL, anyBrowsable: Bool, openFallback: Bool, generation: Int
+    ) async -> NavigationResult {
         // Checked off the main actor. A newer navigation request made meanwhile wins.
-        navigationGeneration += 1
-        let generation = navigationGeneration
         let start = currentURL
         let url: URL
-        if await queries.info(requested).isDirectory {
+        let info = await queries.info(requested)
+        guard generation == navigationGeneration else { return .superseded }
+        if info.isDirectory {
             url = await queries.resolvingSymlink(requested)
         } else if let location = await queries.archiveLocation(requested) {
             // The archive file itself needs an archive extension, unless it's browsed explicitly or
@@ -153,22 +187,24 @@ public final class BrowserModel {
             if !isAccepted {
                 isAccepted = await queries.archiveLocation(start)?.archive == location.archive
             }
-            guard isAccepted else { return }
+            guard generation == navigationGeneration else { return .superseded }
+            guard isAccepted else { return .done }
             url = requested
         } else {
-            return
+            return info.exists ? .done : .missing
         }
-        guard generation == navigationGeneration else { return }
+        guard generation == navigationGeneration else { return .superseded }
         // By path: a folder URL may or may not carry a trailing slash.
-        guard url.standardizedFileURL.path != currentURL.standardizedFileURL.path else { return }
+        guard url.standardizedFileURL.path != currentURL.standardizedFileURL.path else { return .done }
         pendingOpenFallback = openFallback ? url : nil
         history.visit(url)
         clearSelection()
         await load()
+        return .done
     }
 
     public func goBack() async {
-        navigationGeneration += 1
+        _ = beginNavigation()
         guard history.goBack() != nil else { return }
         pendingOpenFallback = nil
         clearSelection()
@@ -176,7 +212,7 @@ public final class BrowserModel {
     }
 
     public func goForward() async {
-        navigationGeneration += 1
+        _ = beginNavigation()
         guard history.goForward() != nil else { return }
         pendingOpenFallback = nil
         clearSelection()
@@ -197,15 +233,20 @@ public final class BrowserModel {
     /// as folders, falling back to `opener` if bsdtar can't read them; anything else, packages
     /// included, is opened. Inside an archive, folders navigate and files are left alone: opening
     /// an archive entry means extracting it first, which the UI does.
+    /// The shown items decide (`archiveLocation` is published with them), so this needs no split.
     public func open(_ item: FileItem) async {
-        if await queries.archiveLocation(currentURL) != nil {
-            if item.isDirectory { await navigate(to: item.url) }
+        let generation = beginNavigation()
+        if archiveLocation != nil {
+            if item.isDirectory {
+                await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
+            }
         } else if item.isDirectory {
-            await navigate(to: item.url)
+            await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
         } else if !item.isPackage, await isPlainFolder(item.url) {
-            await navigate(to: item.url)
+            guard generation == navigationGeneration else { return }
+            await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
         } else if ArchiveFormats.isArchive(item.url) {
-            await navigate(to: item.url, anyBrowsable: false, openFallback: true)
+            await navigate(to: item.url, anyBrowsable: false, openFallback: true, generation: generation)
         } else {
             opener(item.url)
         }
@@ -294,17 +335,24 @@ public final class BrowserModel {
     /// are ignored. Checks the target off the main actor, like `navigate`. Returns false when ignored (the UI beeps), true otherwise.
     @discardableResult
     public func reveal(_ url: URL) async -> Bool {
+        let generation = beginNavigation()
         let target = url.standardizedFileURL
         let parent = target.deletingLastPathComponent()
         // lstat: a broken symlink is still an item in the list. `split` of a real file is the file itself
         // (an archive with an empty inner path), so the parent tells whether the target is inside an archive.
         guard await queries.entryExists(target), await queries.archiveLocation(parent) == nil else { return false }
         let canonicalParent = await queries.canonicalPath(parent)
+        // A newer navigation request wins; this one isn't "ignored", so no beep.
+        guard generation == navigationGeneration else { return true }
         if !isCurrentDirectory(parent, canonical: canonicalParent) {
-            await navigate(to: parent)
+            await navigate(to: parent, anyBrowsable: false, openFallback: false, generation: generation)
             guard isCurrentDirectory(parent, canonical: canonicalParent) else { return true }
         }
-        await selectAfterOperation([target])
+        // Navigating resolves a symlinked parent, so the target may need the resolved spelling to match.
+        let selected = isCurrentDirectory(parent)
+            ? target
+            : URL(fileURLWithPath: canonicalParent, isDirectory: true).appendingPathComponent(target.lastPathComponent)
+        await selectAfterOperation([selected])
         return true
     }
 
@@ -627,15 +675,18 @@ public final class BrowserModel {
         let watcher: DirectoryWatcher?
     }
 
-    @concurrent
+    /// On the blocking-I/O queue: the `stat` and `open` can hang on an unresponsive server.
     private static func prepareWatcher(
         _ url: URL, keepingIdentity watched: FolderIdentity?, onChange: @escaping @Sendable () -> Void
     ) async -> WatcherSetup {
-        let identity = FolderIdentity(path: url.path)
-        if let identity, identity == watched {
-            return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
+        await PathQueries.run {
+            let identity = FolderIdentity(path: url.path)
+            if let identity, identity == watched {
+                return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
+            }
+            return WatcherSetup(
+                keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
         }
-        return WatcherSetup(keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
     }
 
     // MARK: - Volumes
@@ -765,14 +816,13 @@ public final class BrowserModel {
         order.sorted(items)
     }
 
-    @concurrent
-    private static func offMain(_ work: @Sendable () throws -> URL) async throws -> URL {
-        try work()
+    /// Creating and renaming may hit a network volume: on the blocking-I/O queue.
+    private static func offMain(_ work: @escaping @Sendable () throws -> URL) async throws -> URL {
+        try await PathQueries.run { () throws(any Error) -> URL in try work() }
     }
 
-    @concurrent
     private static func rename(_ url: URL, to name: String) async throws(RenameError) -> URL {
-        try ItemRenamer.rename(url, to: name)
+        try await PathQueries.run { () throws(RenameError) -> URL in try ItemRenamer.rename(url, to: name) }
     }
 }
 

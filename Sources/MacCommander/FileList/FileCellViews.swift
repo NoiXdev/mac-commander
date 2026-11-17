@@ -192,8 +192,12 @@ final class FileIconProvider {
         return loaded
     }
 
-    @concurrent
+    /// On the blocking-I/O queue (`PathQueries.run`), not the cooperative pool: a hung lookup holds a thread.
     private static func fileIcons(for urls: [URL]) async -> [URL: NSImage] {
+        await PathQueries.run { fileIconsNow(for: urls) }
+    }
+
+    nonisolated private static func fileIconsNow(for urls: [URL]) -> [URL: NSImage] {
         var icons: [URL: NSImage] = [:]
         for url in urls {
             // Copy before resizing: NSWorkspace may hand out shared image instances.

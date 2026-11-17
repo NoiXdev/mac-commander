@@ -108,14 +108,12 @@ struct SidebarView: View {
         try NSWorkspace.shared.unmountAndEjectDevice(at: url)
     }
 
-    /// Checks the favorite off the main actor (it may be on a network volume), then navigates or offers
-    /// to remove it. The sidebar's grey state is refreshed alongside.
+    /// Navigates (the model checks the folder off the main actor, and a newer click wins), or offers to
+    /// remove the favorite when nothing is there. The sidebar's grey state is refreshed alongside.
     private func select(_ location: SidebarLocation) {
         Task {
             async let refreshed: Void = favorites.refreshExistence()
-            if await PathQueries.info(location.url).exists {
-                await model.navigate(to: location.url)
-            } else {
+            if await model.navigate(to: location.url) == .missing {
                 missing = location
             }
             await refreshed
@@ -190,7 +188,9 @@ private struct FolderDropDelegate: DropDelegate {
     func validateDrop(info: DropInfo) -> Bool {
         guard enabled else { return false }
         if isArchiveDrag { return true }
-        return info.hasItemsConforming(to: [.fileURL]) && currentMode() != nil
+        // The mode isn't checked here: it is computed off the main actor, and `dropUpdated` shows the
+        // refusal (forbidden) until it is known; the drop re-checks.
+        return info.hasItemsConforming(to: [.fileURL])
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
@@ -225,11 +225,9 @@ private struct FolderDropDelegate: DropDelegate {
         let model = model
         let window = window
         DroppedURLCollector.load(providers) { sources in
-            guard let mode = DropPolicy.operation(for: sources, into: destination, modifiers: modifiers) else {
-                NSSound.beep()
-                return
-            }
             Task {
+                guard let mode = await FileActions.dropMode(for: sources, into: destination, modifiers: modifiers)
+                else { return NSSound.beep() }
                 await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window.window)
             }
         }

@@ -246,13 +246,16 @@ enum FileActions {
         return (objects as? [URL]) ?? []
     }
 
-    /// What dropping `sources` into `destination` with the current modifier keys does; nil refuses the drop.
-    static func dropMode(for sources: [URL], into destination: URL) -> TransferMode? {
-        DropPolicy.operation(for: sources, into: destination, modifiers: currentDropModifiers())
+    /// What dropping `sources` into `destination` with `modifiers` does; nil refuses the drop. `DropPolicy`
+    /// resolves symlinks and asks for volumes (the paths may be on a network volume), so it runs on the
+    /// blocking-I/O queue (`PathQueries.run`).
+    static func dropMode(for sources: [URL], into destination: URL, modifiers: DropModifiers) async -> TransferMode? {
+        await PathQueries.run { DropPolicy.operation(for: sources, into: destination, modifiers: modifiers) }
     }
 
     /// `dropMode` while hovering: the drag pasteboard's files with the current modifier keys, answered from
-    /// `DropValidationCache` (validation runs on every mouse move). The drop itself re-checks uncached.
+    /// `DropValidationCache` (validation runs on every mouse move). nil (refuse) until the answer is known;
+    /// AppKit and SwiftUI ask again on the next mouse move or periodic update. The drop itself re-checks.
     static func hoverDropMode(on pasteboard: NSPasteboard, into destination: URL) -> TransferMode? {
         DropValidationCache.shared.mode(on: pasteboard, into: destination, modifiers: currentDropModifiers())
     }
@@ -339,7 +342,8 @@ enum FileActions {
 /// Drop validation results for the drag in progress. Validation runs on every mouse move, and each pass would
 /// decode the pasteboard and run `DropPolicy` (symlink resolution, lstat, ancestor walk, volume lookups) again.
 /// A drag is identified by its pasteboard's name and `changeCount` (a new drag writes the pasteboard anew);
-/// within one drag the sources are decoded once and each destination + modifier combination is decided once.
+/// within one drag the sources are decoded once and each destination + modifier combination is decided once,
+/// off the main actor; until that answer arrives the destination refuses the drop.
 @MainActor
 final class DropValidationCache {
     static let shared = DropValidationCache()
@@ -356,7 +360,12 @@ final class DropValidationCache {
 
     private var drag: Drag?
     private var sources: [URL] = []
-    private var modes: [Key: TransferMode?] = [:]
+    private enum Answer {
+        case pending
+        case known(TransferMode?)
+    }
+
+    private var modes: [Key: Answer] = [:]
 
     func mode(on pasteboard: NSPasteboard, into destination: URL, modifiers: DropModifiers) -> TransferMode? {
         let current = Drag(pasteboard: pasteboard.name, changeCount: pasteboard.changeCount)
@@ -367,9 +376,19 @@ final class DropValidationCache {
         }
         guard !sources.isEmpty else { return nil }
         let key = Key(destination: destination.path, modifiers: modifiers.rawValue)
-        if let cached = modes[key] { return cached }
-        let mode = DropPolicy.operation(for: sources, into: destination, modifiers: modifiers)
-        modes[key] = mode
-        return mode
+        switch modes[key] {
+        case .known(let mode)?: return mode
+        case .pending?: return nil
+        case nil: break
+        }
+        modes[key] = .pending
+        let sources = sources
+        Task {
+            let mode = await FileActions.dropMode(for: sources, into: destination, modifiers: modifiers)
+            // A new drag started meanwhile has its own answers.
+            guard drag == current else { return }
+            modes[key] = .known(mode)
+        }
+        return nil
     }
 }

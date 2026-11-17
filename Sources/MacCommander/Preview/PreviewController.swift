@@ -349,15 +349,18 @@ final class PreviewController {
         let watcher: DirectoryWatcher?
     }
 
-    @concurrent
+    /// On the blocking-I/O queue (`PathQueries.run`): the `stat` and `open` can hang on a network volume.
     private static func prepareWatcher(
         _ url: URL, keepingIdentity watched: FileIdentity?, onChange: @escaping @Sendable () -> Void
     ) async -> WatcherSetup {
-        let identity = FileIdentity(path: url.path)
-        if let identity, identity == watched {
-            return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
+        await PathQueries.run {
+            let identity = FileIdentity(path: url.path)
+            if let identity, identity == watched {
+                return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
+            }
+            return WatcherSetup(
+                keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
         }
-        return WatcherSetup(keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
     }
 
     private func stopWatchingFile() {
@@ -456,9 +459,8 @@ final class PreviewController {
         return await Self.loadItem(url)
     }
 
-    @concurrent
     private static func loadItem(_ url: URL) async -> FileItem? {
-        try? FileItem.load(url)
+        await PathQueries.run { try? FileItem.load(url) }
     }
 
     // MARK: - Header
@@ -485,9 +487,8 @@ final class PreviewController {
     }
 
     /// `NSWorkspace.icon(forFile:)` touches the disk (and can stall on network volumes): off the main thread.
-    @concurrent
     private static func fileIcon(for url: URL) async -> NSImage {
-        sized(NSWorkspace.shared.icon(forFile: url.path))
+        await PathQueries.run { sized(NSWorkspace.shared.icon(forFile: url.path)) }
     }
 
     /// A copy (NSWorkspace may hand out shared instances) at the header's size.
