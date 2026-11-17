@@ -46,9 +46,14 @@ public enum UndoError: Error, Equatable {
 public final class FileUndoStack {
     public private(set) var records: [FileUndoRecord] = []
     public var undoTitle: String? { records.last?.title }
+    /// True while an undo runs; further `undo()` calls wait for it (the UI may disable the menu item).
+    public private(set) var isUndoing = false
 
     @ObservationIgnored private let trash: @Sendable (URL) throws -> URL
     @ObservationIgnored private let limit: Int
+    /// The newest undo; each undo waits for the one before it, so undos run one at a time, newest record first.
+    @ObservationIgnored private var tail: Task<Result<[URL], UndoError>, Never>?
+    @ObservationIgnored private var pendingUndos = 0
 
     public init(trash: @escaping @Sendable (URL) throws -> URL = Trasher.systemTrash, limit: Int = 50) {
         self.trash = trash
@@ -64,14 +69,33 @@ public final class FileUndoStack {
     /// Pops the last record and reverses it off the main actor.
     /// Returns the URLs restored to view, for selection: the `from` URL of a rename, the originals of a move
     /// or trash, and nothing for created items or copies (their parents' contents changed).
+    ///
+    /// Calls are serialized: a second `undo()` while one runs (a quick double ⌘Z) waits for the first to
+    /// finish and only then pops its record, so records are always reversed last-first.
     public func undo() async throws(UndoError) -> [URL] {
-        guard let record = records.popLast() else { throw .nothingToUndo }
-        try await Self.reverse(record.action, trash: trash).get()
+        let previous = tail
+        let task = Task { @MainActor () -> Result<[URL], UndoError> in
+            _ = await previous?.value
+            return await self.undoNext()
+        }
+        tail = task
+        pendingUndos += 1
+        isUndoing = true
+        let result = await task.value
+        pendingUndos -= 1
+        isUndoing = pendingUndos > 0
+        if pendingUndos == 0 { tail = nil }
+        return try result.get()
+    }
+
+    private func undoNext() async -> Result<[URL], UndoError> {
+        guard let record = records.popLast() else { return .failure(.nothingToUndo) }
+        if case .failure(let error) = await Self.reverse(record.action, trash: trash) { return .failure(error) }
         switch record.action {
-        case .rename(let from, _): return [from]
-        case .created, .transferred(.copy, _, _): return []
-        case .transferred(.move, let items, _): return items.map(\.source)
-        case .trashed(let items): return items.map(\.original)
+        case .rename(let from, _): return .success([from])
+        case .created, .transferred(.copy, _, _): return .success([])
+        case .transferred(.move, let items, _): return .success(items.map(\.source))
+        case .trashed(let items): return .success(items.map(\.original))
         }
     }
 
@@ -131,21 +155,31 @@ public final class FileUndoStack {
                     return .failure(.failed(name: step.name, message: error.localizedDescription))
                 }
             case .moveBack(let item, let target):
-                if let message = moveBack(item, to: target) {
-                    return .failure(.failed(name: step.name, message: message))
+                switch moveBack(item, to: target) {
+                case nil: break
+                case .occupied: return .failure(.itemChanged(name: step.name))
+                case .failed(let message): return .failure(.failed(name: step.name, message: message))
                 }
             }
         }
         return .success(())
     }
 
-    /// Returns the name of the first step that can't run: its item is gone, or its target is taken (by
-    /// something no earlier step moves away) or has no parent folder. Nil if every step can run.
+    /// Returns the name of the first step that can't run, nil if every step can. The check simulates the
+    /// steps in order: an item must exist (and not have been moved away by an earlier step), and a target
+    /// must have an existing parent folder and be free — empty on disk or vacated by an earlier step, and
+    /// not filled by an earlier step (two items never go back to the same place).
     private nonisolated static func precheck(_ steps: [Step]) -> String? {
         let fileManager = FileManager()
         var vacated = Set<String>()
+        var occupied = Set<String>()
+        func exists(_ url: URL) -> Bool {
+            let path = key(url)
+            return occupied.contains(path)
+                || (!vacated.contains(path) && FileTransfer.entryExists(url, fileManager: fileManager))
+        }
         for step in steps {
-            guard FileTransfer.entryExists(step.item, fileManager: fileManager) else { return step.name }
+            guard exists(step.item) else { return step.name }
             if case .moveBack(let item, let target) = step {
                 var isDirectory: ObjCBool = false
                 guard
@@ -153,33 +187,35 @@ public final class FileUndoStack {
                         atPath: target.deletingLastPathComponent().path, isDirectory: &isDirectory),
                     isDirectory.boolValue
                 else { return step.name }
-                if FileTransfer.entryExists(target, fileManager: fileManager)
-                    && !vacated.contains(key(target)) && !isCaseOnlyRename(item, to: target)
-                {
-                    return step.name
-                }
+                if occupied.contains(key(target)) { return step.name }
+                if exists(target) && !isCaseOnlyRename(item, to: target) { return step.name }
             }
             vacated.insert(key(step.item))
+            occupied.remove(key(step.item))
+            if case .moveBack(_, let target) = step {
+                occupied.insert(key(target))
+                vacated.remove(key(target))
+            }
         }
         return nil
     }
 
     /// Moves `item` to the free path `target` without ever replacing anything there: an exclusive rename,
     /// or, across volumes (`EXDEV`), copy via staging then delete the moved item. `allowRename: false`
-    /// forces the cross-volume path (tests). Returns an error message, or nil on success.
-    nonisolated static func moveBack(_ item: URL, to target: URL, allowRename: Bool = true) -> String? {
+    /// forces the cross-volume path (tests). Returns nil on success; `.occupied` if something appeared at
+    /// `target` after the pre-check (both items are left unchanged).
+    nonisolated static func moveBack(
+        _ item: URL, to target: URL, allowRename: Bool = true
+    ) -> FileTransfer.CrossVolumeMoveFailure? {
         if allowRename {
             if isCaseOnlyRename(item, to: target) {
                 // `target` is the item itself under another case; an exclusive rename would refuse it.
-                return rename(item.path, target.path) == 0 ? nil : String(cString: strerror(errno))
+                return rename(item.path, target.path) == 0 ? nil : .failed(String(cString: strerror(errno)))
             }
             let code = FileTransfer.exclusiveRename(item, to: target)
             if code == 0 { return nil }
-            if code == EEXIST {
-                return String(
-                    localized: "An item named “\(target.lastPathComponent)” appeared in its original location. Both items were left unchanged.")
-            }
-            if code != EXDEV { return String(cString: strerror(code)) }
+            if code == EEXIST { return .occupied }
+            if code != EXDEV { return .failed(String(cString: strerror(code))) }
         }
         return FileTransfer.moveAcrossVolumes(item, to: target)
     }

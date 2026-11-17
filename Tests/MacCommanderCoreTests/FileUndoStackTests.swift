@@ -223,10 +223,80 @@ struct FileUndoStackTests {
 
         let message = FileUndoStack.moveBack(moved, to: original, allowRename: false)
 
-        #expect(message != nil)
+        #expect(message == .occupied)
         #expect(try f.read(original) == "foreign")
         #expect(try f.read(moved) == "moved")
         #expect(try FileManager.default.contentsOfDirectory(atPath: f.src.path) == ["a"])
+    }
+
+    @Test func concurrentUndosRunInOrder() async throws {
+        // a was renamed to b, then b was moved into dir/. A quick double ⌘Z must undo the move first.
+        let f = try Fixture()
+        let a = f.src.appendingPathComponent("a")
+        let b = f.src.appendingPathComponent("b")
+        let dir = try f.tmp.folder("src/dir")
+        let moved = try f.tmp.file("src/dir/b", contents: "A")
+        f.stack.push(FileUndoRecord(action: .rename(from: a, to: b), title: "Rename"))
+        f.stack.push(
+            FileUndoRecord(
+                action: .transferred(.move, [TransferredItem(source: b, destination: moved)], replaced: []),
+                title: "Move of “b”"))
+
+        async let first = f.stack.undo()
+        async let second = f.stack.undo()
+        let results = try await [first, second]
+
+        // Either call may reach the stack first; together they undo the move, then the rename.
+        #expect(Set(results) == [[b], [a]])
+        #expect(try f.read(a) == "A")
+        #expect(!f.exists(b))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
+        #expect(f.stack.records.isEmpty)
+        #expect(!f.stack.isUndoing)
+    }
+
+    @Test func undoRefusesTwoItemsWithTheSameTarget() async throws {
+        let f = try Fixture()
+        let a = f.src.appendingPathComponent("a")
+        let x = try f.tmp.file("Trash/x", contents: "x")
+        let y = try f.tmp.file("Trash/y", contents: "y")
+        f.stack.push(
+            FileUndoRecord(
+                action: .trashed([TrashedItem(original: a, trashed: x), TrashedItem(original: a, trashed: y)]),
+                title: "Move to Trash"))
+
+        await #expect(throws: UndoError.itemChanged(name: "a")) { try await f.stack.undo() }
+        #expect(!f.exists(a))
+        #expect(try f.trashContents() == ["x", "y"])
+    }
+
+    @Test func partialFailureStopsAndKeepsEarlierSteps() async throws {
+        let tmp = try TemporaryDirectory()
+        let trashFolder = try tmp.folder("Trash")
+        let a = try tmp.file("a", contents: "A")
+        let b = try tmp.file("b", contents: "B")
+        let inner = fakeTrash(into: trashFolder)
+        let stack = FileUndoStack(trash: { url in
+            if url.lastPathComponent == "b" { throw CocoaError(.fileWriteNoPermission) }
+            return try inner(url)
+        })
+        stack.push(FileUndoRecord(action: .created([a, b]), title: "New Folder"))
+
+        do {
+            _ = try await stack.undo()
+            Issue.record("undo should fail")
+        } catch {
+            guard case .failed(let name, let message) = error else {
+                Issue.record("unexpected error \(error)")
+                return
+            }
+            #expect(name == "b")
+            #expect(!message.isEmpty)
+        }
+        #expect(!FileManager.default.fileExists(atPath: a.path))
+        #expect(FileManager.default.fileExists(atPath: trashFolder.appendingPathComponent("a").path))
+        #expect(FileManager.default.fileExists(atPath: b.path))
+        #expect(stack.records.isEmpty)
     }
 
     @Test func undoStackLimit() throws {

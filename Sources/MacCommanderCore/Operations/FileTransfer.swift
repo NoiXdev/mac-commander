@@ -353,31 +353,38 @@ public enum FileTransfer {
         return rc == 0 ? 0 : errno
     }
 
+    enum CrossVolumeMoveFailure: Error, Equatable {
+        /// Something appeared at `target`; it was left unchanged and the source kept.
+        case occupied
+        case failed(String)
+    }
+
     /// Moves `source` to the free path `target` on another volume with the same rules as a cross-volume
     /// transfer: copy under a staging name next to `target`, rename it into place exclusively, and only
     /// then delete the source. The name of `target` may differ from the source's.
-    /// Returns an error message, or nil on success.
-    static func moveAcrossVolumes(_ source: URL, to target: URL) -> String? {
+    /// Returns nil on success.
+    static func moveAcrossVolumes(_ source: URL, to target: URL) -> CrossVolumeMoveFailure? {
         let fileManager = FileManager()
         let staging = target.deletingLastPathComponent().appendingPathComponent(".mc-partial-\(UUID().uuidString)")
         switch copy(source, to: staging, allowClone: true, cancel: CancelFlag(), report: { _ in }) {
         case .success:
-            if let message = commitStaging(staging, to: target) {
+            let code = exclusiveRename(staging, to: target)
+            if code != 0 {
                 try? fileManager.removeItem(at: staging)
-                return message
+                return code == EEXIST ? .occupied : .failed(String(cString: strerror(code)))
             }
         case .cancelled:
             // Unreachable: nothing sets the cancel flag.
             try? fileManager.removeItem(at: staging)
-            return String(cString: strerror(ECANCELED))
+            return .failed(String(cString: strerror(ECANCELED)))
         case .failed(let message):
             try? fileManager.removeItem(at: staging)
-            return message
+            return .failed(message)
         }
         do {
             try fileManager.removeItem(at: source)
         } catch {
-            return error.localizedDescription
+            return .failed(error.localizedDescription)
         }
         return nil
     }
