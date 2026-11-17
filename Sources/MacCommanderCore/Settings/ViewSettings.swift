@@ -65,6 +65,21 @@ public struct ViewSettings: Codable, Equatable, Sendable {
     public var showCheckboxColumn = true
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case columnLayout, sortOrder, showHiddenFiles, showCheckboxColumn
+    }
+
+    /// Lenient decoding: a missing or unreadable field falls back to its default only.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = ViewSettings()
+        columnLayout = (try? c.decodeIfPresent(ColumnLayout.self, forKey: .columnLayout)) ?? d.columnLayout
+        sortOrder = (try? c.decodeIfPresent(FileSortOrder.self, forKey: .sortOrder)) ?? d.sortOrder
+        showHiddenFiles = (try? c.decodeIfPresent(Bool.self, forKey: .showHiddenFiles)) ?? d.showHiddenFiles
+        showCheckboxColumn =
+            (try? c.decodeIfPresent(Bool.self, forKey: .showCheckboxColumn)) ?? d.showCheckboxColumn
+    }
 }
 
 @MainActor @Observable

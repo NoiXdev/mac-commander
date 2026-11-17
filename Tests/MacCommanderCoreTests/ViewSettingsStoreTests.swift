@@ -54,4 +54,26 @@ import Testing
         #expect(layout.columns.first?.column == .size)
         #expect(layout.columns.first?.isVisible == false)
     }
+
+    @Test func missingKeysKeepOtherSettings() {
+        withDefaults { defaults in
+            defaults.set(Data(#"{"showHiddenFiles":true}"#.utf8), forKey: "viewSettings.v1")
+            let store = ViewSettingsStore(defaults: defaults)
+            var expected = ViewSettings()
+            expected.showHiddenFiles = true
+            #expect(store.settings == expected)
+        }
+    }
+
+    @Test func unknownSortColumnKeepsOtherSettings() {
+        withDefaults { defaults in
+            let json = #"{"showHiddenFiles":true,"sortOrder":{"column":"bogus","ascending":false,"foldersOnTop":true}}"#
+            defaults.set(Data(json.utf8), forKey: "viewSettings.v1")
+            let store = ViewSettingsStore(defaults: defaults)
+            #expect(store.settings.showHiddenFiles)
+            #expect(store.settings.sortOrder.column == .name)
+            #expect(store.settings.sortOrder.ascending == false)
+            #expect(store.settings.sortOrder.foldersOnTop)
+        }
+    }
 }

@@ -61,4 +61,14 @@ import Testing
             [item("a"), item("z", directory: true), item("b"), item("m", directory: true)])
         #expect(result == ["m", "z", "a", "b"])
     }
+
+    @Test func sorts50kItemsQuickly() {
+        let items = (0..<50_000).map { item("file\(($0 * 7919) % 50_000)") }
+        let start = ContinuousClock.now
+        let result = FileSortOrder.default.sorted(items)
+        let elapsed = ContinuousClock.now - start
+        #expect(result.count == 50_000)
+        #expect(result.first?.name == "file0")
+        #expect(elapsed < .seconds(1))
+    }
 }
