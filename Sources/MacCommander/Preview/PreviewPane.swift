@@ -50,7 +50,7 @@ struct PreviewPane: View {
                 .padding()
         case .quickLook(let url):
             QuickLookPreview(url: url)
-        case .rendered(let rendered, let file):
+        case .rendered(let rendered, let file, _):
             if controller.markdownShowsSource {
                 SourceTextView(text: rendered.source ?? "")
             } else {

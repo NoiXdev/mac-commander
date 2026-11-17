@@ -9,8 +9,9 @@ enum PreviewContent: Equatable {
     case empty(String)
     /// A real file or folder shown by `QLPreviewView` (for an archive entry: its extracted copy).
     case quickLook(URL)
-    /// A file rendered by a `PreviewRenderer`; `file` is the real file that was rendered.
-    case rendered(RenderedPreview, file: URL)
+    /// A file rendered by a `PreviewRenderer`; `file` is the real file that was rendered (for an archive
+    /// entry, `fromArchive`: its extracted copy in the private preview cache).
+    case rendered(RenderedPreview, file: URL, fromArchive: Bool)
     /// The raw text of `file` ("Show Source" for a file too large to render).
     case source(String, file: URL)
     /// A message with buttons below it.
@@ -274,7 +275,8 @@ final class PreviewController {
         // Rendering waits: never show the previous item's content under this header meanwhile. (Quick Look
         // above is set at once, so a Quick Look to Quick Look change reuses the view without a flash.)
         content = .empty("")
-        await render(url, name: name, with: renderer, generation: generation, selection: selection)
+        await render(
+            url, name: name, with: renderer, fromArchive: !watches, generation: generation, selection: selection)
         if watches, isCurrent(generation, selection), case .rendered = content {
             watchFile(url, name: name, generation: generation, selection: selection)
         }
@@ -282,12 +284,13 @@ final class PreviewController {
 
     /// Renders `url` and shows the result (or the too-large / unpreviewable message) while still current.
     private func render(
-        _ url: URL, name: String, with renderer: any PreviewRenderer, generation: Int, selection: Set<URL>
+        _ url: URL, name: String, with renderer: any PreviewRenderer, fromArchive: Bool = false, generation: Int,
+        selection: Set<URL>
     ) async {
         do {
             let rendered = try await renderer.render(url)
             guard isCurrent(generation, selection) else { return }
-            content = .rendered(rendered, file: url)
+            content = .rendered(rendered, file: url, fromArchive: fromArchive)
         } catch {
             guard isCurrent(generation, selection) else { return }
             switch error {
@@ -373,8 +376,13 @@ final class PreviewController {
     }
 
     /// A local link in a rendered preview: shows its target in the window's list, beeps when it's missing
-    /// or inside an archive.
+    /// or inside an archive. In a rendered archive entry local links point into the private preview cache:
+    /// they only beep (web links still open, see `MarkdownWebView`).
     func reveal(_ url: URL) {
+        if case .rendered(_, _, fromArchive: true) = content {
+            NSSound.beep()
+            return
+        }
         Task { [model] in
             if await !model.reveal(url) { NSSound.beep() }
         }
@@ -412,6 +420,9 @@ final class PreviewController {
     /// The selected item: a row of the listed folder, else (an inline-expanded row) loaded from disk or,
     /// inside an archive, from its parent's listing. Nil when it is gone.
     private func item(for url: URL, inArchive: Bool) async -> FileItem? {
+        // Selection URLs are spelled as in `items`: an exact match first (cheap even with 50k rows), the
+        // standardized compare only on a miss.
+        if let item = model.items.first(where: { $0.url == url }) { return item }
         let path = url.standardizedFileURL.path
         if let item = model.items.first(where: { $0.url.standardizedFileURL.path == path }) { return item }
         if inArchive {
