@@ -20,6 +20,11 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH/MacCommander" "$APP/Contents/MacOS/MacCommander"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
+if [[ ! -f THIRD-PARTY-NOTICES.md ]]; then
+    echo "error: THIRD-PARTY-NOTICES.md is missing; it must ship in the app bundle" >&2
+    exit 1
+fi
+cp THIRD-PARTY-NOTICES.md "$APP/Contents/Resources/"
 
 if [[ -n "${MC_SIGN_IDENTITY:-}" ]]; then
     codesign --force --options runtime --timestamp --sign "$MC_SIGN_IDENTITY" "$APP"
