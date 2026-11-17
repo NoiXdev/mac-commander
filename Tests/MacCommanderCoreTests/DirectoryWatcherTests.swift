@@ -9,6 +9,13 @@ private final class Counter: @unchecked Sendable {
     func increment() { lock.withLock { value += 1 } }
 }
 
+private final class Stamps: @unchecked Sendable {
+    private let lock = NSLock()
+    private var dates: [Date] = []
+    var all: [Date] { lock.withLock { dates } }
+    func record() { lock.withLock { dates.append(Date()) } }
+}
+
 /// Polls until `condition` holds or the deadline passes.
 private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
@@ -33,15 +40,34 @@ private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) async -> 
 
     @Test func debouncesBursts() async throws {
         let dir = try TemporaryDirectory()
-        let counter = Counter()
+        let stamps = Stamps()
         let watcher = try #require(DirectoryWatcher(url: dir.url, debounce: .milliseconds(200)) {
-            counter.increment()
+            stamps.record()
         })
-        for i in 0..<20 { try dir.file("f\(i).txt") }
-        #expect(await waitUntil(timeout: 1) { counter.count >= 1 })
+        for i in 0..<10 {
+            try dir.file("f\(i).txt")
+            try await Task.sleep(for: .milliseconds(30))
+        }
+        let burstEnd = Date()
+        #expect(await waitUntil(timeout: 2) { stamps.all.count >= 1 })
         try await Task.sleep(for: .milliseconds(500))
-        #expect(counter.count >= 1)
-        #expect(counter.count < 5)
+        let all = stamps.all
+        #expect(all.count == 1)
+        #expect(all.first.map { $0 >= burstEnd.addingTimeInterval(-0.05) } == true)
+        watcher.cancel()
+    }
+
+    @Test func firesDuringContinuousEvents() async throws {
+        let dir = try TemporaryDirectory()
+        let counter = Counter()
+        let watcher = try #require(DirectoryWatcher(
+            url: dir.url, debounce: .milliseconds(200), maxLatency: .seconds(1)
+        ) { counter.increment() })
+        for i in 0..<50 {
+            try dir.file("f\(i).txt")
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(counter.count >= 2)
         watcher.cancel()
     }
 
