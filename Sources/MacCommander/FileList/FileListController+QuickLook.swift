@@ -16,6 +16,6 @@ extension FileListController {
         if row < 0 {
             return FileContextMenu.forEmptySpace(model: model, settings: settings)
         }
-        return FileContextMenu.forItems(selectedNodes.map(\.item), model: model, settings: settings)
+        return FileContextMenu.forItems(actionItems(forClickedRow: row), model: model, settings: settings)
     }
 }
