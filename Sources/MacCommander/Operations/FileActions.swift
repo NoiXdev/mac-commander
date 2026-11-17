@@ -1,7 +1,7 @@
 import AppKit
 import MacCommanderCore
 
-/// The file commands behind the keyboard, the menus and (later) drag and drop. Each entry point
+/// The file commands behind the keyboard, the menus and drag and drop. Each entry point
 /// reports its errors in one alert, as a sheet on `window` when one is given.
 @MainActor
 enum FileActions {
@@ -72,6 +72,28 @@ enum FileActions {
         let result = await model.operations.transfer(urls, into: destination, mode: mode, resolver: resolver)
         await finish(result, mode: mode, model: model, window: window)
         return result
+    }
+
+    // MARK: - Drag and drop
+
+    /// The modifier keys held right now, as `DropPolicy` reads them (⌥ forces copy, ⌘ forces move).
+    static func currentDropModifiers() -> DropModifiers {
+        let flags = NSEvent.modifierFlags
+        var modifiers: DropModifiers = []
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.command) { modifiers.insert(.command) }
+        return modifiers
+    }
+
+    /// The file URLs on a drag pasteboard (non-file URLs and promises are ignored).
+    static func fileURLs(on pasteboard: NSPasteboard) -> [URL] {
+        let objects = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        return (objects as? [URL]) ?? []
+    }
+
+    /// What dropping `sources` into `destination` with the current modifier keys does; nil refuses the drop.
+    static func dropMode(for sources: [URL], into destination: URL) -> TransferMode? {
+        DropPolicy.operation(for: sources, into: destination, modifiers: currentDropModifiers())
     }
 
     static func duplicate(_ items: [FileItem], model: BrowserModel, window: NSWindow? = nil) async {

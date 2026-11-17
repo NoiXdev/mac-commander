@@ -106,8 +106,11 @@ final class FileListController: NSViewController {
         outline.columnAutoresizingStyle = .noColumnAutoresizing
         outline.autosaveExpandedItems = false
         outline.indentationPerLevel = 14
-        outline.setDraggingSourceOperationMask([.copy, .link, .generic], forLocal: false)
-        outline.setDraggingSourceOperationMask([.copy, .link, .generic], forLocal: true)
+        // Rows drag out as file URLs (to Finder, the Desktop, other apps, the sidebar or this list);
+        // the destination picks copy or move. Dragging into the Trash (`.delete`) is not offered.
+        outline.setDraggingSourceOperationMask([.copy, .move, .generic], forLocal: false)
+        outline.setDraggingSourceOperationMask([.copy, .move, .generic], forLocal: true)
+        outline.registerForDraggedTypes([.fileURL])
 
         makeColumns()
 

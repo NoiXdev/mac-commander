@@ -8,6 +8,8 @@ struct SidebarView: View {
     @Environment(FavoritesStore.self) private var favorites
     private let volumesState = State<[VolumeInfo]>(initialValue: [])
     private let missingState = State<SidebarLocation?>(initialValue: nil)
+    /// The sidebar's window, for the conflict dialog and alerts of drops onto rows.
+    private let windowState = State(initialValue: WindowBox())
     private var volumes: [VolumeInfo] {
         get { volumesState.wrappedValue }
         nonmutating set { volumesState.wrappedValue = newValue }
@@ -19,16 +21,27 @@ struct SidebarView: View {
 
     var body: some View {
         List {
-            Section(String(localized: "Favorites")) {
+            Section {
                 ForEach(favorites.favorites) { location in
                     row(name: location.name, url: location.url, exists: location.exists)
                         .onTapGesture { select(location) }
+                        .onDrop(of: [.fileURL], delegate: dropDelegate(into: location.url, enabled: location.exists))
                         .contextMenu {
                             Button(String(localized: "Remove from Sidebar")) { favorites.remove(location.url) }
                         }
                 }
                 .onMove { favorites.move(fromOffsets: $0, toOffset: $1) }
+                // Between rows: add the dropped folders as favorites (onto a row: see `FolderDropDelegate`).
                 .onInsert(of: [.fileURL]) { index, providers in drop(providers, at: index) }
+            } header: {
+                // Also adds favorites (at the end), in case drops between rows land on a row instead.
+                Text(String(localized: "Favorites"))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                        drop(providers, at: favorites.favorites.count)
+                        return true
+                    }
             }
             Section(String(localized: "Locations")) {
                 ForEach(volumes) { volume in
@@ -46,10 +59,12 @@ struct SidebarView: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { Task { await model.navigate(to: volume.url) } }
+                    .onDrop(of: [.fileURL], delegate: dropDelegate(into: volume.url, enabled: true))
                 }
             }
         }
         .listStyle(.sidebar)
+        .background(WindowReader(box: windowState.wrappedValue))
         .onAppear { favorites.refreshExistence() }
         .task {
             volumes = VolumeProvider.localVolumes()
@@ -102,6 +117,10 @@ struct SidebarView: View {
         }
     }
 
+    private func dropDelegate(into destination: URL, enabled: Bool) -> FolderDropDelegate {
+        FolderDropDelegate(destination: destination, enabled: enabled, model: model, window: windowState.wrappedValue)
+    }
+
     private func drop(_ providers: [NSItemProvider], at index: Int) {
         for provider in providers {
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
@@ -137,6 +156,121 @@ struct SidebarView: View {
         case home + "/Downloads": return "arrow.down.circle"
         case "/Applications": return "square.grid.2x2"
         default: return "folder"
+        }
+    }
+}
+
+/// Moves or copies files dropped onto a sidebar row (a favorite folder or a volume) into that folder,
+/// with the list's rules (`DropPolicy`: move on the same volume, copy across volumes, ⌥ copy, ⌘ move).
+/// While hovering, the sources are read from the drag pasteboard, since item providers only load
+/// asynchronously; the drop itself loads them from the item providers.
+@MainActor
+private struct FolderDropDelegate: DropDelegate {
+    let destination: URL
+    /// False for a missing favorite: it refuses drops.
+    let enabled: Bool
+    let model: BrowserModel
+    let window: WindowBox
+
+    func validateDrop(info: DropInfo) -> Bool {
+        enabled && info.hasItemsConforming(to: [.fileURL]) && currentMode() != nil
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        switch currentMode() {
+        case .copy?: DropProposal(operation: .copy)
+        case .move?: DropProposal(operation: .move)
+        case nil: DropProposal(operation: .forbidden)
+        }
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard enabled else { return false }
+        let providers = info.itemProviders(for: [.fileURL])
+        guard !providers.isEmpty else { return false }
+        // The keys held at drop time; the URLs arrive later.
+        let modifiers = FileActions.currentDropModifiers()
+        let destination = destination
+        let model = model
+        let window = window
+        DroppedURLCollector.load(providers) { sources in
+            guard let mode = DropPolicy.operation(for: sources, into: destination, modifiers: modifiers) else {
+                NSSound.beep()
+                return
+            }
+            Task {
+                await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window.window)
+            }
+        }
+        return true
+    }
+
+    private func currentMode() -> TransferMode? {
+        guard enabled else { return nil }
+        let sources = FileActions.fileURLs(on: NSPasteboard(name: .drag))
+        return FileActions.dropMode(for: sources, into: destination)
+    }
+}
+
+/// Loads the file URLs of several item providers and hands all of them over at once on the main actor
+/// (one transfer, one conflict dialog, one undo step). Providers that yield no URL are left out.
+@MainActor
+private final class DroppedURLCollector {
+    private var urls: [URL?]
+    private var pending: Int
+    private let completion: @MainActor ([URL]) -> Void
+
+    private init(count: Int, completion: @escaping @MainActor ([URL]) -> Void) {
+        urls = Array(repeating: nil, count: count)
+        pending = count
+        self.completion = completion
+    }
+
+    static func load(_ providers: [NSItemProvider], completion: @escaping @MainActor ([URL]) -> Void) {
+        let collector = DroppedURLCollector(count: providers.count, completion: completion)
+        for (index, provider) in providers.enumerated() {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                Task { @MainActor in collector.received(url, at: index) }
+            }
+        }
+    }
+
+    private func received(_ url: URL?, at index: Int) {
+        urls[index] = url?.isFileURL == true ? url : nil
+        pending -= 1
+        if pending == 0 {
+            let sources = urls.compactMap { $0 }
+            if !sources.isEmpty { completion(sources) }
+        }
+    }
+}
+
+/// Holds the window a SwiftUI view is in (set by `WindowReader`).
+@MainActor
+final class WindowBox {
+    weak var window: NSWindow?
+}
+
+/// An invisible view that records its window in `box`.
+private struct WindowReader: NSViewRepresentable {
+    let box: WindowBox
+
+    func makeNSView(context: Context) -> ReaderView {
+        let view = ReaderView()
+        view.box = box
+        return view
+    }
+
+    func updateNSView(_ view: ReaderView, context: Context) {
+        view.box = box
+        box.window = view.window
+    }
+
+    final class ReaderView: NSView {
+        var box: WindowBox?
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            box?.window = window
         }
     }
 }

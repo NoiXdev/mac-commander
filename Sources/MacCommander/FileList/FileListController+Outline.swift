@@ -56,6 +56,50 @@ extension FileListController: NSOutlineViewDataSource {
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> (any NSPasteboardWriting)? {
         (item as? FileNode)?.url as NSURL?
     }
+
+    // MARK: Drop target
+
+    /// A drop on a folder row (also an inline-expanded subfolder) goes into that folder; anywhere else
+    /// (between rows, on a file, on empty space) it is retargeted to the whole list, i.e. the current
+    /// folder. `DropPolicy` decides copy or move, or refuses (no highlight).
+    func outlineView(
+        _ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?,
+        proposedChildIndex index: Int
+    ) -> NSDragOperation {
+        guard showsCurrentFolder else { return [] }
+        let sources = FileActions.fileURLs(on: info.draggingPasteboard)
+        guard !sources.isEmpty else { return [] }
+        let destination: URL
+        if let node = item as? FileNode, node.item.isDirectory, index == NSOutlineViewDropOnItemIndex {
+            destination = node.url
+        } else {
+            outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
+            destination = model.currentURL
+        }
+        guard let mode = FileActions.dropMode(for: sources, into: destination) else { return [] }
+        return Self.dragOperation(for: mode, allowed: info.draggingSourceOperationMask)
+    }
+
+    func outlineView(
+        _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int
+    ) -> Bool {
+        guard showsCurrentFolder else { return false }
+        let sources = FileActions.fileURLs(on: info.draggingPasteboard)
+        let destination = (item as? FileNode).flatMap { $0.item.isDirectory ? $0.url : nil } ?? model.currentURL
+        guard let mode = FileActions.dropMode(for: sources, into: destination) else { return false }
+        let model = model
+        let window = outlineView.window
+        Task { await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window) }
+        return true
+    }
+
+    /// `.copy` or `.move`, so the cursor shows the matching badge. While ⌘ is held AppKit narrows the
+    /// source's mask to `.generic`; that then stands for the move.
+    static func dragOperation(for mode: TransferMode, allowed: NSDragOperation) -> NSDragOperation {
+        let preferred: NSDragOperation = mode == .copy ? .copy : .move
+        if allowed.contains(preferred) { return preferred }
+        return allowed.contains(.generic) ? .generic : []
+    }
 }
 
 // MARK: - NSOutlineViewDelegate
