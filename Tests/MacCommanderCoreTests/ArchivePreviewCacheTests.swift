@@ -153,4 +153,76 @@ struct ArchivePreviewCacheTests {
         await cache.purge()
         #expect(!FileManager.default.fileExists(atPath: root.path))
     }
+
+    /// Apps save duplicates of a locked file next to it, and Archive Utility expands a nested archive
+    /// beside itself; the cache is purged permanently, so its staging folders must not accept new items.
+    @Test func stagingFoldersAreReadOnlyAndStillPurged() async throws {
+        let temp = try TemporaryDirectory()
+        let zip = try ArchiveFixtures.makeArchive(files, format: "zip", in: temp)
+        let root = temp.url.appendingPathComponent("Previews", isDirectory: true)
+        let cache = ArchivePreviewCache(root: root, catalog: ArchiveCatalog())
+        let extracted = try await cache.files(["img/a.png", "c.txt"], of: zip)
+
+        // `.mc-partial-<UUID>/img/a.png` and `.mc-partial-<UUID>/c.txt`: both folders refuse new items.
+        let nested = extracted[0].deletingLastPathComponent()
+        let staging = extracted[1].deletingLastPathComponent()
+        #expect(nested.deletingLastPathComponent() == staging)
+        for folder in [staging, nested] {
+            let mode = try #require(
+                try FileManager.default.attributesOfItem(atPath: folder.path)[.posixPermissions] as? NSNumber
+            ).intValue
+            #expect(mode & 0o222 == 0)
+            #expect(!FileManager.default.isWritableFile(atPath: folder.path))
+            #expect(throws: (any Error).self) {
+                try "copy".write(to: folder.appendingPathComponent("a copy.png"), atomically: false, encoding: .utf8)
+            }
+        }
+        // The version folder stays writable for later runs.
+        #expect(contents(try await cache.files(["img/b.png"], of: zip)) == ["B"])
+
+        await cache.purge()
+        #expect(!FileManager.default.fileExists(atPath: root.path))
+    }
+
+    /// A temp cleaner or another instance's purge removed the version folder: start a fresh version.
+    @Test func missingVersionFolderStartsFresh() async throws {
+        let temp = try TemporaryDirectory()
+        let zip = try ArchiveFixtures.makeArchive(files, format: "zip", in: temp)
+        let root = temp.url.appendingPathComponent("Previews", isDirectory: true)
+        let cache = ArchivePreviewCache(root: root, catalog: ArchiveCatalog())
+        _ = try await cache.files(["c.txt"], of: zip)
+        // Like another instance's `purge`.
+        await ArchivePreviewCache(root: root, catalog: ArchiveCatalog()).purge()
+        #expect(!FileManager.default.fileExists(atPath: root.path))
+
+        #expect(contents(try await cache.files(["img/a.png", "c.txt"], of: zip)) == ["A", "C"])
+        #expect(versions(in: root).count == 1)
+    }
+
+    /// An entry stored with mode 000 is made owner-readable, so Quick Look can show it.
+    @Test func unreadableEntriesBecomeReadable() async throws {
+        let temp = try TemporaryDirectory()
+        let real = try temp.file("real.txt", contents: "locked")
+        let spec = try temp.file("spec.mtree", contents: "#mtree\nlocked.txt type=file mode=0000 contents=\(real.path)\n")
+        let tar = temp.url.appendingPathComponent("locked.tar")
+        try ArchiveFixtures.run("/usr/bin/bsdtar", ["-c", "-f", tar.path, "--format", "ustar", "@" + spec.path])
+        let cache = ArchivePreviewCache(
+            root: temp.url.appendingPathComponent("Previews", isDirectory: true), catalog: ArchiveCatalog())
+
+        let file = try await cache.files(["locked.txt"], of: tar)[0]
+        #expect(contents([file]) == ["locked"])
+        #expect(!FileManager.default.isWritableFile(atPath: file.path))
+        await cache.purge()
+    }
+
+    @Test func missingEntryNamesLastComponent() async throws {
+        let temp = try TemporaryDirectory()
+        let zip = try ArchiveFixtures.makeArchive(files, format: "zip", in: temp)
+        let cache = ArchivePreviewCache(
+            root: temp.url.appendingPathComponent("Previews", isDirectory: true), catalog: ArchiveCatalog())
+        await #expect(throws: ArchiveError.unreadable(message: "“nope.png” isn’t in the archive.")) {
+            _ = try await cache.files(["img/nope.png"], of: zip)
+        }
+        await cache.purge()
+    }
 }

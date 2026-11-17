@@ -9,7 +9,8 @@ import Foundation
 /// Each extraction run stages its missing entries into its own `ArchiveExtractor` staging folder inside the
 /// version folder (`root/<UUID>/.mc-partial-<UUID>/<entry>`); the staged files are used in place and never
 /// moved. Extracted files are made read-only (`a-w`), so an opened copy can't be edited in place and later
-/// previews keep showing the archive's content; archives are read-only.
+/// previews keep showing the archive's content; archives are read-only. Staging folders are made read-only
+/// too, so no app can save anything into the cache (it is removed permanently).
 ///
 /// A symlink entry is refused (`.unreadable`): previewing or opening it would follow it out of the cache,
 /// e.g. to `~/.zshrc`.
@@ -58,7 +59,8 @@ public actor ArchivePreviewCache {
         let wanted = entries.map(Self.normalized)
         // Single stats and small folder operations; the actor never runs on the main thread.
         let key = try Self.key(of: path)
-        if let current = versions[path], current.key != key {
+        if let current = versions[path], current.key != key || !Self.isFolder(current.folder) {
+            // Changed, or its folder is gone (a temp cleaner, another instance's purge): start fresh.
             Self.remove(current.folder)
             versions[path] = nil
         }
@@ -111,11 +113,13 @@ public actor ArchivePreviewCache {
                 Self.makeReadOnly(file)
                 version.files[entry] = file
             }
+            Self.makeFoldersReadOnly(staging)
             versions[path] = version
         }
         return try wanted.map { entry throws(ArchiveError) in
             guard let file = version.files[entry] else {
-                throw .unreadable(message: String(localized: "“\(entry)” isn’t in the archive."))
+                let name = entry.split(separator: "/").last.map(String.init) ?? entry
+                throw .unreadable(message: String(localized: "“\(name)” isn’t in the archive."))
             }
             return file
         }
@@ -140,11 +144,31 @@ public actor ArchivePreviewCache {
         return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFLNK
     }
 
-    /// Removes write permission (a-w) from a regular file, found with `lstat`. Best effort.
+    /// Removes write permission (a-w) from a regular file, found with `lstat`, and makes it owner-readable
+    /// (u+r), so an entry stored with mode 000 can still be previewed. Best effort.
     private static func makeReadOnly(_ url: URL) {
         var info = stat()
         guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return }
-        chmod(url.path, info.st_mode & 0o7777 & ~(S_IWUSR | S_IWGRP | S_IWOTH))
+        chmod(url.path, (info.st_mode | S_IRUSR) & 0o7777 & ~(S_IWUSR | S_IWGRP | S_IWOTH))
+    }
+
+    /// Removes write permission (a-w) from `folder` and every folder below it, found with `lstat` (symlinks
+    /// are never followed). Apps save a duplicate of a locked file next to it, and Archive Utility expands a
+    /// nested archive beside itself; the cache is deleted permanently, so nothing may land there. Saving
+    /// fails instead and the app asks for another place. `remove` makes the folders writable again. Best effort.
+    private static func makeFoldersReadOnly(_ folder: URL) {
+        var info = stat()
+        guard lstat(folder.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { return }
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: folder.path) {
+            for name in names { makeFoldersReadOnly(folder.appendingPathComponent(name)) }
+        }
+        chmod(folder.path, info.st_mode & 0o7777 & ~(S_IWUSR | S_IWGRP | S_IWOTH))
+    }
+
+    /// `lstat`: true for a real folder (not a symlink to one).
+    private static func isFolder(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR
     }
 
     private static func key(of path: String) throws(ArchiveError) -> VersionKey {

@@ -145,6 +145,8 @@ enum FileActions {
     /// Opens `items` like ⌘↓ (the caller picks them: one item, or only the files of several). Outside an
     /// archive `model.open`. Inside one, folders navigate and files are extracted through the preview cache
     /// and opened with their default app; changes to those copies aren't written back (archives are read-only).
+    /// Nested pure archives (a `.zip` inside the archive) run "Extract To…" instead: Archive Utility would
+    /// unpack them into the preview cache, which is deleted permanently.
     static func open(_ items: [FileItem], model: BrowserModel, window: NSWindow?) async {
         guard let archive = model.archiveLocation?.archive else {
             for item in items { await model.open(item) }
@@ -155,9 +157,18 @@ enum FileActions {
         let links = items.filter { !$0.isDirectory && $0.isSymlink }
         showAlert(
             links.map { String(localized: "“\($0.name)” couldn’t be opened: It’s a link.") }, window: window)
-        let files = items.filter { !$0.isDirectory && !$0.isSymlink }
-        // Cheap stats only (`ArchivePath.split`).
-        let entries = files.compactMap { ArchivePath.split($0.url)?.inner }
+        let candidates = items.filter { !$0.isDirectory && !$0.isSymlink }
+        let nested = candidates.filter { ArchiveFormats.isArchive($0.url) }
+        let files = candidates.filter { !ArchiveFormats.isArchive($0.url) }
+        // Pure string work, no file-system access.
+        let nestedEntries = nested.compactMap { ArchivePath.inner(of: $0.url, in: archive) }
+        if !nestedEntries.isEmpty {
+            let parent = archive.deletingLastPathComponent()
+            if let destination = await chooseExtractionFolder(startingAt: parent, window: window) {
+                await extract(nestedEntries, from: archive, into: destination, model: model, window: window)
+            }
+        }
+        let entries = files.compactMap { ArchivePath.inner(of: $0.url, in: archive) }
         guard !entries.isEmpty else { return }
         let name = files.count == 1 ? files[0].name : archive.lastPathComponent
         guard let extracted = await extractForPreview(entries, of: archive, name: name, window: window) else { return }
