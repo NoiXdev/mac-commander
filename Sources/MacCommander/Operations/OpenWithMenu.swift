@@ -9,13 +9,22 @@ enum OpenWithMenu {
         menu.autoenablesItems = false
         let workspace = NSWorkspace.shared
 
-        let defaultApp = urls.first.flatMap { workspace.urlForApplication(toOpen: $0) }
+        // Launch Services is queried once per content type, not per item: a huge selection of a few types
+        // stays cheap. With too many types the menu offers only "Other…".
+        guard let samples = samples(of: urls) else {
+            menu.addItem(ActionMenuItem(String(localized: "Other…")) { chooseApp(for: urls) })
+            item.submenu = menu
+            return item
+        }
+        var defaultApp = urls.first.flatMap { workspace.urlForApplication(toOpen: $0) }
         // With several items, only apps that open all of them.
         var common: Set<URL>?
-        for url in urls {
+        for url in samples {
             let apps = Set(workspace.urlsForApplications(toOpen: url))
             common = common.map { $0.intersection(apps) } ?? apps
         }
+        // The first item's default app is offered only if it opens all of them.
+        if urls.count > 1, let app = defaultApp, common?.contains(app) != true { defaultApp = nil }
         let others = (common ?? [])
             .filter { $0 != defaultApp }
             .map { (url: $0, name: displayName($0)) }
@@ -33,6 +42,24 @@ enum OpenWithMenu {
         menu.addItem(ActionMenuItem(String(localized: "Other…")) { chooseApp(for: urls) })
         item.submenu = menu
         return item
+    }
+
+    /// Above this many distinct content types, the menu offers only "Other…".
+    static let maxContentTypes = 50
+
+    /// One URL per distinct content type (`contentTypeKey`, else the lowercased path extension), in order;
+    /// nil if there are more than `maxContentTypes`.
+    private static func samples(of urls: [URL]) -> [URL]? {
+        var seen = Set<String>()
+        var samples: [URL] = []
+        for url in urls {
+            let type = (try? url.resourceValues(forKeys: [.contentTypeKey]))?.contentType?.identifier
+            let key = type ?? "extension:" + url.pathExtension.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            if seen.count > maxContentTypes { return nil }
+            samples.append(url)
+        }
+        return samples
     }
 
     private static func displayName(_ app: URL) -> String {

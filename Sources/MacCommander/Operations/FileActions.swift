@@ -41,6 +41,8 @@ enum FileActions {
         do {
             let zip = try await model.operations.compress(items.map(\.url))
             await model.selectAfterOperation([zip])
+        } catch is CancellationError {
+            // Cancelled from the operations strip: nothing to report.
         } catch {
             showAlert([String(localized: "The items couldn’t be compressed: \(error.localizedDescription)")], window: window)
         }
