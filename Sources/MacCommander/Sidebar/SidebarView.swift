@@ -25,7 +25,7 @@ struct SidebarView: View {
                 ForEach(favorites.favorites) { location in
                     row(name: location.name, url: location.url, exists: location.exists)
                         .onTapGesture { select(location) }
-                        .onDrop(of: [.fileURL], delegate: dropDelegate(into: location.url, enabled: location.exists))
+                        .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: location.exists))
                         .contextMenu {
                             Button(String(localized: "Remove from Sidebar")) { favorites.remove(location.url) }
                         }
@@ -59,7 +59,7 @@ struct SidebarView: View {
                     }
                     .contentShape(Rectangle())
                     .onTapGesture { Task { await model.navigate(to: volume.url) } }
-                    .onDrop(of: [.fileURL], delegate: dropDelegate(into: volume.url, enabled: true))
+                    .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: volume.url, enabled: true))
                 }
             }
         }
@@ -164,8 +164,16 @@ struct SidebarView: View {
 /// with the list's rules (`DropPolicy`: move on the same volume, copy across volumes, ⌥ copy, ⌘ move).
 /// While hovering, the sources are read from the drag pasteboard, since item providers only load
 /// asynchronously; the drop itself loads them from the item providers.
+///
+/// Entries dragged out of an archive (`archiveEntries`, checked first) are extracted into the folder; copy
+/// is the only operation. Their payload is read synchronously from the drag pasteboard
+/// (`NSPasteboard(name: .drag)`) rather than through `NSItemProvider`: the type isn't declared in Info.plist,
+/// and the pasteboard is what the hover check reads anyway. That works for drags from any MacCommander window.
 @MainActor
 private struct FolderDropDelegate: DropDelegate {
+    /// The types the rows register for: archive entries first, then files.
+    static let types: [UTType] = [.archiveEntries, .fileURL]
+
     let destination: URL
     /// False for a missing favorite: it refuses drops.
     let enabled: Bool
@@ -173,19 +181,35 @@ private struct FolderDropDelegate: DropDelegate {
     let window: WindowBox
 
     func validateDrop(info: DropInfo) -> Bool {
-        enabled && info.hasItemsConforming(to: [.fileURL]) && currentMode() != nil
+        guard enabled else { return false }
+        if isArchiveDrag { return acceptsArchiveDrop }
+        return info.hasItemsConforming(to: [.fileURL]) && currentMode() != nil
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        if isArchiveDrag { return DropProposal(operation: acceptsArchiveDrop ? .copy : .forbidden) }
         switch currentMode() {
-        case .copy?: DropProposal(operation: .copy)
-        case .move?: DropProposal(operation: .move)
-        case nil: DropProposal(operation: .forbidden)
+        case .copy?: return DropProposal(operation: .copy)
+        case .move?: return DropProposal(operation: .move)
+        case nil: return DropProposal(operation: .forbidden)
         }
     }
 
     func performDrop(info: DropInfo) -> Bool {
         guard enabled else { return false }
+        if isArchiveDrag {
+            guard acceptsArchiveDrop, let payload = ArchiveDragPayload(pasteboard: NSPasteboard(name: .drag)) else {
+                return false
+            }
+            let destination = destination
+            let model = model
+            let window = window
+            Task {
+                await FileActions.extract(
+                    payload.entries, from: payload.archive, into: destination, model: model, window: window.window)
+            }
+            return true
+        }
         let providers = info.itemProviders(for: [.fileURL])
         guard !providers.isEmpty else { return false }
         // The keys held at drop time; the URLs arrive later.
@@ -204,6 +228,12 @@ private struct FolderDropDelegate: DropDelegate {
         }
         return true
     }
+
+    /// The drag carries entries of an archive (a type check on the drag pasteboard).
+    private var isArchiveDrag: Bool { ArchiveDragPayload.isOn(NSPasteboard(name: .drag)) }
+
+    /// Archive entries go into real folders only (cheap stats, see `FileListController.acceptsArchiveDrop`).
+    private var acceptsArchiveDrop: Bool { FileListController.acceptsArchiveDrop(into: destination) }
 
     /// Cached per drag, destination and modifier keys: `dropUpdated` runs on every mouse move.
     private func currentMode() -> TransferMode? {

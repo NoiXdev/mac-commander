@@ -56,11 +56,55 @@ extension FileListController: NSOutlineViewDataSource {
 
     /// Rows can be dragged out (e.g. onto the sidebar Favorites or Finder) as file URLs. A selected row
     /// inside a selected folder is not dragged on its own: it moves or copies with that folder.
+    /// Archive entries are dragged as file promises plus the `archiveEntries` type (`ArchiveEntryDragProvider`).
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> (any NSPasteboardWriting)? {
         guard let node = item as? FileNode else { return nil }
         let row = outlineView.row(forItem: node)
-        if row >= 0, outlineView.isRowSelected(row), hasSelectedAncestor(node) { return nil }
-        return node.url as NSURL
+        let isSelected = row >= 0 && outlineView.isRowSelected(row)
+        if isSelected, hasSelectedAncestor(node) { return nil }
+        guard let archive = model.archiveLocation?.archive else { return node.url as NSURL }
+        guard let entry = Self.entryPath(of: node.url, in: archive) else { return nil }
+        let payload =
+            isSelected
+            ? selectionDragPayload(archive: archive)
+            : ArchiveDragPayload(archive: archive, entries: [entry])
+        return ArchiveEntryDragProvider(archive: archive, entry: entry, isDirectory: node.item.isDirectory, payload: payload)
+    }
+
+    /// Archive rows drag as copies only (nothing leaves the archive); other rows keep copy, move and
+    /// generic (⌘ = move), as set up in `configureOutline`.
+    func outlineView(
+        _ outlineView: NSOutlineView, draggingSession session: NSDraggingSession, willBeginAt screenPoint: NSPoint,
+        forItems draggedItems: [Any]
+    ) {
+        // All writers of this drag exist now: the payload cache must not outlive it.
+        archiveDragPayload = nil
+        let mask: NSDragOperation = isInArchive ? .copy : Self.fileDragOperations
+        outlineView.setDraggingSourceOperationMask(mask, forLocal: false)
+        outlineView.setDraggingSourceOperationMask(mask, forLocal: true)
+    }
+
+    /// The payload for dragging the selection: every selected top-level entry. AppKit asks for one writer
+    /// per dragged row, so it is computed once per drag (the cache is cleared when the session begins).
+    private func selectionDragPayload(archive: URL) -> ArchiveDragPayload {
+        let selection = outlineView.selectedRowIndexes
+        if let cached = archiveDragPayload, cached.selection == selection, cached.payload.archive == archive {
+            return cached.payload
+        }
+        let urls = selection.compactMap { node(atRow: $0)?.url }
+        let entries = PathUtilities.topLevel(urls).compactMap { Self.entryPath(of: $0, in: archive) }
+        let payload = ArchiveDragPayload(archive: archive, entries: entries)
+        archiveDragPayload = (selection, payload)
+        return payload
+    }
+
+    /// The inner path of a row's virtual URL inside `archive` (by path prefix, no file-system access);
+    /// nil for the archive itself or a URL outside it.
+    static func entryPath(of url: URL, in archive: URL) -> String? {
+        let prefix = archive.standardizedFileURL.path + "/"
+        let path = url.standardizedFileURL.path
+        guard path.hasPrefix(prefix), path.count > prefix.count else { return nil }
+        return String(path.dropFirst(prefix.count))
     }
 
     // MARK: Drop target
@@ -81,6 +125,11 @@ extension FileListController: NSOutlineViewDataSource {
             outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
             destination = model.currentURL
         }
+        // Entries dragged out of an archive (checked first: their promises are no file URLs) are extracted.
+        if ArchiveDragPayload.isOn(info.draggingPasteboard) {
+            return info.draggingSourceOperationMask.contains(.copy) && Self.acceptsArchiveDrop(into: destination)
+                ? .copy : []
+        }
         // Cached per drag, destination and modifier keys: this runs on every mouse move.
         guard let mode = FileActions.hoverDropMode(on: info.draggingPasteboard, into: destination) else { return [] }
         return Self.dragOperation(for: mode, allowed: info.draggingSourceOperationMask)
@@ -90,13 +139,30 @@ extension FileListController: NSOutlineViewDataSource {
         _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int
     ) -> Bool {
         guard showsCurrentFolder, !isInArchive else { return false }
-        let sources = FileActions.fileURLs(on: info.draggingPasteboard)
         let destination = (item as? FileNode).flatMap { $0.item.isDirectory ? $0.url : nil } ?? model.currentURL
+        if ArchiveDragPayload.isOn(info.draggingPasteboard) {
+            guard let payload = ArchiveDragPayload(pasteboard: info.draggingPasteboard),
+                Self.acceptsArchiveDrop(into: destination)
+            else { return false }
+            let model = model
+            let window = outlineView.window
+            Task {
+                await FileActions.extract(
+                    payload.entries, from: payload.archive, into: destination, model: model, window: window)
+            }
+            return true
+        }
+        let sources = FileActions.fileURLs(on: info.draggingPasteboard)
         guard let mode = FileActions.dropMode(for: sources, into: destination) else { return false }
         let model = model
         let window = outlineView.window
         Task { await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window) }
         return true
+    }
+
+    /// Archive entries can be extracted into a real folder only, never into an archive (cheap stats only).
+    static func acceptsArchiveDrop(into destination: URL) -> Bool {
+        ArchivePath.split(destination) == nil
     }
 
     /// `.copy` or `.move`, so the cursor shows the matching badge. While ⌘ is held AppKit narrows the

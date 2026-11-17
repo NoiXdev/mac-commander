@@ -42,6 +42,12 @@ final class FileListController: NSViewController {
     /// selection change cancels it (see `toggleQuickLook`).
     var quickLookTask: (task: Task<Void, Never>, selection: [URL])?
 
+    /// The payload of the archive drag being set up, for the selected rows it was computed for.
+    var archiveDragPayload: (selection: IndexSet, payload: ArchiveDragPayload)?
+
+    /// The source operations of rows outside archives.
+    static let fileDragOperations: NSDragOperation = [.copy, .move, .generic]
+
     /// Above this many inserted/removed/changed rows, a reload is cheaper than row animations.
     static let maxIncrementalChanges = 500
 
@@ -112,9 +118,11 @@ final class FileListController: NSViewController {
         outline.indentationPerLevel = 14
         // Rows drag out as file URLs (to Finder, the Desktop, other apps, the sidebar or this list);
         // the destination picks copy or move. Dragging into the Trash (`.delete`) is not offered.
-        outline.setDraggingSourceOperationMask([.copy, .move, .generic], forLocal: false)
-        outline.setDraggingSourceOperationMask([.copy, .move, .generic], forLocal: true)
-        outline.registerForDraggedTypes([.fileURL])
+        // Archive entries drag as copies only (see `outlineView(_:draggingSession:willBeginAt:forItems:)`) and
+        // arrive as `archiveEntries`.
+        outline.setDraggingSourceOperationMask(Self.fileDragOperations, forLocal: false)
+        outline.setDraggingSourceOperationMask(Self.fileDragOperations, forLocal: true)
+        outline.registerForDraggedTypes([.archiveEntries, .fileURL])
 
         makeColumns()
 

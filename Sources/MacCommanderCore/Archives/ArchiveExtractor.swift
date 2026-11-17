@@ -70,6 +70,28 @@ public enum ArchiveExtractor {
         }
     }
 
+    /// Extracts the single `entry` (a file or folder inside `archive`) to exactly `target`, e.g. the URL a
+    /// file promise receiver (Finder, the Desktop) asks for. Stages next to `target`, then renames the staged
+    /// item into place exclusively, and removes staging. Never overwrites: if anything is at `target` (before
+    /// staging or when the rename runs), it throws `CocoaError(.fileWriteFileExists)` and leaves it unchanged.
+    /// No conflict dialog, progress or undo: the receiver owns the result.
+    @concurrent public static func extract(_ entry: String, from archive: URL, to target: URL, password: String?)
+        async throws
+    {
+        let exists = CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: target.path])
+        var info = stat()
+        if lstat(target.path, &info) == 0 { throw exists }
+        guard !entry.split(separator: "/").filter({ $0 != "." }).isEmpty else { throw notInArchive(entry) }
+        let (staging, items) = try await stage(
+            [entry], from: archive, near: target.deletingLastPathComponent(), password: password)
+        defer { removeStaging(staging) }
+        guard let item = items.first else { throw notInArchive(entry) }
+        try Task.checkCancellation()
+        let code = FileTransfer.exclusiveRename(item, to: target)
+        if code == EEXIST { throw exists }
+        if code != 0 { throw POSIXError(POSIXErrorCode(rawValue: code) ?? .EIO) }
+    }
+
     /// Permanently removes a staging folder made by `stage`. Only `.mc-partial-*` folders are touched.
     public static func removeStaging(_ staging: URL) {
         guard staging.lastPathComponent.hasPrefix(stagingPrefix) else { return }

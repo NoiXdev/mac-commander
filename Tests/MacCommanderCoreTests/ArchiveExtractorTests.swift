@@ -336,6 +336,52 @@ struct ArchiveExtractorTests {
         #expect(f.center.operations.isEmpty)
     }
 
+    // MARK: Single entry to a promised URL (drag to Finder)
+
+    @Test func extractsSingleEntryToPromisedName() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
+        let target = f.dst.appendingPathComponent("promised.png")
+
+        try await ArchiveExtractor.extract("img/a.png", from: zip, to: target, password: nil)
+
+        #expect(f.dstNames == ["promised.png"])
+        #expect(f.contents(target) == "A")
+    }
+
+    @Test func extractsSingleFolderEntryToPromisedName() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
+        let target = f.dst.appendingPathComponent("img")
+
+        try await ArchiveExtractor.extract("img", from: zip, to: target, password: nil)
+
+        #expect(f.dstNames == ["img"])
+        #expect(f.names(in: target) == ["a.png", "b.png"])
+    }
+
+    @Test func singleEntryExtractionNeverOverwrites() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
+        let target = try f.tmp.file("dst/a.png", contents: "existing")
+
+        await #expect(throws: CocoaError.self) {
+            try await ArchiveExtractor.extract("img/a.png", from: zip, to: target, password: nil)
+        }
+        #expect(f.dstNames == ["a.png"])
+        #expect(f.contents(target) == "existing")
+    }
+
+    @Test func singleEntryExtractionRemovesStagingOnFailure() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
+
+        await #expect(throws: ArchiveError.self) {
+            try await ArchiveExtractor.extract("missing.txt", from: zip, to: f.dst.appendingPathComponent("x"), password: nil)
+        }
+        #expect(f.dstNames.isEmpty)
+    }
+
     @Test func baseNameDropsArchiveExtension() {
         func base(_ name: String) -> String { ArchiveFormats.baseName(of: URL(fileURLWithPath: "/t/\(name)")) }
         #expect(base("assets.tar.gz") == "assets")
