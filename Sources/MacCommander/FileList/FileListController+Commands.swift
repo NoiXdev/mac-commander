@@ -56,8 +56,7 @@ extension FileListController: FileCommandHandler {
         case .undo:
             Task { await FileActions.undo(model: model, window: window) }
         case .getInfo:
-            // Get Info comes with the info panel (Task 11).
-            NSSound.beep()
+            FileActions.getInfo(items.map(\.url))
         }
     }
 }

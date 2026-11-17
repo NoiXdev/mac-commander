@@ -14,8 +14,11 @@ extension FileListController {
     func contextMenu(forRow row: Int) -> NSMenu? {
         guard showsCurrentFolder else { return nil }
         if row < 0 {
-            return FileContextMenu.forEmptySpace(model: model, settings: settings)
+            return FileContextMenu.forEmptySpace(
+                model: model, settings: settings, clipboard: clipboard, window: outlineView.window)
         }
-        return FileContextMenu.forItems(actionItems(forClickedRow: row), model: model, settings: settings)
+        return FileContextMenu.forItems(
+            actionItems(forClickedRow: row), model: model, settings: settings, clipboard: clipboard,
+            window: outlineView.window)
     }
 }

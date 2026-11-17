@@ -25,9 +25,13 @@ final class ActionMenuItem: NSMenuItem {
 @MainActor
 enum FileContextMenu {
     /// Right-click on empty space (spec 2.2.3).
-    static func forEmptySpace(model: BrowserModel, settings: ViewSettingsStore) -> NSMenu {
+    static func forEmptySpace(
+        model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard, window: NSWindow?
+    ) -> NSMenu {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         addNewItemActions(to: menu, model: model, in: nil)
+        menu.addItem(pasteItem(into: model.currentURL, model: model, clipboard: clipboard, window: window))
         menu.addItem(.separator())
 
         let sortItem = NSMenuItem(title: String(localized: "Sort By"), action: nil, keyEquivalent: "")
@@ -55,14 +59,22 @@ enum FileContextMenu {
         ) {
             settings.settings.showCheckboxColumn.toggle()
         })
+        menu.addItem(.separator())
+        let folderURL = model.currentURL
+        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL]) })
         return menu
     }
 
     /// Right-click on rows. `items` are the clicked row, or the whole selection if it contains it.
-    static func forItems(_ items: [FileItem], model: BrowserModel, settings: ViewSettingsStore) -> NSMenu {
+    static func forItems(
+        _ items: [FileItem], model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard,
+        window: NSWindow?
+    ) -> NSMenu {
         let menu = NSMenu()
+        menu.autoenablesItems = false
         guard !items.isEmpty else { return menu }
 
+        let urls = items.map(\.url)
         menu.addItem(ActionMenuItem(String(localized: "Open")) {
             // Like ⌘↓: a single item opens (folders navigate); with several, only the files open.
             let toOpen = items.count == 1 ? items : items.filter { !$0.isDirectory }
@@ -74,18 +86,63 @@ enum FileContextMenu {
             items.count == 1
             ? String(localized: "Quick Look “\(items[0].name)”")
             : String(localized: "Quick Look \(items.count) items")
+        menu.addItem(OpenWithMenu.make(for: urls))
         // The right-click selected exactly these items, so the panel previews them.
         menu.addItem(ActionMenuItem(quickLookTitle) { QuickLookController.showPanel() })
+        menu.addItem(.separator())
+
         if items.count == 1 {
             let url = items[0].url
             // The list starts inline editing for `pendingRename`.
             menu.addItem(ActionMenuItem(String(localized: "Rename")) { model.pendingRename = url })
         }
+        menu.addItem(ActionMenuItem(String(localized: "Duplicate")) {
+            Task { @MainActor in await FileActions.duplicate(items, model: model, window: window) }
+        })
         menu.addItem(.separator())
 
         let folder = items.count == 1 && items[0].isDirectory ? items[0].url : nil
+        menu.addItem(ActionMenuItem(String(localized: "Copy")) { FileActions.copy(items, clipboard: clipboard) })
+        menu.addItem(ActionMenuItem(String(localized: "Cut")) { FileActions.cut(items, clipboard: clipboard) })
+        menu.addItem(pasteItem(into: folder ?? model.currentURL, model: model, clipboard: clipboard, window: window))
+        menu.addItem(ActionMenuItem(String(localized: "Move to Trash")) {
+            Task { @MainActor in await FileActions.moveToTrash(items, model: model, window: window) }
+        })
+        menu.addItem(.separator())
+
+        // Inline-expanded rows can mix parents; compress needs one.
+        if Set(urls.map { $0.deletingLastPathComponent().standardizedFileURL }).count == 1 {
+            let title =
+                items.count == 1
+                ? String(localized: "Compress “\(items[0].name)”")
+                : String(localized: "Compress \(items.count) Items")
+            menu.addItem(ActionMenuItem(title) {
+                Task { @MainActor in await FileActions.compress(items, model: model, window: window) }
+            })
+            menu.addItem(.separator())
+        }
+
+        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls) })
+        menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(items) })
+        menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
+        menu.addItem(.separator())
+
         addNewItemActions(to: menu, model: model, in: folder)
         return menu
+    }
+
+    /// Paste into `destination`; disabled while the clipboard is empty.
+    private static func pasteItem(
+        into destination: URL, model: BrowserModel, clipboard: FileClipboard, window: NSWindow?
+    ) -> NSMenuItem {
+        let item = ActionMenuItem(String(localized: "Paste")) {
+            Task { @MainActor in
+                await FileActions.paste(
+                    into: destination, forceMove: false, model: model, clipboard: clipboard, window: window)
+            }
+        }
+        item.isEnabled = !clipboard.fileURLs.isEmpty
+        return item
     }
 
     /// New Folder and New Empty File, in `folder` (nil = the current folder). The list expands

@@ -24,6 +24,28 @@ enum FileActions {
         pasteboard.setString(items.map(\.url.path).joined(separator: "\n"), forType: .string)
     }
 
+    /// Placeholder until the info panel arrives (Task 11).
+    static func getInfo(_ urls: [URL]) {
+        NSSound.beep()
+    }
+
+    /// Selects `urls` in a Finder window.
+    static func revealInFinder(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        NSWorkspace.shared.activateFileViewerSelecting(urls)
+    }
+
+    /// Zips `items` (one shared parent) and selects the archive.
+    static func compress(_ items: [FileItem], model: BrowserModel, window: NSWindow?) async {
+        guard !items.isEmpty else { return }
+        do {
+            let zip = try await model.operations.compress(items.map(\.url))
+            await model.selectAfterOperation([zip])
+        } catch {
+            showAlert([String(localized: "The items couldn’t be compressed: \(error.localizedDescription)")], window: window)
+        }
+    }
+
     /// Copies (or, after a cut or with `forceMove`, moves) the pasteboard's files into `destination`.
     static func paste(
         into destination: URL, forceMove: Bool, model: BrowserModel, clipboard: FileClipboard, window: NSWindow?
@@ -113,7 +135,7 @@ enum FileActions {
 
     /// One alert for all `messages` (none: no alert). A single message is the alert's text; several are
     /// listed below a summary.
-    private static func showAlert(_ messages: [String], window: NSWindow?) {
+    static func showAlert(_ messages: [String], window: NSWindow?) {
         guard let first = messages.first else { return }
         let alert = NSAlert()
         alert.alertStyle = .warning
