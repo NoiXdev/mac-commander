@@ -64,6 +64,13 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut("a", modifiers: [.command, .shift])
         }
         CommandGroup(after: .toolbar) {
+            Button(
+                settings.settings.showPreview
+                    ? String(localized: "Hide Preview") : String(localized: "Show Preview")
+            ) {
+                settings.settings.showPreview.toggle()
+            }
+            .keyboardShortcut("p", modifiers: [.command, .shift])
             Toggle("Show Hidden Files", isOn: Binding(
                 get: { settings.settings.showHiddenFiles },
                 set: { settings.settings.showHiddenFiles = $0 }))

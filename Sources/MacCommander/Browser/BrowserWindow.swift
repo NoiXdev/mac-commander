@@ -25,35 +25,50 @@ struct BrowserWindow: View {
     @Environment(FileClipboard.self) private var clipboard
     @SceneStorage("currentFolderPath") private var storedPath = ""
     private let modelState = State<BrowserModel?>(initialValue: nil)
+    private let previewState = State<PreviewController?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
     private var model: BrowserModel? {
         get { modelState.wrappedValue }
         nonmutating set { modelState.wrappedValue = newValue }
     }
+    private var preview: PreviewController? {
+        get { previewState.wrappedValue }
+        nonmutating set { previewState.wrappedValue = newValue }
+    }
     private var showGoToFolder: Binding<Bool> { goToFolderState.projectedValue }
 
     var body: some View {
         Group {
-            if let model {
-                content(model)
+            if let model, let preview {
+                content(model, preview: preview)
             } else {
                 Color.clear
             }
         }
         .onAppear {
             guard model == nil else { return }
-            model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
+            let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
+            self.model = model
+            preview = PreviewController(model: model, settings: settings)
         }
     }
 
-    private func content(_ model: BrowserModel) -> some View {
+    private func content(_ model: BrowserModel, preview: PreviewController) -> some View {
         NavigationSplitView {
             SidebarView(model: model)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             VStack(spacing: 0) {
-                FileListView(model: model, settings: settings, clipboard: clipboard)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // The list stays the split view's first child whether or not the pane is shown, so it keeps
+                // its identity (controller, scroll position, selection) when the pane toggles.
+                HSplitView {
+                    FileListView(model: model, settings: settings, clipboard: clipboard)
+                        .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
+                    if settings.settings.showPreview {
+                        PreviewPane(controller: preview)
+                            .frame(minWidth: 240, idealWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
                 Divider()
                 PathBar(model: model)
                 OperationsStrip()
@@ -83,6 +98,12 @@ struct BrowserWindow: View {
                 }
                 // Archives are read-only.
                 .disabled(model.archiveLocation != nil)
+                Button {
+                    settings.settings.showPreview.toggle()
+                } label: {
+                    Label(String(localized: "Preview"), systemImage: "sidebar.right")
+                }
+                .help(String(localized: "Preview"))
                 Button {
                     settings.settings.showHiddenFiles.toggle()
                 } label: {
