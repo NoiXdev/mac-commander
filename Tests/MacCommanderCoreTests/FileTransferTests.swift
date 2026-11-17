@@ -298,6 +298,35 @@ private func exists(_ url: URL) -> Bool { (try? FileManager.default.attributesOf
         }
     }
 
+    /// A same-volume move renames exclusively: an item that appears at the target after Replace trashed the
+    /// old one is never overwritten, and the move fails with the "appeared" message, as a copy does.
+    @Test func sameVolumeMoveNeverReplacesItemAppearingAtTarget() async throws {
+        let f = try Fixture()
+        let source = try f.tmp.file("src/a", contents: "new")
+        try f.tmp.file("dst/a", contents: "old")
+        let target = f.dst.appendingPathComponent("a")
+        let realTrash = f.trash
+        let trash: @Sendable (URL) throws -> URL = { url in
+            let trashed = try realTrash(url)
+            try "foreign".write(to: target, atomically: false, encoding: .utf8)
+            return trashed
+        }
+
+        let result = await FileTransfer.run(
+            [source], into: f.dst, mode: .move,
+            resolver: ScriptedResolver([.init(choice: .replace, applyToAll: false)]).resolver,
+            trash: trash, sameVolume: { _, _ in true }, allowClone: true)
+
+        guard case .failed(.failed(name: "a", let message)) = result.outcome else {
+            Issue.record("expected failure, got \(result.outcome)")
+            return
+        }
+        #expect(message.contains("appeared"))
+        #expect(result.completed.isEmpty)
+        #expect(read(target) == "foreign")
+        #expect(read(source) == "new")
+    }
+
     @Test func replaceRefusesToTrashAncestorOfSource() async throws {
         let f = try Fixture()
         // Moving dst/x/x up into dst: the conflicting dst/x contains the source itself.

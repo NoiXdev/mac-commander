@@ -187,13 +187,20 @@ public enum FileTransfer {
             }
 
             let target = destination.appendingPathComponent(targetName)
+            // Same volume: an exclusive rename, which never replaces an item that appeared at `target`.
+            // If the volumes differ after all (EXDEV), fall back to copy-then-delete.
+            var renamed = false
             if mode == .move && sameVolume(source, destination) {
-                do {
-                    try fileManager.moveItem(at: source, to: target)
-                } catch {
-                    return fail(error.localizedDescription)
+                let code = exclusiveRename(source, to: target)
+                if code == 0 {
+                    renamed = true
+                } else if code == EEXIST {
+                    return fail(appearedMessage(target))
+                } else if code != EXDEV {
+                    return fail(String(cString: strerror(code)))
                 }
-            } else {
+            }
+            if !renamed {
                 let base = state
                 let cap = sizes[index]
                 // Copy under a private staging name, then rename it into place exclusively. Cleanup only ever
@@ -331,11 +338,13 @@ public enum FileTransfer {
     private static func commitStaging(_ staging: URL, to target: URL) -> String? {
         let code = exclusiveRename(staging, to: target)
         if code == 0 { return nil }
-        if code == EEXIST {
-            return String(
-                localized: "An item named “\(target.lastPathComponent)” appeared in the destination during the transfer. It was left unchanged.")
-        }
+        if code == EEXIST { return appearedMessage(target) }
         return String(cString: strerror(code))
+    }
+
+    private static func appearedMessage(_ target: URL) -> String {
+        String(
+            localized: "An item named “\(target.lastPathComponent)” appeared in the destination during the transfer. It was left unchanged.")
     }
 
     /// Renames `item` to `target` only if nothing exists at `target`; never replaces.

@@ -30,4 +30,26 @@ struct TrasherTests {
         #expect(result.failures.first?.url == missing)
         #expect(result.failures.first?.message.isEmpty == false)
     }
+
+    /// Cancelling stops before the next item; items not reached yet stay where they are.
+    @Test func cancellationStopsBeforeTheNextItem() async throws {
+        let tmp = try TemporaryDirectory()
+        let trashFolder = try tmp.folder("Trash")
+        let a = try tmp.file("a.txt", contents: "A")
+        let b = try tmp.file("b.txt", contents: "B")
+        let c = try tmp.file("c.txt", contents: "C")
+        let trash = fakeTrash(into: trashFolder)
+
+        let result = await Trasher.trash([a, b, c]) { url in
+            let trashed = try trash(url)
+            // The closure runs synchronously in the trashing task.
+            withUnsafeCurrentTask { $0?.cancel() }
+            return trashed
+        }
+
+        #expect(result.trashed.map(\.original) == [a])
+        #expect(result.failures.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: b.path))
+        #expect(FileManager.default.fileExists(atPath: c.path))
+    }
 }

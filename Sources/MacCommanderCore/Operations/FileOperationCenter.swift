@@ -61,11 +61,13 @@ public final class FileOperationCenter {
                 sources, into: destination, mode: mode, resolver: resolver, trash: trash, sameVolume: sameVolume,
                 allowClone: allowClone, progress: progress)
         }
-        if !result.completed.isEmpty || !result.replaced.isEmpty {
+        // A move into the item's own folder changed nothing: it is neither undone nor counted in the title.
+        let changed = result.completed.filter { $0.destination != $0.source }
+        if !changed.isEmpty || !result.replaced.isEmpty {
             undo.push(
                 FileUndoRecord(
-                    action: .transferred(mode, result.completed, replaced: result.replaced),
-                    title: Self.undoTitle(mode: mode, completed: result.completed)))
+                    action: .transferred(mode, changed, replaced: result.replaced),
+                    title: Self.undoTitle(mode: mode, completed: changed)))
         }
         postFoldersDidChange([destination] + sources.map { $0.deletingLastPathComponent() })
         return result
@@ -164,12 +166,12 @@ public final class FileOperationCenter {
     /// Undoes the newest record and posts `foldersDidChange` for the folders it touched, whether the undo
     /// succeeded or not. Returns the restored URLs (see `FileUndoStack.undo()`).
     ///
-    /// The folders come from the newest record when the call starts; while another undo is still running,
-    /// that may be the record the other call reverses.
+    /// The folders are those of the record this call actually reversed: with a queued second undo
+    /// (a quick double ⌘Z), that is the record below the one the first call reverses.
     public func performUndo() async throws(UndoError) -> [URL] {
-        let folders = undo.records.last.map { Self.folders(touchedBy: $0.action) } ?? []
-        defer { postFoldersDidChange(folders) }
-        return try await undo.undo()
+        let outcome = await undo.undoReportingRecord()
+        if let record = outcome.record { postFoldersDidChange(Self.folders(touchedBy: record.action)) }
+        return try outcome.result.get()
     }
 
     // MARK: - Running

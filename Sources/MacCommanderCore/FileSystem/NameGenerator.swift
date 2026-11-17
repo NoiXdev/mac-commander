@@ -18,8 +18,14 @@ public enum NameGenerator {
         var start = 1
         if let range = stem.range(of: #" copy( [0-9]+)?$"#, options: .regularExpression) {
             let suffix = stem[range].dropFirst(" copy".count).trimmingCharacters(in: .whitespaces)
-            base = String(stem[..<range.lowerBound])
-            start = max((Int(suffix) ?? 1) + 1, 2)
+            // A number at or beyond Int.max can't be continued: the stem then counts as a plain name.
+            if suffix.isEmpty {
+                base = String(stem[..<range.lowerBound])
+                start = 2
+            } else if let n = Int(suffix), n < Int.max {
+                base = String(stem[..<range.lowerBound])
+                start = max(n + 1, 2)
+            }
         }
         return firstFreeName(
             base: base + " copy", pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
@@ -35,7 +41,7 @@ public enum NameGenerator {
         var base = stem
         var start = 2
         if let range = stem.range(of: #" [0-9]+$"#, options: .regularExpression),
-            let n = Int(stem[range].dropFirst()), n >= 2
+            let n = Int(stem[range].dropFirst()), n >= 2, n < Int.max
         {
             base = String(stem[..<range.lowerBound])
             start = n + 1
@@ -65,7 +71,8 @@ public enum NameGenerator {
             return "\(stem).\(pathExtension)"
         }
         var n = start
-        while exists(name(n), in: directory, fileManager: fileManager) { n += 1 }
+        // Stops at Int.max instead of trapping; callers never write over an existing item anyway.
+        while n < Int.max, exists(name(n), in: directory, fileManager: fileManager) { n += 1 }
         return name(n)
     }
 }

@@ -50,4 +50,28 @@ import Foundation
         #expect(NameGenerator.keepBothName(for: "report 2.txt", isDirectory: false, in: tmp.url) == "report 3.txt")
         #expect(NameGenerator.keepBothName(for: "Ärger.md", isDirectory: false, in: tmp.url) == "Ärger.md")
     }
+
+    /// A suffix at or beyond Int.max is not a number to continue from (it used to trap on `+ 1`).
+    @Test func hugeNumericSuffixesDontOverflow() throws {
+        let tmp = try TemporaryDirectory()
+        let max = "9223372036854775807"
+        let beyond = "99999999999999999999"
+        try tmp.file("x \(max).txt")
+        try tmp.file("x copy \(max).txt")
+        #expect(NameGenerator.copyName(for: "x \(max).txt", isDirectory: false, in: tmp.url) == "x \(max) copy.txt")
+        #expect(
+            NameGenerator.copyName(for: "x copy \(max).txt", isDirectory: false, in: tmp.url)
+                == "x copy \(max) copy.txt")
+        #expect(
+            NameGenerator.copyName(for: "x copy \(beyond).txt", isDirectory: false, in: tmp.url)
+                == "x copy \(beyond) copy.txt")
+        #expect(NameGenerator.keepBothName(for: "x \(max).txt", isDirectory: false, in: tmp.url) == "x \(max) 2.txt")
+        try tmp.file("x \(beyond).txt")
+        #expect(
+            NameGenerator.keepBothName(for: "x \(beyond).txt", isDirectory: false, in: tmp.url) == "x \(beyond) 2.txt")
+        // The largest number that still continues.
+        let below = "9223372036854775806"
+        try tmp.file("y \(below).txt")
+        #expect(NameGenerator.keepBothName(for: "y \(below).txt", isDirectory: false, in: tmp.url) == "y \(max).txt")
+    }
 }

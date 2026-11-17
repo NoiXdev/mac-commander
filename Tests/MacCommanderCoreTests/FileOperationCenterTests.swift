@@ -174,6 +174,57 @@ struct FileOperationCenterTests {
         #expect(f.center.undo.records.isEmpty)
     }
 
+    /// Moving items into their own folder changes nothing and records no undo; a real move alongside them
+    /// is titled for itself alone.
+    @Test func noOpMoveRecordsNoUndo() async throws {
+        let f = try Fixture()
+        let a = try f.tmp.file("src/a.txt", contents: "A")
+        let b = try f.tmp.file("dst/b.txt", contents: "B")
+
+        let noOp = await f.center.transfer([a], into: f.src, mode: .move, resolver: keepBoth)
+        #expect(noOp.outcome == .finished)
+        #expect(f.center.undo.records.isEmpty)
+
+        let mixed = await f.center.transfer([a, b], into: f.dst, mode: .move, resolver: keepBoth)
+        #expect(mixed.outcome == .finished)
+        #expect(f.center.undo.records.count == 1)
+        #expect(f.center.undo.undoTitle == "Move of “a.txt”")
+    }
+
+    /// A quick double ⌘Z: each performUndo posts the folders of the record it actually reversed.
+    @Test func queuedUndosPostTheirOwnRecordsFolders() async throws {
+        let f = try Fixture()
+        let a = f.src.appendingPathComponent("a.txt")
+        let a2 = try f.tmp.file("src/a2.txt", contents: "A")
+        let b = f.dst.appendingPathComponent("b.txt")
+        let b2 = try f.tmp.file("dst/b2.txt", contents: "B")
+        f.center.recordRename(from: a, to: a2)
+        f.center.recordRename(from: b, to: b2)
+        let notices = FolderNotices(f.center)
+
+        async let first = f.center.performUndo()
+        async let second = f.center.performUndo()
+        let results = try await [first, second]
+
+        #expect(Set(results.map { $0.map(path) }) == [[path(a)], [path(b)]])
+        // Before the fix both calls posted the newest record's folder (dst) twice.
+        #expect(notices.paths.count == 2)
+        #expect(Set(notices.paths) == [[path(f.src)], [path(f.dst)]])
+    }
+
+    /// A failing undo still posts the folders of the record it popped.
+    @Test func failedUndoPostsItsRecordsFolders() async throws {
+        let f = try Fixture()
+        let gone = f.dst.appendingPathComponent("gone.txt")
+        f.center.recordRename(from: f.dst.appendingPathComponent("was.txt"), to: gone)
+        let notices = FolderNotices(f.center)
+
+        await #expect(throws: UndoError.itemChanged(name: "was.txt")) { try await f.center.performUndo() }
+        #expect(notices.paths == [[path(f.dst)]])
+        await #expect(throws: UndoError.nothingToUndo) { try await f.center.performUndo() }
+        #expect(notices.paths == [[path(f.dst)]])
+    }
+
     @Test func duplicateTitlesAndNames() async throws {
         let f = try Fixture()
         let a = try f.tmp.file("src/a.txt", contents: "A")

@@ -52,7 +52,7 @@ public final class FileUndoStack {
     @ObservationIgnored private let trash: @Sendable (URL) throws -> URL
     @ObservationIgnored private let limit: Int
     /// The newest undo; each undo waits for the one before it, so undos run one at a time, newest record first.
-    @ObservationIgnored private var tail: Task<Result<[URL], UndoError>, Never>?
+    @ObservationIgnored private var tail: Task<UndoOutcome, Never>?
     @ObservationIgnored private var pendingUndos = 0
 
     public init(trash: @escaping @Sendable (URL) throws -> URL = Trasher.systemTrash, limit: Int = 50) {
@@ -73,30 +73,46 @@ public final class FileUndoStack {
     /// Calls are serialized: a second `undo()` while one runs (a quick double ⌘Z) waits for the first to
     /// finish and only then pops its record, so records are always reversed last-first.
     public func undo() async throws(UndoError) -> [URL] {
+        try await undoReportingRecord().result.get()
+    }
+
+    /// What one `undo()` call did: the record it popped (nil if there was none) and its result.
+    struct UndoOutcome: Sendable {
+        let record: FileUndoRecord?
+        let result: Result<[URL], UndoError>
+    }
+
+    /// `undo()`, also reporting the record this call actually reversed — with queued calls, not necessarily
+    /// the newest record when the call started.
+    func undoReportingRecord() async -> UndoOutcome {
         let previous = tail
-        let task = Task { @MainActor () -> Result<[URL], UndoError> in
+        let task = Task { @MainActor () -> UndoOutcome in
             _ = await previous?.value
             return await self.undoNext()
         }
         tail = task
         pendingUndos += 1
         isUndoing = true
-        let result = await task.value
+        let outcome = await task.value
         pendingUndos -= 1
         isUndoing = pendingUndos > 0
         if pendingUndos == 0 { tail = nil }
-        return try result.get()
+        return outcome
     }
 
-    private func undoNext() async -> Result<[URL], UndoError> {
-        guard let record = records.popLast() else { return .failure(.nothingToUndo) }
-        if case .failure(let error) = await Self.reverse(record.action, trash: trash) { return .failure(error) }
-        switch record.action {
-        case .rename(let from, _): return .success([from])
-        case .created, .transferred(.copy, _, _): return .success([])
-        case .transferred(.move, let items, _): return .success(items.map(\.source))
-        case .trashed(let items): return .success(items.map(\.original))
+    private func undoNext() async -> UndoOutcome {
+        guard let record = records.popLast() else { return UndoOutcome(record: nil, result: .failure(.nothingToUndo)) }
+        if case .failure(let error) = await Self.reverse(record.action, trash: trash) {
+            return UndoOutcome(record: record, result: .failure(error))
         }
+        let restored: [URL]
+        switch record.action {
+        case .rename(let from, _): restored = [from]
+        case .created, .transferred(.copy, _, _): restored = []
+        case .transferred(.move, let items, _): restored = items.map(\.source)
+        case .trashed(let items): restored = items.map(\.original)
+        }
+        return UndoOutcome(record: record, result: .success(restored))
     }
 
     // MARK: - Reversing

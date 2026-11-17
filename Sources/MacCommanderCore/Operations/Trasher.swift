@@ -33,12 +33,14 @@ public enum Trasher {
     }
 
     /// Moves each item to the Trash off the main actor. A failing item does not stop the others;
-    /// `trashed` records where each item went, so it can be put back.
+    /// `trashed` records where each item went, so it can be put back. Cancelling stops before the next
+    /// item; items not reached are left where they are (neither trashed nor failures).
     @concurrent public static func trash(
         _ urls: [URL], using trash: @Sendable (URL) throws -> URL = systemTrash
     ) async -> TrashResult {
         var result = TrashResult(trashed: [], failures: [])
         for url in urls {
+            if Task.isCancelled { break }
             do {
                 result.trashed.append(TrashedItem(original: url, trashed: try trash(url)))
             } catch {
