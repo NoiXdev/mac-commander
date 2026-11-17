@@ -7,7 +7,7 @@ public enum MarkdownHTML {
     /// The HTML body for `markdown` (no <html>/<head>). Text, code and attribute values are HTML-escaped;
     /// raw HTML blocks/inlines pass through unchanged.
     public static func body(for markdown: String) -> String {
-        let document = Document(parsing: markdown)
+        let document = Document(parsing: markdown, options: .disableSmartOpts)
         var renderer = Renderer()
         renderer.visit(document)
         return renderer.out
@@ -21,12 +21,19 @@ public enum MarkdownHTML {
             if ch == " " { base.append("-") }
             else if ch == "-" || ch == "_" || ch.isLetter || ch.isNumber { base.append(ch) }
         }
-        if let n = used[base] {
-            used[base] = n + 1
-            return "\(base)-\(n)"
+        guard var n = used[base] else {
+            used[base] = 1
+            return base
         }
-        used[base] = 1
-        return base
+        // Suffixed candidates are re-checked against the used set (github-slugger style).
+        var candidate = "\(base)-\(n)"
+        while used[candidate] != nil {
+            n += 1
+            candidate = "\(base)-\(n)"
+        }
+        used[base] = n + 1
+        used[candidate] = 1
+        return candidate
     }
 
     static func escape(_ s: String) -> String {
@@ -63,24 +70,30 @@ public enum MarkdownHTML {
     }
 
     // Matches bare URLs; trailing punctuation is trimmed afterwards.
-    private static let urlRegex = try? NSRegularExpression(pattern: #"(?:https?://|www\.)[^\s<]+"#)
+    private static let urlRegex = try? NSRegularExpression(
+        pattern: #"(?:^|(?<=[\s(*_~]))(?:https?://|www\.)[^\s<]+"#, options: [.caseInsensitive])
 
     /// Escaped text with bare URLs turned into links.
     static func autolinked(_ text: String) -> String {
-        guard text.contains("http") || text.contains("www."), let regex = urlRegex else { return escape(text) }
+        guard text.range(of: "http", options: .caseInsensitive) != nil || text.range(of: "www.", options: .caseInsensitive) != nil, let regex = urlRegex else { return escape(text) }
         let ns = text as NSString
         var out = ""
         var last = 0
         for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             var range = m.range
             var url = ns.substring(with: range)
-            while let c = url.last, ".,:;!?)".contains(c) {
-                url.removeLast()
-                range.length -= (c.utf16.count)
+            while let c = url.last {
+                if ".,:;!?".contains(c) {
+                    url.removeLast()
+                } else if c == ")", url.filter({ $0 == ")" }).count > url.filter({ $0 == "(" }).count {
+                    url.removeLast()
+                } else { break }
             }
-            if url.hasSuffix("://") || url == "www." || range.length == 0 { continue }
+            range.length = (url as NSString).length
+            let lower = url.lowercased()
+            if lower.hasSuffix("://") || lower == "www." || range.length == 0 { continue }
             out += escape(ns.substring(with: NSRange(location: last, length: range.location - last)))
-            let href = url.hasPrefix("www.") ? "http://" + url : url
+            let href = lower.hasPrefix("www.") ? "http://" + url : url
             out += "<a href=\"\(escape(href))\">\(escape(url))</a>"
             last = range.location + range.length
         }
@@ -154,7 +167,8 @@ public enum MarkdownHTML {
         }
 
         mutating func visitCodeBlock(_ c: CodeBlock) {
-            if let lang = c.language, !lang.isEmpty {
+            // Only the first word of the info string is the language.
+            if let lang = c.language?.split(whereSeparator: { $0.isWhitespace }).first.map(String.init) {
                 out += "<pre><code class=\"language-\(MarkdownHTML.escape(lang))\">"
             } else {
                 out += "<pre><code>"
