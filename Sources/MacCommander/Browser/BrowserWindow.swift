@@ -46,16 +46,11 @@ struct BrowserWindow: View {
             }
         }
         .onAppear {
-            if model != nil {
-                preview?.resume()
-                return
-            }
+            guard model == nil else { return }
             let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
             self.model = model
             preview = PreviewController(model: model, settings: settings)
         }
-        // Closing the window: stop extraction and rendering for the preview.
-        .onDisappear { preview?.stop() }
     }
 
     private func content(_ model: BrowserModel, preview: PreviewController) -> some View {
@@ -79,6 +74,11 @@ struct BrowserWindow: View {
                 OperationsStrip()
             }
         }
+        // On the split view, which exists exactly while model and preview do (not on the Group's branches,
+        // whose switch from `Color.clear` would fire them around creation). Closing the window stops
+        // extraction and rendering for the preview; both calls are idempotent.
+        .onAppear { preview.resume() }
+        .onDisappear { preview.stop() }
         .navigationTitle(Self.displayName(of: model.currentURL))
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {

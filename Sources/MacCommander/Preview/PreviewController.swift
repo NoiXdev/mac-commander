@@ -140,13 +140,16 @@ final class PreviewController {
 
     /// The window's content went away (window closed): cancel running work, so no extraction or render keeps
     /// running (or keeps this controller alive), and resolve nothing until `resume()`.
+    /// Idempotent.
     func stop() {
+        guard !isStopped else { return }
         isStopped = true
         cancelWork()
         generation += 1
     }
 
-    /// The window's content is shown again after `stop()`: resolve for the current selection.
+    /// The window's content is shown again after `stop()`: resolve for the current selection. Idempotent; a
+    /// no-op on a controller that was never stopped (it resolves on its own).
     func resume() {
         guard isStopped else { return }
         isStopped = false
