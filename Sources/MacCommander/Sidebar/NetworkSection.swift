@@ -46,6 +46,10 @@ struct NetworkSection: View {
                 Task { await ShareActions.disconnect(share, manager: manager, sheets: sheets) }
             }
             .disabled(!(Self.isConnected(status) || (status == .unreachable && manager.hasMountPoint(share.id))))
+            Button(String(localized: "Sign In…")) {
+                Task { await ShareActions.showSignIn(share, sheets: sheets) }
+            }
+            .disabled(Self.isConnected(status))
             Divider()
             Button(String(localized: "Edit…")) { sheets.editing = share }
             Button(String(localized: "Remove…")) {
@@ -58,7 +62,7 @@ struct NetworkSection: View {
         Task {
             switch status {
             case .connected(let mountPoint)?:
-                await model.navigate(to: mountPoint)
+                await model.navigate(to: share.url.folder(atMountPoint: mountPoint))
             case .unreachable?:
                 await ShareActions.showUnreachable(share, manager: manager, model: model, sheets: sheets)
             case .available?, .checking?, nil:

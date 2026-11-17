@@ -12,6 +12,13 @@ final class ShareSheets {
     var signIn: SavedShare?
     /// The share the Edit sheet is shown for.
     var editing: SavedShare?
+    /// Go to Folder (owned by the window; mirrored here so the share commands can see it).
+    var showGoToFolder = false
+
+    /// Whether any of the window's sheets is up; ⌘K is disabled meanwhile.
+    var isPresentingSheet: Bool {
+        showConnectToServer || signIn != nil || editing != nil || showGoToFolder
+    }
     /// The window the sheets and alerts belong to (set by `WindowReader`).
     @ObservationIgnored let window = WindowBox()
 }
@@ -38,8 +45,9 @@ enum ShareActions {
 
     /// Connected: a window showing the share's Disconnected placeholder returns to the same folder under the
     /// (possibly renamed) mount point via `BrowserModel.shareDidConnect`; otherwise (⌘K, sign-in, a sidebar
-    /// click) the window goes to the mount point. Needs sign-in: the sign-in
-    /// sheet. Unreachable: the "can’t be reached" alert, whose Retry connects again. Failed: an alert with the message.
+    /// click) the window goes to the share's folder: the mount point, plus the saved address's folder inside
+    /// an smb/afp share (`ShareURL.folder(atMountPoint:)`). Needs sign-in: the sign-in sheet, once no other
+    /// sheet is up. Unreachable: the "can’t be reached" alert, whose Retry connects again. Failed: an alert with the message.
     static func handle(
         _ outcome: ConnectOutcome, for share: SavedShare, manager: ShareManager, model: BrowserModel,
         sheets: ShareSheets
@@ -47,10 +55,9 @@ enum ShareActions {
         switch outcome {
         case .connected(let mountPoint):
             guard await !model.shareDidConnect(id: share.id, mountPoint: mountPoint) else { return }
-            await model.navigate(to: mountPoint)
+            await model.navigate(to: share.url.folder(atMountPoint: mountPoint))
         case .needsSignIn:
-            await waitForSheetToClose(sheets.window.window)
-            sheets.signIn = share
+            await showSignIn(share, sheets: sheets)
         case .unreachable:
             await showUnreachable(share, manager: manager, model: model, sheets: sheets)
         case .failed(let message):
@@ -84,6 +91,7 @@ enum ShareActions {
             case .unreachable: message = String(localized: "The server can’t be reached.")
             case .cancelled: message = String(localized: "The operation was cancelled.")
             case .authenticationFailed: message = String(localized: "The server refused the request.")
+            case .alreadyMounted: message = String(localized: "The share is in use.")
             }
             FileActions.showAlert(
                 [String(localized: "“\(share.name)” couldn’t be disconnected: \(message)")],
@@ -107,6 +115,18 @@ enum ShareActions {
         cancel.keyEquivalent = "\r"
         guard await run(alert, window: sheets.window.window) == .alertFirstButtonReturn else { return }
         await manager.remove(share.id)
+    }
+
+    /// Shows the sign-in sheet for `share`. While another sheet of the window is up (or still animating out)
+    /// the request waits for it to close, however long that takes, so it is never dropped; it is dropped only
+    /// when the window closes.
+    static func showSignIn(_ share: SavedShare, sheets: ShareSheets) async {
+        while sheets.isPresentingSheet || sheets.window.window?.attachedSheet != nil {
+            if sheets.signIn?.id == share.id { return }
+            guard let window = sheets.window.window, window.isVisible else { return }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        sheets.signIn = share
     }
 
     /// As a sheet on the window, or app-modal when there is none or it already shows a sheet.

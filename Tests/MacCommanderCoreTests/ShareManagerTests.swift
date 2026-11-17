@@ -536,7 +536,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(next.manager.rememberPrompts.isEmpty)
     }
 
-    @Test func volumesChangedTracksMountsWithoutProbing() async throws {
+    @Test func volumesChangedProbesOnlyForADroppedConnectedShare() async throws {
         let h = try Harness()
         let share = try h.share("smb://nas/A", autoReconnect: false)
         await h.prober.set("nas", reachable: true)
@@ -547,11 +547,145 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.manager.volumesChanged()
         #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
 
+        #expect(await h.prober.probeCount == 1)
+
+        // Gone while connected: one probe decides between "ejected elsewhere" and "dropped".
         await h.volumes.set([])
         await h.manager.volumesChanged()
         #expect(h.manager.status[share.id] == .available(needsSignIn: false))
-        #expect(await h.prober.probeCount == 1)
+        #expect(await h.prober.probeCount == 2)
         #expect(await h.mounter.mounts.isEmpty)
+    }
+
+    @Test func droppedMountWithUnreachableServerIsUnreachable() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A")
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+
+        // The link dropped (the system unmounted the dead volume): not an eject in Finder.
+        await h.prober.set("nas", reachable: false)
+        await h.volumes.set([])
+        await h.manager.volumesChanged()
+        #expect(h.manager.status[share.id] == .unreachable)
+        #expect(!h.manager.hasMountPoint(share.id))
+
+        // So once the server is back, auto-reconnect mounts it again without waiting for a network change.
+        await h.prober.set("nas", reachable: true)
+        await h.refresh()
+        #expect(await h.mounter.mounts.count == 1)
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+    }
+
+    @Test func connectWithStaleConnectedStatusProbes() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+
+        // The server went away; nothing has told the manager yet.
+        await h.prober.set("nas", reachable: false)
+        #expect(await h.manager.connect(share.id) == .unreachable)
+        #expect(h.manager.status[share.id] == .unreachable)
+        #expect(await h.prober.probeCount == 2)
+        #expect(await h.mounter.mounts.isEmpty)
+        // Still mounted as far as the manager knows: Disconnect can force-unmount it.
+        #expect(h.manager.hasMountPoint(share.id))
+    }
+
+    @Test func connectWhenAlreadyMountedAdoptsTheVolume() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+
+        // Mounted in Finder; the volume notification hasn't been handled yet.
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A-1"), url: share.url)])
+        #expect(await h.manager.connect(share.id) == .connected(volume("/Volumes/A-1")))
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A-1")))
+        #expect(await h.mounter.mounts.isEmpty)
+    }
+
+    @Test func alreadyMountedErrorAdoptsTheVolumeOrFails() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.refresh()
+        let mountPoint = volume("/Volumes/A")
+        // NetFS reports EEXIST: the share is mounted already.
+        await h.mounter.setHandler { _, _ in .failure(.alreadyMounted) }
+        // ...but no listed volume serves it.
+        #expect(await h.manager.signIn(share.id, username: "bob", password: "pw", remember: false)
+            == .failed("Already connected."))
+        // Mounted elsewhere meanwhile: that volume is used.
+        await h.volumes.set([MountedShare(mountPoint: mountPoint, url: share.url)])
+        #expect(await h.manager.connectAsGuest(share.id) == .connected(mountPoint))
+        #expect(h.manager.status[share.id] == .connected(mountPoint: mountPoint))
+    }
+
+    @Test func savedSubfolderMatchesTheShareRootMount() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/Media/Movies/2024", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/Media"), url: try url("smb://NAS/media"))])
+
+        await h.refresh()
+
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/Media")))
+        #expect(h.manager.rememberPrompts.isEmpty)
+        #expect(h.manager.mountPoint(containing: volume("/Volumes/Media/Movies/2024/a.mkv"))?.share.id == share.id)
+        #expect(share.url.folder(atMountPoint: volume("/Volumes/Media")).path == "/Volumes/Media/Movies/2024")
+
+        // A second saved folder in the same share: lookups pick the one whose folder contains the path.
+        let other = try h.share("smb://nas/Media/Music", autoReconnect: false)
+        await h.refresh()
+        #expect(h.manager.status[other.id] == .connected(mountPoint: volume("/Volumes/Media")))
+        #expect(h.manager.mountPoint(containing: volume("/Volumes/Media/Music/x.mp3"))?.share.id == other.id)
+        #expect(h.manager.mountPoint(containing: volume("/Volumes/Media/Movies/2024"))?.share.id == share.id)
+
+        // Dropped while connected and the server answers: ejected elsewhere, for both.
+        await h.volumes.set([])
+        await h.manager.volumesChanged()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+    }
+
+    @Test func recheckReclassifiesOneShare() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+
+        await h.prober.set("nas", reachable: false)
+        let gate = MountGate()
+        await h.prober.setGate(gate)
+        h.manager.recheck(share.id)
+        h.manager.recheck(share.id)  // coalesced
+        #expect(await eventually { await h.prober.probeCount == 2 })
+        await gate.release()
+        await h.manager.waitForRechecks()
+        #expect(h.manager.status[share.id] == .unreachable)
+        #expect(await h.prober.probeCount == 2)
+    }
+
+    @Test func addressEditDoesNotOfferTheOldVolume() async throws {
+        let h = try Harness()
+        var share = try h.share("smb://nas/A", autoReconnect: false)
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+
+        let old = share.url
+        share.url = try url("smb://nas/B")
+        h.store.update(share)
+        h.manager.addressChanged(from: old)
+        await h.manager.requestRefresh().value
+        #expect(h.manager.rememberPrompts.isEmpty)
     }
 
     @Test func removeKeepsKeychain() async throws {
@@ -809,6 +943,13 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(h.store.shares.map(\.id) == [share.id])
         #expect(share.lastMountPath == "/Volumes/New")
         #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/New")))
+    }
+
+    @Test func addAndConnectKeepsTypedUsername() async throws {
+        let h = try Harness()
+        await h.prober.set("nas", reachable: true)
+        let (share, _) = await h.manager.addAndConnect(try url("smb://nas/New"), username: "bob")
+        #expect(share.username == "bob")
     }
 
     @Test func postsDidConnectNotification() async throws {

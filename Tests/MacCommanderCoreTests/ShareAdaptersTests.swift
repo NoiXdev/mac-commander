@@ -15,6 +15,7 @@ import Testing
         for status: Int32 in [89, -128] {
             #expect(NetFSMounter.mapMountError(status) == .cancelled, "\(status)")
         }
+        #expect(NetFSMounter.mapMountError(EEXIST) == .alreadyMounted)
         #expect(NetFSMounter.mapMountError(2) == .failed(String(cString: strerror(2))))
         #expect(NetFSMounter.mapMountError(-6600) == .failed("Error -6600 (kNetAuthErrorInternal)"))
         #expect(NetFSMounter.mapMountError(-6602) == .failed("Error -6602 (kNetAuthErrorMountFailed)"))

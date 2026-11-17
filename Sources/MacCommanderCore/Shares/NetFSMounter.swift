@@ -35,7 +35,7 @@ public struct NetFSMounter: ShareMounter {
 
     /// Maps a NetFS / errno status to a `MountError`. Only real credential problems count as authentication
     /// failures (they stop auto-reconnect until the user signs in); NetAuth's internal and mount-failed codes
-    /// (-6600, -6602) are transient. Other negative codes become "Error <n>" (with the NetFS.h name when known);
+    /// (-6600, -6602) are transient. EEXIST means the share is mounted already. Other negative codes become "Error <n>" (with the NetFS.h name when known);
     /// positive ones use `strerror`.
     public static func mapMountError(_ status: Int32) -> MountError {
         switch status {
@@ -49,6 +49,8 @@ public struct NetFSMounter: ShareMounter {
             return .unreachable
         case ECANCELED, -128:
             return .cancelled
+        case EEXIST:
+            return .alreadyMounted
         default:
             guard status < 0 else { return .failed(String(cString: strerror(status))) }
             if let name = negativeErrorNames[status] { return .failed("Error \(status) (\(name))") }

@@ -97,7 +97,49 @@ public struct ShareURL: Hashable, Sendable, Codable {
         }
     }
 
+    /// The folder below the share root that this address points into, for smb and afp ("Sub/Dir" for
+    /// `smb://nas/Share/Sub/Dir`; "" for the share root). Those mount the share root, so the folder to show
+    /// after a mount is the mount point plus this path. Other schemes mount the address itself: always "".
+    public var subpathInShare: String {
+        guard scheme == "smb" || scheme == "afp" else { return "" }
+        return components.dropFirst().joined(separator: "/")
+    }
+
+    /// The folder this address points to when the share is mounted at `mountPoint` (see `subpathInShare`).
+    public func folder(atMountPoint mountPoint: URL) -> URL {
+        let subpath = subpathInShare
+        return subpath.isEmpty ? mountPoint : mountPoint.appendingPathComponent(subpath, isDirectory: true)
+    }
+
+    /// Whether a volume mounted from `mounted` (a remount URL) serves this share. smb and afp mount the
+    /// share root, so scheme, host, effective port and share name (ignoring case) decide, whatever folder
+    /// below the root either address points into. Other schemes compare the whole path, like `matches`.
+    /// For saved-share duplicates use `matches`, which compares the whole path.
+    public func matchesMount(_ mounted: ShareURL) -> Bool {
+        guard scheme == mounted.scheme, host == mounted.host, probePort == mounted.probePort else { return false }
+        if scheme == "smb" || scheme == "afp" {
+            return shareName.caseInsensitiveCompare(mounted.shareName) == .orderedSame
+        }
+        return path == mounted.path
+    }
+
+    /// The user name in a typed address (`smb://DOMAIN;bob:pw@host/Share` gives `DOMAIN;bob`), percent-decoded,
+    /// without the password; nil when there is none. Accepts the same forms as `init(_:)`.
+    public static func username(in string: String) -> String? {
+        var text = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.hasPrefix("\\\\") else { return nil }
+        if let schemeEnd = text.range(of: "://") { text = String(text[schemeEnd.upperBound...]) }
+        let authorityEnd = text.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? text.endIndex
+        let authority = text[..<authorityEnd]
+        guard let at = authority.lastIndex(of: "@") else { return nil }
+        let userInfo = authority[..<at]
+        let user = userInfo.firstIndex(of: ":").map { userInfo[..<$0] } ?? userInfo
+        let decoded = String(user).removingPercentEncoding ?? String(user)
+        return decoded.isEmpty ? nil : decoded
+    }
+
     /// Same scheme, host, effective port and path. The path is compared ignoring case for smb and afp.
+    /// Identifies saved shares (duplicates, "Not Now" answers); mounted volumes are matched with `matchesMount`.
     public func matches(_ other: ShareURL) -> Bool {
         guard scheme == other.scheme, host == other.host, probePort == other.probePort else { return false }
         if scheme == "smb" || scheme == "afp" {

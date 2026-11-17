@@ -29,7 +29,9 @@ extension ShareCredentials: CustomStringConvertible, CustomDebugStringConvertibl
 }
 
 public enum MountError: Error, Equatable, Sendable {
-    case authenticationFailed, unreachable, cancelled, failed(String)
+    /// `alreadyMounted`: the share is mounted already (EEXIST), for example by Finder; `ShareManager` then
+    /// looks it up among the mounted volumes.
+    case authenticationFailed, unreachable, cancelled, alreadyMounted, failed(String)
 }
 
 /// Mounts and unmounts shares without showing any system UI. Implementations do their own off-main work.
