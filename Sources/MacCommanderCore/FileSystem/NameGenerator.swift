@@ -5,16 +5,67 @@ public enum NameGenerator {
     public static func uniqueName(
         base: String, pathExtension: String?, in directory: URL, fileManager: FileManager = .default
     ) -> String {
+        firstFreeName(base: base, pathExtension: pathExtension, startingAt: 1, in: directory, fileManager: fileManager)
+    }
+
+    /// Finder-style duplicate name: `name copy.ext`, `name copy 2.ext`, … Always a copy name, even if `name` is free.
+    /// Duplicating a copy continues its numbering (`report copy.txt` → `report copy 2.txt`) instead of stacking.
+    public static func copyName(
+        for name: String, isDirectory: Bool, in directory: URL, fileManager: FileManager = .default
+    ) -> String {
+        let (stem, ext) = split(name, isDirectory: isDirectory)
+        var base = stem
+        var start = 1
+        if let range = stem.range(of: #" copy( [0-9]+)?$"#, options: .regularExpression) {
+            let suffix = stem[range].dropFirst(" copy".count).trimmingCharacters(in: .whitespaces)
+            base = String(stem[..<range.lowerBound])
+            start = max((Int(suffix) ?? 1) + 1, 2)
+        }
+        return firstFreeName(
+            base: base + " copy", pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
+    }
+
+    /// Finder "Keep Both" name: `name` itself when free, otherwise `name 2.ext`, `name 3.ext`, …
+    /// A trailing ` <n>` on the stem continues from `n + 1`.
+    public static func keepBothName(
+        for name: String, isDirectory: Bool, in directory: URL, fileManager: FileManager = .default
+    ) -> String {
+        if !exists(name, in: directory, fileManager: fileManager) { return name }
+        let (stem, ext) = split(name, isDirectory: isDirectory)
+        var base = stem
+        var start = 2
+        if let range = stem.range(of: #" [0-9]+$"#, options: .regularExpression),
+            let n = Int(stem[range].dropFirst()), n >= 2
+        {
+            base = String(stem[..<range.lowerBound])
+            start = n + 1
+        }
+        return firstFreeName(base: base, pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
+    }
+
+    /// Extension is split only for non-directories with a non-empty extension (`.zshrc` has none).
+    private static func split(_ name: String, isDirectory: Bool) -> (stem: String, ext: String?) {
+        let ns = name as NSString
+        guard !isDirectory, !ns.pathExtension.isEmpty else { return (name, nil) }
+        return (ns.deletingPathExtension, ns.pathExtension)
+    }
+
+    /// attributesOfItem uses lstat, so dangling symlinks count as taken.
+    private static func exists(_ name: String, in directory: URL, fileManager: FileManager) -> Bool {
+        (try? fileManager.attributesOfItem(atPath: directory.appendingPathComponent(name).path)) != nil
+    }
+
+    /// First free of `base[.ext]` (n == 1), `base 2[.ext]`, … beginning at `start`.
+    private static func firstFreeName(
+        base: String, pathExtension: String?, startingAt start: Int, in directory: URL, fileManager: FileManager
+    ) -> String {
         func name(_ n: Int) -> String {
             let stem = n == 1 ? base : "\(base) \(n)"
             guard let pathExtension else { return stem }
             return "\(stem).\(pathExtension)"
         }
-        var n = 1
-        // attributesOfItem uses lstat, so dangling symlinks count as taken.
-        while (try? fileManager.attributesOfItem(atPath: directory.appendingPathComponent(name(n)).path)) != nil {
-            n += 1
-        }
+        var n = start
+        while exists(name(n), in: directory, fileManager: fileManager) { n += 1 }
         return name(n)
     }
 }
