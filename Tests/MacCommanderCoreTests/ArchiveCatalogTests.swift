@@ -175,4 +175,14 @@ struct ArchiveCatalogTests {
         #expect(!ArchiveFormats.isBrowsable(url("a.dmg")))
         #expect(!ArchiveFormats.isBrowsable(url("a.app")))
     }
+
+    /// Shown by receivers of a failed file promise (Finder), so the text must be readable.
+    @Test func errorDescriptions() {
+        #expect(ArchiveError.passwordRequired.errorDescription == "The archive is encrypted. Enter its password to extract it.")
+        #expect(ArchiveError.incorrectPassword.errorDescription == "The password you entered is incorrect.")
+        #expect(ArchiveError.cancelled.errorDescription == "The operation was cancelled.")
+        #expect(ArchiveError.unreadable(message: "Bad data").errorDescription == "Bad data")
+        #expect(ArchiveError.unsupported(message: "Unrecognized archive format").errorDescription == "Unrecognized archive format")
+        #expect((ArchiveError.incorrectPassword as any Error).localizedDescription == "The password you entered is incorrect.")
+    }
 }

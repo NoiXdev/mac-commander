@@ -17,5 +17,16 @@
     <key>NSDownloadsFolderUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
     <key>NSRemovableVolumesUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
     <key>NSNetworkVolumesUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+    <key>UTExportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key><string>dev.noix.MacCommander.archive-entries</string>
+            <key>UTTypeDescription</key><string>MacCommander Archive Entries</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

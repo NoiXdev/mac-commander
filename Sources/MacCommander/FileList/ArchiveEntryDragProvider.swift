@@ -9,7 +9,8 @@ extension NSPasteboard.PasteboardType {
 
 extension UTType {
     /// `NSPasteboard.PasteboardType.archiveEntries` as a UTType, for SwiftUI `onDrop`.
-    static let archiveEntries = UTType(importedAs: "dev.noix.MacCommander.archive-entries")
+    /// Declared in Info.plist (`UTExportedTypeDeclarations`).
+    static let archiveEntries = UTType(exportedAs: "dev.noix.MacCommander.archive-entries")
 }
 
 /// What an archive drag carries for MacCommander's own drop targets: the archive and all dragged entries
@@ -82,16 +83,19 @@ final class ArchiveEntryDragProvider: NSFilePromiseProvider {
 }
 
 /// Writes archive entry promises: extracts the entry to exactly the promised URL (never overwriting; an
-/// existing item fails the promise) off the main thread. The password is the session's remembered one; an
-/// encrypted archive without one fails with "password required" (the receiver shows the error).
+/// existing item fails the promise) off the main thread, at most two at a time. The password is the
+/// session's remembered one; an encrypted archive without one (or with a wrong one) asks for it app-modally
+/// and tries again. Cancel fails the promise with `userCancelled`; other errors are shown by the receiver.
 final class ArchiveDragDelegate: NSObject, NSFilePromiseProviderDelegate, Sendable {
     static let shared = ArchiveDragDelegate()
 
-    /// Promises are written here, never on the main queue.
+    /// Promises are written here, never on the main queue. Each operation blocks until its extraction
+    /// finished, so the limit bounds the bsdtar runs of a many-row drag.
     private let queue: OperationQueue = {
         let queue = OperationQueue()
         queue.name = "MacCommander archive drag"
         queue.qualityOfService = .userInitiated
+        queue.maxConcurrentOperationCount = 2
         return queue
     }()
 
@@ -103,6 +107,7 @@ final class ArchiveDragDelegate: NSObject, NSFilePromiseProviderDelegate, Sendab
         queue
     }
 
+    /// Called on `queue`. Blocks this operation (never the main thread) until the extraction finished.
     func filePromiseProvider(
         _ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL,
         completionHandler: @escaping (Error?) -> Void
@@ -114,15 +119,58 @@ final class ArchiveDragDelegate: NSObject, NSFilePromiseProviderDelegate, Sendab
         let archive = provider.archive
         let entry = provider.entry
         let completion = PromiseCompletion(completionHandler)
+        let done = DispatchSemaphore(value: 0)
         Task.detached {
+            completion.call(await Self.write(entry, of: archive, to: url))
+            done.signal()
+        }
+        if Thread.isMainThread { return }
+        done.wait()
+    }
+
+    /// Extracts `entry` to `url`; on a password error asks for the password and tries again.
+    /// Returns the error to complete the promise with, or nil on success.
+    @concurrent private static func write(_ entry: String, of archive: URL, to url: URL) async -> Error? {
+        while true {
+            let password = await ArchiveCatalog.shared.password(for: archive)
             do {
-                let password = await ArchiveCatalog.shared.password(for: archive)
                 try await ArchiveExtractor.extract(entry, from: archive, to: url, password: password)
-                completion.call(nil)
+                return nil
+            } catch let error as ArchiveError where error == .passwordRequired || error == .incorrectPassword {
+                guard
+                    await PromisePassword.ask(
+                        for: archive, tried: password, incorrect: error == .incorrectPassword)
+                else { return CocoaError(.userCancelled) }
             } catch {
-                completion.call(error)
+                return error
             }
         }
+    }
+}
+
+/// The password prompt for promises: one at a time per archive, so the rows of one drag share a single
+/// prompt. A promise that failed with a password another promise has replaced meanwhile just tries again.
+@MainActor
+private enum PromisePassword {
+    private static var prompts: [String: Task<Bool, Never>] = [:]
+
+    /// Whether a (new) password is set for `archive`; false when the user cancelled.
+    static func ask(for archive: URL, tried: String?, incorrect: Bool) async -> Bool {
+        let key = archive.standardizedFileURL.path
+        if let running = prompts[key] { return await running.value }
+        if await ArchiveCatalog.shared.password(for: archive) != tried { return true }
+        if let running = prompts[key] { return await running.value }
+        let prompt = Task { @MainActor () -> Bool in
+            defer { prompts[key] = nil }
+            // No window: app-modal, since the drop went to another app.
+            NSApp.activate()
+            guard let password = await ArchivePasswordSheet.ask(for: archive, incorrect: incorrect, window: nil)
+            else { return false }
+            await ArchiveCatalog.shared.setPassword(password, for: archive)
+            return true
+        }
+        prompts[key] = prompt
+        return await prompt.value
     }
 }
 

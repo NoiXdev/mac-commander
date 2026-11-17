@@ -12,6 +12,18 @@ public enum ArchiveError: Error, Equatable, Sendable {
     case unreadable(message: String)
 }
 
+/// Readable texts for receivers that only show `localizedDescription`, e.g. Finder after a failed file promise.
+extension ArchiveError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .passwordRequired: String(localized: "The archive is encrypted. Enter its password to extract it.")
+        case .incorrectPassword: String(localized: "The password you entered is incorrect.")
+        case .cancelled: String(localized: "The operation was cancelled.")
+        case .unsupported(let message), .unreadable(let message): message
+        }
+    }
+}
+
 /// App-wide archive listings: runs `/usr/bin/bsdtar -tv` once per archive version and caches the index.
 /// (Read mode, not `-c --format=mtree @archive`: bsdtar 3.5.3 hands `--passphrase` to the writer in
 /// create mode and fails, and without it an archive with encrypted data prompts forever.)
@@ -103,7 +115,7 @@ public actor ArchiveCatalog {
     ) async throws(ArchiveError) -> [FileItem] {
         let index = try await index(of: archive)
         guard let entries = index.entries(in: folder) else {
-            throw .unreadable(message: String(localized: "The folder “\(folder)” isn't in the archive."))
+            throw .unreadable(message: String(localized: "The folder “\(folder)” isn’t in the archive."))
         }
         return entries.compactMap { entry in
             let components = entry.path.split(separator: "/").map(String.init)
