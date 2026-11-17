@@ -57,12 +57,18 @@ public actor ArchivePreviewCache {
     public func files(_ entries: [String], of archive: URL) async throws(ArchiveError) -> [URL] {
         let path = archive.standardizedFileURL.path
         let wanted = entries.map(Self.normalized)
-        // Single stats and small folder operations; the actor never runs on the main thread.
-        let key = try Self.key(of: path)
-        if let current = versions[path], current.key != key || !Self.isFolder(current.folder) {
-            // Changed, or its folder is gone (a temp cleaner, another instance's purge): start fresh.
-            Self.remove(current.folder)
-            versions[path] = nil
+        // The archive may be on a network volume: its stat runs on the blocking-I/O queue, so a hung stat
+        // doesn't hold this app-wide actor. The cache's own folder is local, but is checked the same way.
+        // State is read again after each await.
+        let key = try await Self.key(of: path)
+        if let current = versions[path] {
+            let folder = current.folder
+            let isValid = current.key == key ? await PathQueries.run { Self.isFolder(folder) } : false
+            if !isValid, versions[path]?.folder == folder {
+                // Changed, or its folder is gone (a temp cleaner, another instance's purge): start fresh.
+                Self.remove(folder)
+                versions[path] = nil
+            }
         }
         var version: Version
         if let current = versions[path] {
@@ -171,15 +177,19 @@ public actor ArchivePreviewCache {
         return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFDIR
     }
 
-    private static func key(of path: String) throws(ArchiveError) -> VersionKey {
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: path)
-            return VersionKey(
-                size: (attributes[.size] as? NSNumber)?.int64Value ?? -1,
-                modified: attributes[.modificationDate] as? Date ?? .distantPast)
-        } catch {
-            throw .unreadable(message: error.localizedDescription)
+    /// The archive's size and mtime, stat'ed on the blocking-I/O queue (`PathQueries.run`).
+    private static func key(of path: String) async throws(ArchiveError) -> VersionKey {
+        let result: Result<VersionKey, ArchiveError> = await PathQueries.run {
+            do {
+                let attributes = try FileManager.default.attributesOfItem(atPath: path)
+                return .success(VersionKey(
+                    size: (attributes[.size] as? NSNumber)?.int64Value ?? -1,
+                    modified: attributes[.modificationDate] as? Date ?? .distantPast))
+            } catch {
+                return .failure(.unreadable(message: error.localizedDescription))
+            }
         }
+        return try result.get()
     }
 
     /// Removes one of the cache's own folders. Extracted folders may be read-only, so they are made

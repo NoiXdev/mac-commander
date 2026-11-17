@@ -40,22 +40,41 @@ struct MacCommanderApp: App {
 /// and monitor for the whole app), starts them at launch and stops them at quit.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// How long quitting waits for the purge and the share list's last write.
+    static let quitTimeout: Duration = .seconds(2)
+
     let shares = NetworkShares()
+    /// Set once quitting was answered (the work finished or the timeout passed).
+    private var didReplyToTerminate = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await ArchivePreviewCache.shared.purge() }
         shares.start()
     }
 
-    /// Quitting waits for the purge, which runs off the main thread (`.terminateLater`), then goes on to
-    /// `applicationWillTerminate` as usual.
+    /// Quitting waits (`.terminateLater`) for the preview cache purge and for pending writes of the share list
+    /// (`ShareStore.flush`), both off the main thread, but at most `quitTimeout`: the cache's actor may be
+    /// busy with work on a slow volume. Then it goes on to `applicationWillTerminate` as usual.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         shares.stop()
+        didReplyToTerminate = false
+        let store = shares.store
         Task {
             await ArchivePreviewCache.shared.purge()
-            sender.reply(toApplicationShouldTerminate: true)
+            await store.flush()
+            replyToTerminate(sender)
+        }
+        Task {
+            try? await Task.sleep(for: Self.quitTimeout)
+            replyToTerminate(sender)
         }
         return .terminateLater
+    }
+
+    private func replyToTerminate(_ sender: NSApplication) {
+        guard !didReplyToTerminate else { return }
+        didReplyToTerminate = true
+        sender.reply(toApplicationShouldTerminate: true)
     }
 }
 

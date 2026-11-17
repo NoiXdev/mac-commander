@@ -60,22 +60,31 @@ public actor ArchiveCatalog {
         self.testError = testError
     }
 
+    /// The archive's (path, size, mtime), stat'ed off the actor (`PathQueries.run`).
+    private static func cacheKey(of path: String) async throws(ArchiveError) -> CacheKey {
+        let result: Result<CacheKey, ArchiveError> = await PathQueries.run {
+            do {
+                let attributes = try FileManager.default.attributesOfItem(atPath: path)
+                return .success(CacheKey(
+                    path: path,
+                    size: (attributes[.size] as? NSNumber)?.int64Value ?? -1,
+                    modified: attributes[.modificationDate] as? Date ?? .distantPast))
+            } catch {
+                return .failure(.unreadable(message: error.localizedDescription))
+            }
+        }
+        return try result.get()
+    }
+
     /// Index for `archive`, listed once per (path, size, mtime). Uses the session password if one is set.
     /// Cancelling the calling task terminates bsdtar and throws `.cancelled`.
     public func index(of archive: URL) async throws(ArchiveError) -> ArchiveIndex {
         let path = Self.path(of: archive)
         if let testError, passwords[path] == nil { throw testError }
-        // A single stat; cheap, and the actor never runs on the main thread.
-        let attributes: [FileAttributeKey: Any]
-        do {
-            attributes = try FileManager.default.attributesOfItem(atPath: path)
-        } catch {
-            throw .unreadable(message: error.localizedDescription)
-        }
-        let key = CacheKey(
-            path: path,
-            size: (attributes[.size] as? NSNumber)?.int64Value ?? -1,
-            modified: attributes[.modificationDate] as? Date ?? .distantPast)
+        // A single stat, on the blocking-I/O queue: the archive may be on a network volume, and a stat that
+        // hangs there must not hold this app-wide actor (every archive window waits on it). The cache is read
+        // only after the await.
+        let key = try await Self.cacheKey(of: path)
         if let position = cache.firstIndex(where: { $0.key == key }) {
             let hit = cache.remove(at: position)
             cache.append(hit)
