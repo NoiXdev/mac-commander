@@ -18,7 +18,6 @@ struct GoToFolderSheet: View {
             TextField("", text: text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 380)
-                .onSubmit(go)
                 .onChange(of: text.wrappedValue) { failed = false }
             if failed {
                 Text("The folder can't be found.")

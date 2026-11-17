@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 struct SidebarView: View {
     let model: BrowserModel
     @Environment(FavoritesStore.self) private var favorites
-    private let volumesState = State(initialValue: VolumeProvider.localVolumes())
+    private let volumesState = State<[VolumeInfo]>(initialValue: [])
     private let missingState = State<SidebarLocation?>(initialValue: nil)
     private var volumes: [VolumeInfo] {
         get { volumesState.wrappedValue }
@@ -36,7 +36,7 @@ struct SidebarView: View {
                         row(name: volume.name, url: volume.url, exists: true, symbol: volume.isBoot ? "internaldrive" : "externaldrive")
                         if volume.isEjectable {
                             Button {
-                                try? NSWorkspace.shared.unmountAndEjectDevice(at: volume.url)
+                                eject(volume)
                             } label: {
                                 Image(systemName: "eject")
                             }
@@ -51,7 +51,10 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .onAppear { favorites.refreshExistence() }
-        .task { await observeVolumes() }
+        .task {
+            volumes = VolumeProvider.localVolumes()
+            await observeVolumes()
+        }
         .alert(
             String(localized: "“\(missing?.name ?? "")” can't be found. Remove it from Favorites?"),
             isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })
@@ -69,6 +72,25 @@ struct SidebarView: View {
             .opacity(exists ? 1 : 0.5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+    }
+
+    private func eject(_ volume: VolumeInfo) {
+        Task {
+            do {
+                try await Self.unmount(volume.url)
+            } catch {
+                let alert = NSAlert(error: error)
+                alert.messageText = String(localized: "The volume “\(volume.name)” couldn't be ejected.")
+                alert.informativeText = error.localizedDescription
+                alert.runModal()
+            }
+        }
+    }
+
+    /// Unmounting can block for a long time, so it runs off the main actor.
+    @concurrent
+    private static func unmount(_ url: URL) async throws {
+        try NSWorkspace.shared.unmountAndEjectDevice(at: url)
     }
 
     private func select(_ location: SidebarLocation) {

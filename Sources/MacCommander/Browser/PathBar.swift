@@ -8,6 +8,7 @@ struct PathBar: View {
 
     var body: some View {
         let segments = PathUtilities.segments(of: model.currentURL)
+        ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
                 ForEach(Array(segments.enumerated()), id: \.offset) { index, url in
@@ -27,10 +28,14 @@ struct PathBar: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .id(index)
                 }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
+        }
+        .onAppear { proxy.scrollTo(segments.count - 1, anchor: .trailing) }
+        .onChange(of: model.currentURL) { proxy.scrollTo(segments.count - 1, anchor: .trailing) }
         }
         .background(.bar)
     }

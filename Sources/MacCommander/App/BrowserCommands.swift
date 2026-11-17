@@ -7,9 +7,8 @@ struct BrowserCommands: Commands {
     @FocusedValue(\.goToFolderPresented) private var goToFolder
 
     var body: some Commands {
-        CommandGroup(replacing: .newItem) {
-            Button("New Window") { NSApp.sendAction(#selector(NSResponder.newWindowForTab(_:)), to: nil, from: nil) }
-                .keyboardShortcut("n")
+        // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
+        CommandGroup(after: .newItem) {
             Divider()
             Button("New Folder") { run { await BrowserActions.newFolder($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
