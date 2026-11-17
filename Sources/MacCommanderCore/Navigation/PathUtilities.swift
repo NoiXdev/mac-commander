@@ -1,11 +1,15 @@
 import Foundation
 
 public enum PathUtilities {
-    /// Returns `url` if it exists, otherwise the closest ancestor that does (at worst `/`).
+    /// Returns `url` if it is an existing folder, otherwise the closest ancestor that is (at worst `/`).
+    /// Files are skipped, so a path inside an archive (or below a plain file) gives the parent folder.
     public static func nearestExistingAncestor(of url: URL, fileManager: FileManager = .default) -> URL {
         var candidate = url.standardizedFileURL
         while candidate.path != "/" {
-            if fileManager.fileExists(atPath: candidate.path) { return candidate }
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: candidate.path, isDirectory: &isDirectory), isDirectory.boolValue {
+                return candidate
+            }
             candidate = candidate.deletingLastPathComponent().standardizedFileURL
         }
         return URL(fileURLWithPath: "/")

@@ -99,8 +99,7 @@ public actor ArchiveCatalog {
             let name = components.last ?? entry.path
             let isHidden = name.hasPrefix(".") || components.contains("__MACOSX")
             if isHidden && !includeHidden { return nil }
-            // TODO(Task 3): ArchivePath.url(archive:inner:)
-            let url = components.reduce(archive) { $0.appendingPathComponent($1) }
+            let url = ArchivePath.url(archive: archive, inner: entry.path)
             return FileItem(
                 url: url,
                 name: name,
