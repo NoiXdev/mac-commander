@@ -1,7 +1,8 @@
 import AppKit
 import MacCommanderCore
 
-/// The file commands from the menu bar and the keyboard (see `FileOutlineView`), acting on `selectedItems`.
+/// The file commands from the menu bar and the keyboard (see `FileOutlineView`). Copy, cut, duplicate and
+/// trash act on `topLevelSelectedItems`; Get Info and Copy Path on all `selectedItems`.
 /// Paste from the menu bar goes into the current folder.
 extension FileListController: FileCommandHandler {
     var isEditingText: Bool { rename.session != nil }
@@ -37,11 +38,12 @@ extension FileListController: FileCommandHandler {
         let clipboard = clipboard
         let window = outlineView.window
         let items = selectedItems
+        let topLevel = Self.topLevel(items)
         switch command {
         case .copy:
-            FileActions.copy(items, clipboard: clipboard)
+            FileActions.copy(topLevel, clipboard: clipboard)
         case .cut:
-            FileActions.cut(items, clipboard: clipboard)
+            FileActions.cut(topLevel, clipboard: clipboard)
         case .copyPath:
             FileActions.copyPath(items)
         case .paste, .pasteAsMove:
@@ -52,9 +54,9 @@ extension FileListController: FileCommandHandler {
                     window: window)
             }
         case .duplicate:
-            Task { await FileActions.duplicate(items, model: model, window: window) }
+            Task { await FileActions.duplicate(topLevel, model: model, window: window) }
         case .moveToTrash:
-            Task { await FileActions.moveToTrash(items, model: model, window: window) }
+            Task { await FileActions.moveToTrash(topLevel, model: model, window: window) }
         case .undo:
             Task { await FileActions.undo(model: model, window: window) }
         case .getInfo:

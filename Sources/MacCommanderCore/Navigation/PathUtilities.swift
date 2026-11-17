@@ -21,4 +21,18 @@ public enum PathUtilities {
         }
         return result
     }
+
+    /// `urls` without those lying inside another of them (compared by standardized path), in their order.
+    /// A selection that holds a folder and rows of its inline-expanded contents acts on the folder alone.
+    public static func topLevel(_ urls: [URL]) -> [URL] {
+        let paths = Set(urls.map(\.standardizedFileURL.path))
+        return urls.filter { url in
+            var ancestor = url.standardizedFileURL
+            while ancestor.path != "/" {
+                ancestor = ancestor.deletingLastPathComponent()
+                if paths.contains(ancestor.path) { return false }
+            }
+            return true
+        }
+    }
 }

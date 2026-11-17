@@ -32,4 +32,13 @@ struct PathUtilitiesTests {
         #expect(PathUtilities.segments(of: url).map(\.path) == ["/", "/Users", "/Users/d", "/Users/d/Docs"])
         #expect(PathUtilities.segments(of: URL(fileURLWithPath: "/")).map { $0.path } == ["/"])
     }
+
+    @Test func topLevelDropsDescendantsOfOtherURLs() {
+        func url(_ path: String) -> URL { URL(fileURLWithPath: path) }
+        let urls = [url("/a/F"), url("/a/F/x"), url("/a/F/sub/y"), url("/a/Fx"), url("/a/b.txt"), url("/a/Fx/../F/z")]
+        // Order is kept; a sibling sharing a name prefix ("Fx") is not inside "F"; paths are standardized.
+        #expect(PathUtilities.topLevel(urls).map(\.path) == ["/a/F", "/a/Fx", "/a/b.txt"])
+        #expect(PathUtilities.topLevel([url("/a/F/x"), url("/a/F")]).map(\.path) == ["/a/F"])
+        #expect(PathUtilities.topLevel([]).isEmpty)
+    }
 }

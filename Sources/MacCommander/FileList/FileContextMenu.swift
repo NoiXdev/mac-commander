@@ -66,34 +66,36 @@ enum FileContextMenu {
         return menu
     }
 
-    /// Right-click on rows. `items` are the clicked row, or the whole selection if it contains it.
+    /// Right-click on rows. `all` are the clicked row, or the whole selection if it contains it; `items` are
+    /// those without rows inside a selected folder. Duplicate, Copy, Cut, Move to Trash and Compress act on
+    /// `items`, so a folder selected with its expanded contents is handled once; the rest go by `all`.
     static func forItems(
-        _ items: [FileItem], model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard,
-        window: NSWindow?, openInfo: @escaping (URL) -> Void
+        _ items: [FileItem], all: [FileItem], model: BrowserModel, settings: ViewSettingsStore,
+        clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
         guard !items.isEmpty else { return menu }
 
-        let urls = items.map(\.url)
+        let urls = all.map(\.url)
         menu.addItem(ActionMenuItem(String(localized: "Open")) {
             // Like ⌘↓: a single item opens (folders navigate); with several, only the files open.
-            let toOpen = items.count == 1 ? items : items.filter { !$0.isDirectory }
+            let toOpen = all.count == 1 ? all : all.filter { !$0.isDirectory }
             Task { @MainActor in
                 for item in toOpen { await model.open(item) }
             }
         })
         let quickLookTitle =
-            items.count == 1
-            ? String(localized: "Quick Look “\(items[0].name)”")
-            : String(localized: "Quick Look \(items.count) items")
+            all.count == 1
+            ? String(localized: "Quick Look “\(all[0].name)”")
+            : String(localized: "Quick Look \(all.count) items")
         menu.addItem(OpenWithMenu.make(for: urls))
         // The right-click selected exactly these items, so the panel previews them.
         menu.addItem(ActionMenuItem(quickLookTitle) { QuickLookController.showPanel() })
         menu.addItem(.separator())
 
-        if items.count == 1 {
-            let url = items[0].url
+        if all.count == 1 {
+            let url = all[0].url
             // The list starts inline editing for `pendingRename`.
             menu.addItem(ActionMenuItem(String(localized: "Rename")) { model.pendingRename = url })
         }
@@ -102,7 +104,7 @@ enum FileContextMenu {
         })
         menu.addItem(.separator())
 
-        let folder = items.count == 1 && items[0].isDirectory ? items[0].url : nil
+        let folder = all.count == 1 && all[0].isDirectory ? all[0].url : nil
         menu.addItem(ActionMenuItem(String(localized: "Copy")) { FileActions.copy(items, clipboard: clipboard) })
         menu.addItem(ActionMenuItem(String(localized: "Cut")) { FileActions.cut(items, clipboard: clipboard) })
         menu.addItem(pasteItem(into: folder ?? model.currentURL, model: model, clipboard: clipboard, window: window))
@@ -112,7 +114,7 @@ enum FileContextMenu {
         menu.addItem(.separator())
 
         // Inline-expanded rows can mix parents; compress needs one.
-        if Set(urls.map { $0.deletingLastPathComponent().standardizedFileURL }).count == 1 {
+        if Set(items.map { $0.url.deletingLastPathComponent().standardizedFileURL }).count == 1 {
             let title =
                 items.count == 1
                 ? String(localized: "Compress “\(items[0].name)”")
@@ -124,7 +126,7 @@ enum FileContextMenu {
         }
 
         menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls, open: openInfo) })
-        menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(items) })
+        menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(all) })
         menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
         menu.addItem(.separator())
 

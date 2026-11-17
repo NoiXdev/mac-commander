@@ -18,8 +18,9 @@ extension FileListController {
                 model: model, settings: settings, clipboard: clipboard, window: outlineView.window,
                 openInfo: openInfo)
         }
+        let items = actionItems(forClickedRow: row)
         return FileContextMenu.forItems(
-            actionItems(forClickedRow: row), model: model, settings: settings, clipboard: clipboard,
+            items.topLevel, all: items.all, model: model, settings: settings, clipboard: clipboard,
             window: outlineView.window, openInfo: openInfo)
     }
 }

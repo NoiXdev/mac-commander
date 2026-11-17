@@ -52,9 +52,13 @@ extension FileListController: NSOutlineViewDataSource {
         (item as? FileNode)?.item.isDirectory ?? false
     }
 
-    /// Rows can be dragged out (e.g. onto the sidebar Favorites or Finder) as file URLs.
+    /// Rows can be dragged out (e.g. onto the sidebar Favorites or Finder) as file URLs. A selected row
+    /// inside a selected folder is not dragged on its own: it moves or copies with that folder.
     func outlineView(_ outlineView: NSOutlineView, pasteboardWriterForItem item: Any) -> (any NSPasteboardWriting)? {
-        (item as? FileNode)?.url as NSURL?
+        guard let node = item as? FileNode else { return nil }
+        let row = outlineView.row(forItem: node)
+        if row >= 0, outlineView.isRowSelected(row), hasSelectedAncestor(node) { return nil }
+        return node.url as NSURL
     }
 
     // MARK: Drop target

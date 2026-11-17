@@ -104,11 +104,38 @@ extension FileListController {
         outlineView.selectedRowIndexes.compactMap { node(atRow: $0)?.item }
     }
 
+    /// `selectedItems` without rows inside a selected folder (an inline-expanded folder selected along with
+    /// some of its contents, e.g. after ⌘A). Copy, cut, duplicate, trash, compress and drags act on these, so
+    /// nothing is transferred twice; Get Info and Copy Path use the full `selectedItems`.
+    var topLevelSelectedItems: [FileItem] { Self.topLevel(selectedItems) }
+
+    static func topLevel(_ items: [FileItem]) -> [FileItem] {
+        guard items.count > 1 else { return items }
+        let kept = Set(PathUtilities.topLevel(items.map(\.url)))
+        return items.filter { kept.contains($0.url) }
+    }
+
     /// What a context-menu command on `row` acts on: the whole selection if the row is selected,
-    /// otherwise just that row; nothing for `row < 0`.
-    func actionItems(forClickedRow row: Int) -> [FileItem] {
-        guard row >= 0 else { return [] }
-        if outlineView.isRowSelected(row) { return selectedItems }
-        return node(atRow: row).map { [$0.item] } ?? []
+    /// otherwise just that row; nothing for `row < 0`. `all` keeps rows inside selected folders (for Get Info
+    /// and Copy Path); `topLevel` drops them (for everything else).
+    func actionItems(forClickedRow row: Int) -> (all: [FileItem], topLevel: [FileItem]) {
+        guard row >= 0 else { return ([], []) }
+        if outlineView.isRowSelected(row) {
+            let all = selectedItems
+            return (all, Self.topLevel(all))
+        }
+        let clicked = node(atRow: row).map { [$0.item] } ?? []
+        return (clicked, clicked)
+    }
+
+    /// True if a folder row containing `node` is selected; such a row drags as part of that folder.
+    func hasSelectedAncestor(_ node: FileNode) -> Bool {
+        var ancestor = node.parent
+        while let current = ancestor {
+            let row = outlineView.row(forItem: current)
+            if row >= 0, outlineView.isRowSelected(row) { return true }
+            ancestor = current.parent
+        }
+        return false
     }
 }
