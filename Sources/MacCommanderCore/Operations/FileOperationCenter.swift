@@ -28,24 +28,29 @@ public final class FileOperationCenter {
     @ObservationIgnored private let sameVolume: @Sendable (URL, URL) -> Bool
     /// False forces real data copies (tests).
     @ObservationIgnored private let allowClone: Bool
+    /// Session passwords for extraction.
+    @ObservationIgnored let catalog: ArchiveCatalog
     /// Cancels the running operation with that id.
     @ObservationIgnored private var cancellers: [UUID: @Sendable () -> Void] = [:]
 
     public convenience init(
         undo: FileUndoStack = FileUndoStack(), trash: @escaping @Sendable (URL) throws -> URL = Trasher.systemTrash,
-        sameVolume: @escaping @Sendable (URL, URL) -> Bool = FileTransfer.isSameVolume
+        sameVolume: @escaping @Sendable (URL, URL) -> Bool = FileTransfer.isSameVolume,
+        catalog: ArchiveCatalog = .shared
     ) {
-        self.init(undo: undo, trash: trash, sameVolume: sameVolume, allowClone: true)
+        self.init(undo: undo, trash: trash, sameVolume: sameVolume, allowClone: true, catalog: catalog)
     }
 
     init(
         undo: FileUndoStack, trash: @escaping @Sendable (URL) throws -> URL,
-        sameVolume: @escaping @Sendable (URL, URL) -> Bool = FileTransfer.isSameVolume, allowClone: Bool
+        sameVolume: @escaping @Sendable (URL, URL) -> Bool = FileTransfer.isSameVolume, allowClone: Bool,
+        catalog: ArchiveCatalog = .shared
     ) {
         self.undo = undo
         self.trashItem = trash
         self.sameVolume = sameVolume
         self.allowClone = allowClone
+        self.catalog = catalog
     }
 
     // MARK: - Operations
@@ -143,9 +148,99 @@ public final class FileOperationCenter {
         return try result.get()
     }
 
+    /// Extracts `entries` (paths inside `archive`, "" = everything) into `destination`. bsdtar unpacks them
+    /// into a hidden staging folder in `destination` (see `ArchiveExtractor.stage`), the transfer engine
+    /// moves them in (conflicts go to `resolver`), and the staging folder is removed. Uses the catalog's
+    /// session password for `archive`.
+    ///
+    /// Throws `ArchiveError` when bsdtar fails, `CancellationError` when cancelled (while unpacking or
+    /// moving), and `CocoaError(.fileWriteNoPermission)` when `destination` is inside an archive. Otherwise
+    /// the move's outcome (finished, stopped, failed) is reported in the result like `transfer`. Completed
+    /// items are undoable as "Extract", which moves them to the Trash.
+    public func extract(
+        _ entries: [String], from archive: URL, into destination: URL, resolver: @escaping ConflictResolver
+    ) async throws -> TransferResult {
+        try Self.requireWritableFolder(destination)
+        let password = await catalog.password(for: archive)
+        let names = entries.map { $0.split(separator: "/").last.map(String.init) ?? archive.lastPathComponent }
+        return try await runExtraction(title: Self.extractTitle(names), into: destination, resolver: resolver) {
+            let staged = try await ArchiveExtractor.stage(entries, from: archive, near: destination, password: password)
+            return (staged.staging, staged.items)
+        }
+    }
+
+    /// Extracts the whole archive into `destination`. A single top-level item arrives as is; several arrive
+    /// in a new folder named after the archive without its archive extension (`assets.tar.gz` → `assets`,
+    /// `assets 2` if that's taken), moved in as one item. Errors as for `extract`.
+    public func extractAll(
+        _ archive: URL, into destination: URL, resolver: @escaping ConflictResolver
+    ) async throws -> TransferResult {
+        try Self.requireWritableFolder(destination)
+        let password = await catalog.password(for: archive)
+        let folderName = ArchiveFormats.baseName(of: archive)
+        return try await runExtraction(
+            title: Self.extractTitle([archive.lastPathComponent]), into: destination, resolver: resolver
+        ) {
+            let staged = try await ArchiveExtractor.stage([""], from: archive, near: destination, password: password)
+            if staged.items.count == 1 { return (staged.staging, staged.items) }
+            do {
+                let folder = try await ArchiveExtractor.wrap(
+                    staged.items, in: staged.staging, named: folderName, for: destination)
+                return (staged.staging, [folder])
+            } catch {
+                ArchiveExtractor.removeStaging(staged.staging)
+                throw error
+            }
+        }
+    }
+
     /// Cancels the running operation `id`; it ends as soon as its work notices.
     public func cancel(_ id: UUID) {
         cancellers[id]?()
+    }
+
+    /// Runs `stage` and moves its items into `destination` as one listed operation, always removing the
+    /// staging folder; records undo and posts `foldersDidChange` for `destination`.
+    private func runExtraction(
+        title: String, into destination: URL, resolver: @escaping ConflictResolver,
+        stage: @escaping @Sendable () async throws -> (staging: URL, items: [URL])
+    ) async throws -> TransferResult {
+        let trash = trashItem
+        let sameVolume = sameVolume
+        let allowClone = allowClone
+        let outcome = await run(title: title) { progress -> Result<TransferResult, any Error> in
+            let staged: (staging: URL, items: [URL])
+            do {
+                staged = try await stage()
+            } catch {
+                return .failure(error)
+            }
+            let result = await FileTransfer.run(
+                staged.items, into: destination, mode: .move, resolver: resolver, trash: trash,
+                sameVolume: sameVolume, allowClone: allowClone, progress: progress)
+            await Self.removeStaging(staged.staging)
+            return .success(result)
+        }
+        if case .success(let result) = outcome, !result.completed.isEmpty {
+            undo.push(
+                FileUndoRecord(
+                    action: .created(result.completed.map(\.destination)), title: String(localized: "Extract")))
+        }
+        postFoldersDidChange([destination])
+        let result = try outcome.get()
+        // Like a cancel while unpacking: the completed part stays recorded for undo.
+        if result.outcome == .cancelled { throw CancellationError() }
+        return result
+    }
+
+    /// Staging removal is file-system work: off the main actor.
+    @concurrent private nonisolated static func removeStaging(_ staging: URL) async {
+        ArchiveExtractor.removeStaging(staging)
+    }
+
+    /// Extraction writes only into real folders, never into a folder inside an archive (plain stats only).
+    private static func requireWritableFolder(_ destination: URL) throws {
+        if ArchivePath.split(destination) != nil { throw CocoaError(.fileWriteNoPermission) }
     }
 
     // MARK: - Recording
@@ -308,6 +403,13 @@ public final class FileOperationCenter {
             return String(localized: "Compressing “\(name)”")
         }
         return String(localized: "Compressing \(items.count) items")
+    }
+
+    private static func extractTitle(_ names: [String]) -> String {
+        if names.count == 1, let name = names.first {
+            return String(localized: "Extracting “\(name)”")
+        }
+        return String(localized: "Extracting \(names.count) items")
     }
 
     private static func undoTitle(mode: TransferMode, completed: [TransferredItem]) -> String {

@@ -46,7 +46,7 @@ enum ArchiveFixtures {
         }
     }
 
-    private static func run(_ executable: String, _ arguments: [String], in directory: URL? = nil) throws {
+    static func run(_ executable: String, _ arguments: [String], in directory: URL? = nil) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments

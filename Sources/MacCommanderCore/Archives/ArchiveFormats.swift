@@ -24,6 +24,21 @@ public enum ArchiveFormats {
         matches(url, pureExtensions) || matches(url, containerExtensions)
     }
 
+    /// The file name without its archive extension, matched like `isBrowsable` (longest extension wins):
+    /// `assets.tar.gz` → `assets`, `a.ZIP` → `a`. Other names lose their last path extension.
+    public static func baseName(of url: URL) -> String {
+        let name = url.lastPathComponent
+        let lowered = name.lowercased()
+        let matching = (pureExtensions + containerExtensions)
+            .filter { lowered.count > $0.count + 1 && lowered.hasSuffix("." + $0) }
+            .max { $0.count < $1.count }
+        if let matching, let range = name.range(of: "." + matching, options: [.caseInsensitive, .backwards, .anchored]) {
+            return String(name[..<range.lowerBound])
+        }
+        let stem = (name as NSString).deletingPathExtension
+        return stem.isEmpty ? name : stem
+    }
+
     private static func matches(_ url: URL, _ extensions: [String]) -> Bool {
         let name = url.lastPathComponent.lowercased()
         // A bare "zip" (no stem) is not an archive name.
