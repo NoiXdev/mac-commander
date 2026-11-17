@@ -26,7 +26,10 @@ final class FileOutlineView: NSOutlineView {
         let point = convert(event.locationInWindow, from: nil)
         let row = row(at: point)
         let column = column(at: point)
-        guard row >= 0, column >= 0, tableColumns[column].identifier == .checkboxColumn else {
+        // Ctrl-click opens the context menu (through `menu(for:)`), also in the checkbox column.
+        guard row >= 0, column >= 0, tableColumns[column].identifier == .checkboxColumn,
+            !event.modifierFlags.contains(.control)
+        else {
             super.mouseDown(with: event)
             return
         }
@@ -48,7 +51,10 @@ final class FileOutlineView: NSOutlineView {
         } else if !isRowSelected(row) {
             selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         }
-        return contextMenu?(row)
+        guard let menu = contextMenu?(row) else { return nil }
+        // Like Finder, a right-click focuses the list, so e.g. Quick Look finds it as controller.
+        window?.makeFirstResponder(self)
+        return menu
     }
 
     override func keyDown(with event: NSEvent) {
@@ -85,7 +91,7 @@ final class FileOutlineView: NSOutlineView {
     // Declared on NSObject without actor isolation; the panel calls them on the main thread.
 
     override func acceptsPreviewPanelControl(_ panel: QLPreviewPanel!) -> Bool {
-        MainActor.assumeIsolated { quickLook != nil }
+        MainActor.assumeIsolated { quickLook != nil && allowsInteraction() }
     }
 
     override func beginPreviewPanelControl(_ panel: QLPreviewPanel!) {

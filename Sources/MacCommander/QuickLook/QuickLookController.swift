@@ -56,6 +56,13 @@ final class QuickLookController: NSObject, @preconcurrency QLPreviewPanelDataSou
         self.panel = nil
     }
 
+    /// The list is leaving its folder: close a panel showing its items.
+    func folderDidChange() {
+        guard let panel else { return }
+        urls = []
+        panel.orderOut(nil)
+    }
+
     /// Follows the list selection while the panel is controlled by this list.
     func selectionDidChange() {
         guard let panel else { return }

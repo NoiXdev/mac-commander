@@ -200,6 +200,7 @@ final class FileListController: NSViewController {
     private func currentFolderDidChange() {
         guard model.currentURL != displayedFolder, displayedFolder != nil || !roots.isEmpty else { return }
         endRename(commit: true)
+        outlineView.quickLook?.folderDidChange()
         displayedFolder = nil
         roots.forEach { $0.detach() }
         roots = []
@@ -299,6 +300,7 @@ final class FileListController: NSViewController {
         }
         refreshLoadedFolders(in: roots)
         syncSelectionFromModel()
+        repairRenameSession()
         startPendingRename()
     }
 
@@ -422,6 +424,7 @@ final class FileListController: NSViewController {
             }
         }
         syncSelectionFromModel()
+        repairRenameSession()
         startPendingRename()
     }
 

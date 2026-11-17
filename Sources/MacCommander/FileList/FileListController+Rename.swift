@@ -10,6 +10,8 @@ struct RenameSession {
     /// The name the cell showed before editing (the localized name).
     let displayName: String
     weak var cell: FileNameCellView?
+    /// The field's text, kept up to date while typing, so it survives a reload of the cell.
+    var text: String
 }
 
 struct InlineRenameState {
@@ -23,6 +25,7 @@ struct InlineRenameState {
 extension FileListController: NSTextFieldDelegate {
     /// Return: renames the single selected row.
     func renameSelection() {
+        repairRenameSession()
         guard showsCurrentFolder, rename.session == nil else { return }
         let nodes = selectedNodes
         guard nodes.count == 1 else { return }
@@ -74,10 +77,12 @@ extension FileListController: NSTextFieldDelegate {
         else { return }
 
         let name = node.url.lastPathComponent
-        rename.session = RenameSession(url: node.url, originalName: name, displayName: node.item.name, cell: cell)
+        let initial = text ?? name
+        rename.session = RenameSession(
+            url: node.url, originalName: name, displayName: node.item.name, cell: cell, text: initial)
         cell.setEditing(true)
         field.delegate = self
-        field.stringValue = text ?? name
+        field.stringValue = initial
         guard view.window?.makeFirstResponder(field) == true else {
             endRename(commit: false)
             return
@@ -90,18 +95,24 @@ extension FileListController: NSTextFieldDelegate {
     /// the keyboard focus back to the list (not when the field lost it to something else).
     func endRename(commit: Bool, restoreFocus: Bool = true) {
         guard let session = rename.session else { return }
+        // A reload during the edit may have removed the cell or reused it for another row; its
+        // field then isn't the user's input for this item. Resume on the item's current cell
+        // instead (unless focus is moving elsewhere), so the typed name isn't silently lost.
+        guard isIntact(session) else {
+            abandonRename(session, restoreFocus: restoreFocus)
+            if restoreFocus, showsCurrentFolder, let node = loadedNode(path: session.url.path) {
+                beginRename(of: node, text: session.text)
+            }
+            return
+        }
         rename.session = nil
         let cell = session.cell
-        // A reload during the edit may have removed the cell or reused it for another row; its
-        // text then isn't the user's input for this item, so nothing is renamed.
-        let isIntact =
-            cell.map { $0.isEditing && node(atRow: outlineView.row(for: $0))?.url == session.url } ?? false
-        let newName = cell?.textField?.stringValue ?? session.originalName
+        let newName = cell?.textField?.stringValue ?? session.text
         if restoreFocus, let field = cell?.textField, field.currentEditor() != nil {
             view.window?.makeFirstResponder(outlineView)
         }
         cell?.setEditing(false)
-        guard isIntact, let cell else { return }
+        guard let cell else { return }
 
         guard commit, newName != session.originalName else {
             cell.textField?.stringValue = session.displayName
@@ -124,12 +135,58 @@ extension FileListController: NSTextFieldDelegate {
                 alert.alertStyle = .warning
                 alert.messageText = error.message
                 alert.runModal()
-                guard let self, self.showsCurrentFolder, self.rename.session == nil,
-                    let node = self.loadedNode(path: session.url.path)
-                else { return }
+                guard let self else { return }
+                let node = self.loadedNode(path: session.url.path)
+                guard self.showsCurrentFolder, self.rename.session == nil, let node else {
+                    // Editing can't resume: don't leave the rejected name on screen.
+                    if let node { self.showDisplayName(of: node) }
+                    return
+                }
                 self.beginRename(of: node, text: name)
             }
         }
+    }
+
+    /// True while the session's cell is still the edited name cell of its item's row.
+    private func isIntact(_ session: RenameSession) -> Bool {
+        guard let cell = session.cell, cell.isEditing else { return false }
+        return node(atRow: outlineView.row(for: cell))?.url == session.url
+    }
+
+    /// Ends a session whose cell was lost, without renaming.
+    private func abandonRename(_ session: RenameSession, restoreFocus: Bool) {
+        rename.session = nil
+        if let field = session.cell?.textField, field.currentEditor() != nil, restoreFocus {
+            view.window?.makeFirstResponder(outlineView)
+        }
+        if let cell = session.cell, cell.isEditing, outlineView.row(for: cell) < 0 { cell.setEditing(false) }
+    }
+
+    /// After rows were reloaded: if the edited cell was replaced, editing restarts on the item's
+    /// new cell with the text typed so far; if the item is gone, the session ends.
+    func repairRenameSession() {
+        guard let session = rename.session, !isIntact(session) else { return }
+        let hadFocus = session.cell?.textField?.currentEditor() != nil
+        abandonRename(session, restoreFocus: true)
+        guard showsCurrentFolder, let node = loadedNode(path: session.url.path) else { return }
+        // Resume unless the user had already moved the focus somewhere else.
+        let responder = view.window?.firstResponder
+        let focusInList =
+            responder == nil || responder === view.window
+            || (responder as? NSView)?.isDescendant(of: outlineView) == true
+        if hadFocus || focusInList {
+            beginRename(of: node, text: session.text)
+        }
+    }
+
+    private func showDisplayName(of node: FileNode) {
+        let row = outlineView.row(forItem: node)
+        let column = outlineView.column(withIdentifier: NSUserInterfaceItemIdentifier(FileColumn.name))
+        guard row >= 0, column >= 0,
+            let cell = outlineView.view(atColumn: column, row: row, makeIfNecessary: false) as? FileNameCellView,
+            !cell.isEditing
+        else { return }
+        cell.textField?.stringValue = node.item.name
     }
 
     /// The loaded node (at any depth) whose URL has this path.
@@ -164,6 +221,13 @@ extension FileListController: NSTextFieldDelegate {
         default:
             return false
         }
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        guard let field = notification.object as? NSTextField, field === rename.session?.cell?.textField else {
+            return
+        }
+        rename.session?.text = field.stringValue
     }
 
     /// Focus left the field (click elsewhere, Tab): commit, like Finder.
