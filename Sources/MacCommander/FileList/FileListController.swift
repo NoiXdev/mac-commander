@@ -16,6 +16,10 @@ final class FileListController: NSViewController {
     var reconnect: ((DisconnectedShare) -> Void)? {
         didSet { if isViewLoaded, case .shareDisconnected? = model.loadError { applyLoadError() } }
     }
+    /// "Sign In…" for a dropped network share (supplied by `FileListView`); nil hides the button.
+    var signIn: ((DisconnectedShare) -> Void)? {
+        didSet { if isViewLoaded, case .shareDisconnected? = model.loadError { applyLoadError() } }
+    }
 
     private(set) var outlineView = FileOutlineView()
     let scrollView = NSScrollView()
@@ -303,11 +307,14 @@ final class FileListController: NSViewController {
             return
         }
         var reconnectAction: (() -> Void)?
-        if let reconnect, let share = model.disconnectedShare {
-            reconnectAction = { reconnect(share) }
+        var signInAction: (() -> Void)?
+        if let share = model.disconnectedShare {
+            if let reconnect { reconnectAction = { reconnect(share) } }
+            if let signIn { signInAction = { signIn(share) } }
         }
         let errorView = LoadErrorView(
-            error: error, enterPassword: { [weak self] in self?.askForArchivePassword() }, reconnect: reconnectAction)
+            error: error, enterPassword: { [weak self] in self?.askForArchivePassword() }, reconnect: reconnectAction,
+            signIn: signInAction)
         if let errorHost {
             errorHost.rootView = errorView
             errorHost.isHidden = false

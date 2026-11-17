@@ -26,8 +26,12 @@ public struct DisconnectedShare: Equatable, Sendable {
     }
 }
 
-/// What `BrowserModel.shareResolver` reports for a path on a saved share.
-public typealias ShareLookup = (id: UUID, name: String, mountPoint: URL, isConnected: Bool)
+/// What `BrowserModel.shareResolver` reports for a path on a saved share. `isConnected`: the manager reports the
+/// share connected at `mountPoint`. `isKnownDisconnected`: the manager has checked the share and doesn't report it
+/// connected (unreachable, or available but not mounted); false while it is still being checked.
+public typealias ShareLookup = (
+    id: UUID, name: String, mountPoint: URL, isConnected: Bool, isKnownDisconnected: Bool
+)
 
 /// Per-window view model: the current folder, its sorted items, selection and navigation.
 ///
@@ -56,8 +60,12 @@ public final class BrowserModel {
     /// access (the UI wires it to `ShareManager.mountPoint(containing:)`). `isConnected` is whether the
     /// manager reports the share connected at that mount point. A vanished folder on a share that isn't
     /// connected (or whose mount point is gone too) shows `.shareDisconnected` instead of falling back to an
-    /// ancestor.
+    /// ancestor. A path on a share known to be disconnected (`isKnownDisconnected`) shows `.shareDisconnected`
+    /// at once, without any file-system access: a `stat` on a dead mount can hang until the server times out.
     @ObservationIgnored public var shareResolver: (@MainActor (URL) -> ShareLookup?)?
+    /// Called with the share's id whenever this window shows a share's Disconnected placeholder, so the app can
+    /// re-check that share (the UI wires it to `ShareManager.recheck`, which coalesces).
+    @ObservationIgnored public var shareDropped: (@MainActor (UUID) -> Void)?
     /// The last placeholder recovery (share id, navigation generation after it): until the next navigation,
     /// a connect of that share counts as the recovery (see `shareDidConnect`).
     @ObservationIgnored private var recovery: (id: UUID, navigation: Int)?
@@ -113,7 +121,7 @@ public final class BrowserModel {
         start: URL,
         settings: ViewSettingsStore,
         loader: DirectoryLoader = DirectoryLoader(),
-        opener: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+        opener: @escaping @MainActor (URL) -> Void = { PathQueries.openWithDefaultApp($0) },
         operations: FileOperationCenter = FileOperationCenter(),
         catalog: ArchiveCatalog = .shared
     ) {
@@ -127,7 +135,7 @@ public final class BrowserModel {
         start: URL,
         settings: ViewSettingsStore,
         loader: DirectoryLoader = DirectoryLoader(),
-        opener: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+        opener: @escaping @MainActor (URL) -> Void = { PathQueries.openWithDefaultApp($0) },
         operations: FileOperationCenter = FileOperationCenter(),
         catalog: ArchiveCatalog = .shared,
         pathQueries: any PathQueriesProvider
@@ -172,7 +180,9 @@ public final class BrowserModel {
     /// Navigates to a folder. A symlink to a folder navigates to its target, because the loader
     /// can't list through a symlink. Also navigates into archives: a pure archive file
     /// (`ArchiveFormats.isArchive`; a symlink to one keeps its own path), and any virtual path
-    /// inside an archive (Go to Folder `…/a.zip/img`). Other files and missing paths are ignored.
+    /// inside an archive (Go to Folder `…/a.zip/img`). Other files and missing paths are ignored, except a
+    /// path on a saved share that isn't connected: it is shown with the share's Disconnected placeholder (and
+    /// its Reconnect), never reported `.missing`.
     /// Every public navigation takes its place in line when called: one whose off-main checks finish
     /// after a newer request was made is dropped (`.superseded`), so the last click wins.
     @discardableResult
@@ -204,6 +214,10 @@ public final class BrowserModel {
     private func navigate(
         to requested: URL, anyBrowsable: Bool, openFallback: Bool, generation: Int
     ) async -> NavigationResult {
+        // A share known to be down: its placeholder, without statting the dead path.
+        if let share = shareResolver?(requested), share.isKnownDisconnected {
+            return await visitDisconnected(requested)
+        }
         // Checked off the main actor. A newer navigation request made meanwhile wins.
         let start = currentURL
         let url: URL
@@ -221,6 +235,9 @@ public final class BrowserModel {
             guard generation == navigationGeneration else { return .superseded }
             guard isAccepted else { return .done }
             url = requested
+        } else if !info.exists, let share = shareResolver?(requested), !share.isConnected {
+            // Not there because its share isn't connected: `load()` shows the placeholder.
+            return await visitDisconnected(requested)
         } else {
             return info.exists ? .done : .missing
         }
@@ -230,6 +247,17 @@ public final class BrowserModel {
         pendingOpenFallback = openFallback ? url : nil
         history.visit(url)
         clearSelection()
+        await load()
+        return .done
+    }
+
+    /// Visits `url` on a share that isn't connected; `load()` shows the Disconnected placeholder there.
+    private func visitDisconnected(_ url: URL) async -> NavigationResult {
+        pendingOpenFallback = nil
+        if url.standardizedFileURL.path != currentURL.standardizedFileURL.path {
+            history.visit(url)
+            clearSelection()
+        }
         await load()
         return .done
     }
@@ -414,6 +442,12 @@ public final class BrowserModel {
         // In flight from the start, so a change reported during the path checks coalesces into it.
         inFlightURL = currentURL
 
+        // On a saved share known to be down: the placeholder at once. No stat, which could hang on the dead
+        // mount (and keep the spinner up) until the server times out.
+        if let share = shareResolver?(currentURL), share.isKnownDisconnected {
+            return await showDisconnected(share, generation: generation)
+        }
+
         // A folder needs no split. Otherwise split: a virtual path inside an archive doesn't exist on
         // disk. A vanished archive splits to nil and falls back like a vanished folder.
         var target = await resolveLoadTarget(currentURL)
@@ -554,6 +588,8 @@ public final class BrowserModel {
         loadedLocation = nil
         disconnectedShare = DisconnectedShare(id: share.id, name: share.name, mountPoint: share.mountPoint)
         loadError = .shareDisconnected(name: share.name)
+        // The share's status may be stale (for example still "connected"): let the app check it again.
+        shareDropped?(share.id)
         await present(loadGeneration: generation)
         guard generation == loadGeneration else { return false }
         isLoading = false

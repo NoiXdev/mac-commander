@@ -9,6 +9,8 @@ struct FileListView: NSViewControllerRepresentable {
     let clipboard: FileClipboard
     /// "Reconnect" in the Disconnected placeholder of a dropped network share.
     var reconnect: ((DisconnectedShare) -> Void)? = nil
+    /// "Sign In…" in the same placeholder.
+    var signIn: ((DisconnectedShare) -> Void)? = nil
     @Environment(\.openWindow) private var openWindow
 
     func makeNSViewController(context: Context) -> FileListController {
@@ -16,6 +18,7 @@ struct FileListView: NSViewControllerRepresentable {
             model: model, settings: settings, clipboard: clipboard,
             openInfo: { [openWindow] url in openWindow(id: "info", value: url) })
         controller.reconnect = reconnect
+        controller.signIn = signIn
         return controller
     }
 
@@ -23,16 +26,18 @@ struct FileListView: NSViewControllerRepresentable {
         // The controller observes the model and settings itself.
         controller.openInfo = { [openWindow] url in openWindow(id: "info", value: url) }
         controller.reconnect = reconnect
+        controller.signIn = signIn
     }
 }
 
 /// Shown instead of the list when the folder can't be read. An encrypted archive gets an
 /// "Enter Password…" button, which runs `enterPassword`; a dropped network share shows "Disconnected"
-/// with a "Reconnect" button, which runs `reconnect`.
+/// with a "Reconnect" button, which runs `reconnect`, and a "Sign In…" button, which runs `signIn`.
 struct LoadErrorView: View {
     let error: DirectoryLoadError
     var enterPassword: (() -> Void)? = nil
     var reconnect: (() -> Void)? = nil
+    var signIn: (() -> Void)? = nil
 
     private static let privacySettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
@@ -44,8 +49,13 @@ struct LoadErrorView: View {
             } description: {
                 Text(error.message)
             } actions: {
-                if let reconnect {
-                    Button(String(localized: "Reconnect"), action: reconnect)
+                HStack {
+                    if let reconnect {
+                        Button(String(localized: "Reconnect"), action: reconnect)
+                    }
+                    if let signIn {
+                        Button(String(localized: "Sign In…"), action: signIn)
+                    }
                 }
             }
         } else {

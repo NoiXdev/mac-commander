@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// What one look at a path found. Symlinks are followed (a symlink to a folder is a folder).
@@ -63,6 +64,18 @@ public enum PathQueries {
             queue().async {
                 testDelay(for: key)
                 inFlight.finish(key, with: infoNow(url))
+            }
+        }
+    }
+
+    /// Opens `url` with its default app, like `NSWorkspace.open`, without blocking the caller: LaunchServices
+    /// reads the item (its type, a package's bundle) before opening it, which can block on a network volume, so
+    /// the call is made on the blocking-I/O queue. Returns at once. Failures aren't reported to the caller, as
+    /// before; LaunchServices still asks the user when no app can open the item.
+    public nonisolated static func openWithDefaultApp(_ url: URL) {
+        Task.detached {
+            await run {
+                NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
             }
         }
     }

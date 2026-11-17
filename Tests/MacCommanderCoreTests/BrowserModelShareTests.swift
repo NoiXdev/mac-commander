@@ -28,17 +28,82 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
     }
 
     /// Resolves paths under any of `mountPoints` to the "Media" share, like `ShareManager.mountPoint(containing:)`.
-    /// `isConnected` is what the manager would report (false: the share dropped).
-    private func resolver(_ mountPoints: [URL], isConnected: Bool = false) -> @MainActor (URL) -> ShareLookup? {
+    /// `isConnected` is what the manager would report (false: the share dropped). `isKnownDisconnected`: the
+    /// manager has checked the share and it isn't connected.
+    private func resolver(
+        _ mountPoints: [URL], isConnected: Bool = false, isKnownDisconnected: Bool = false
+    ) -> @MainActor (URL) -> ShareLookup? {
         let id = shareID
         return { url in
             let path = url.standardizedFileURL.path
             for mountPoint in mountPoints {
                 let root = mountPoint.standardizedFileURL.path
-                if path == root || path.hasPrefix(root + "/") { return (id, "Media", mountPoint, isConnected) }
+                if path == root || path.hasPrefix(root + "/") {
+                    return (id, "Media", mountPoint, isConnected, isKnownDisconnected)
+                }
             }
             return nil
         }
+    }
+
+    @Test func knownDisconnectedShareShowsPlaceholderWithoutStat() async throws {
+        let dir = try TemporaryDirectory()
+        let local = try dir.folder("local")
+        let share = try dir.folder("share")
+        let sub = try dir.folder("share/sub")
+        // Any stat under the share would hang like a dead mount.
+        let prefix = share.standardizedFileURL.path
+        PathQueries.setTestDelay(5, forPathsUnder: prefix)
+        defer { PathQueries.setTestDelay(nil, forPathsUnder: prefix) }
+        let model = BrowserModel(start: local, settings: makeStore())
+        model.shareResolver = resolver([share], isKnownDisconnected: true)
+        var dropped: [UUID] = []
+        model.shareDropped = { dropped.append($0) }
+        await model.reload()
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        #expect(await model.navigate(to: sub) == .done)
+        #expect(clock.now - start < .seconds(2))
+        #expect(model.loadError == .shareDisconnected(name: "Media"))
+        #expect(model.disconnectedShare?.id == shareID)
+        #expect(samePath(model.currentURL, sub))
+        #expect(!model.isLoading)
+        #expect(PathQueries.testLookupCount(forPathsUnder: prefix) == 0)
+        #expect(dropped == [shareID])
+
+        // A reload doesn't stat either.
+        await model.reload()
+        #expect(PathQueries.testLookupCount(forPathsUnder: prefix) == 0)
+        #expect(model.loadError == .shareDisconnected(name: "Media"))
+    }
+
+    @Test func missingPathOnUnconnectedShareShowsPlaceholderNotMissing() async throws {
+        let dir = try TemporaryDirectory()
+        let local = try dir.folder("local")
+        // The share's last mount point; nothing is mounted there now (the manager is still checking).
+        let share = dir.url.appendingPathComponent("share", isDirectory: true)
+        let favorite = share.appendingPathComponent("Projects", isDirectory: true)
+        let model = BrowserModel(start: local, settings: makeStore())
+        model.shareResolver = resolver([share])
+        await model.reload()
+
+        #expect(await model.navigate(to: favorite) == .done)
+        #expect(model.loadError == .shareDisconnected(name: "Media"))
+        #expect(samePath(model.currentURL, favorite))
+        #expect(model.history.canGoBack)
+    }
+
+    @Test func missingPathOnConnectedShareIsMissing() async throws {
+        let dir = try TemporaryDirectory()
+        let share = try dir.folder("share")
+        let model = BrowserModel(start: share, settings: makeStore())
+        model.shareResolver = resolver([share], isConnected: true)
+        await model.reload()
+
+        #expect(await model.navigate(to: share.appendingPathComponent("gone")) == .missing)
+        #expect(model.loadError == nil)
+        #expect(samePath(model.currentURL, share))
     }
 
     @Test func deletedSubfolderOnConnectedShareFallsBack() async throws {

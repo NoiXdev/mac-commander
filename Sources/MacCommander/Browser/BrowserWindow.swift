@@ -69,9 +69,18 @@ struct BrowserWindow: View {
             // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
             model.shareResolver = { [weak shareManager] url in
                 guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
-                let isConnected = shareManager.status[hit.share.id] == .connected(mountPoint: hit.mountPoint)
-                return (hit.share.id, hit.share.name, hit.mountPoint, isConnected)
+                let status = shareManager.status[hit.share.id]
+                let isConnected = status == .connected(mountPoint: hit.mountPoint)
+                // Checked and not connected: the window shows Disconnected without statting the dead path.
+                let isKnownDisconnected: Bool
+                switch status {
+                case .unreachable?, .available?: isKnownDisconnected = true
+                case .connected?, .checking?, nil: isKnownDisconnected = false
+                }
+                return (hit.share.id, hit.share.name, hit.mountPoint, isConnected, isKnownDisconnected)
             }
+            // A window showing Disconnected has the manager re-check that share (its status may be stale).
+            model.shareDropped = { [shareManager] id in shareManager.recheck(id) }
             self.model = model
             preview = PreviewController(model: model, settings: settings)
         }
@@ -94,6 +103,10 @@ struct BrowserWindow: View {
                                     disconnected, store: shareStore, manager: shareManager, model: model,
                                     sheets: shareSheets)
                             }
+                        },
+                        signIn: { [shareStore, shareSheets] disconnected in
+                            guard let share = shareStore.shares.first(where: { $0.id == disconnected.id }) else { return }
+                            Task { await ShareActions.showSignIn(share, sheets: shareSheets) }
                         })
                         .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
                     if settings.settings.showPreview {
@@ -159,6 +172,8 @@ struct BrowserWindow: View {
         .focusedSceneValue(\.browserModel, model)
         .focusedSceneValue(\.goToFolderPresented, showGoToFolder)
         .sheet(isPresented: showGoToFolder) { GoToFolderSheet(model: model) }
+        // Mirrored for ⌘K and the queued sign-in sheet, which wait for every sheet of the window.
+        .onChange(of: showGoToFolder.wrappedValue) { _, shown in shareSheets.showGoToFolder = shown }
         .focusedSceneValue(\.shareSheets, shareSheets)
         .sheet(isPresented: Bindable(shareSheets).showConnectToServer) {
             ConnectToServerSheet(model: model, sheets: shareSheets)

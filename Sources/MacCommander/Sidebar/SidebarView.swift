@@ -111,11 +111,13 @@ struct SidebarView: View {
     }
 
     /// Navigates (the model checks the folder off the main actor, and a newer click wins), or offers to
-    /// remove the favorite when nothing is there. The sidebar's grey state is refreshed alongside.
+    /// remove the favorite when nothing is there. Never for a path on a saved network share: one that isn't
+    /// connected shows its Disconnected placeholder instead, and a folder missing on a connected one may be
+    /// back after the next reconnect. The sidebar's grey state is refreshed alongside.
     private func select(_ location: SidebarLocation) {
         Task {
             async let refreshed: Void = favorites.refreshExistence()
-            if await model.navigate(to: location.url) == .missing {
+            if await model.navigate(to: location.url) == .missing, model.shareResolver?(location.url) == nil {
                 missing = location
             }
             await refreshed

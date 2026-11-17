@@ -172,7 +172,7 @@ enum FileActions {
         guard !entries.isEmpty else { return }
         let name = files.count == 1 ? files[0].name : archive.lastPathComponent
         guard let extracted = await extractForPreview(entries, of: archive, name: name, window: window) else { return }
-        for url in extracted { NSWorkspace.shared.open(url) }
+        for url in extracted { PathQueries.openWithDefaultApp(url) }
     }
 
     /// Extracts `entries` (files) of `archive` through `ArchivePreviewCache` and returns the temporary copies in
