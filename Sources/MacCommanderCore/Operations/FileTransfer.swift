@@ -186,9 +186,13 @@ public enum FileTransfer {
             } else {
                 let base = state
                 let cap = sizes[index]
+                // Copy under a private staging name, then rename it into place exclusively. Cleanup only ever
+                // removes the staging item, which this run created; an item that appears at `target`
+                // meanwhile (e.g. an autosave right after Replace) is never written into or deleted.
+                let staging = destination.appendingPathComponent(".mc-partial-\(UUID().uuidString)")
                 let cancel = CancelFlag()
                 let status = await withTaskCancellationHandler {
-                    copy(source, to: target, allowClone: allowClone, cancel: cancel) { itemBytes in
+                    copy(source, to: staging, allowClone: allowClone, cancel: cancel) { itemBytes in
                         var update = base
                         update.completedBytes = base.completedBytes + min(itemBytes, cap)
                         progress(update)
@@ -198,14 +202,16 @@ public enum FileTransfer {
                 }
                 switch status {
                 case .success:
-                    break
+                    if let message = commitStaging(staging, to: target) {
+                        try? fileManager.removeItem(at: staging)
+                        return fail(message)
+                    }
                 case .cancelled:
-                    // `target` was free before the copy, so anything there now is our partial output.
-                    try? fileManager.removeItem(at: target)
+                    try? fileManager.removeItem(at: staging)
                     result.outcome = .cancelled
                     return result
                 case .failed(let message):
-                    try? fileManager.removeItem(at: target)
+                    try? fileManager.removeItem(at: staging)
                     return fail(message)
                 }
                 if mode == .move {
@@ -259,6 +265,8 @@ public enum FileTransfer {
         guard let context else { return COPYFILE_CONTINUE }
         let box = Unmanaged<CopyContext>.fromOpaque(context).takeUnretainedValue()
         if box.cancel.isSet.load(ordering: .relaxed) { return COPYFILE_QUIT }
+        // Like Finder, a destination that refuses some extended attributes (SMB, exFAT) does not fail the copy.
+        if what == COPYFILE_COPY_XATTR && stage == COPYFILE_ERR { return COPYFILE_CONTINUE }
         if what == COPYFILE_RECURSE_ERROR || stage == COPYFILE_ERR {
             box.errorCode = errno
             return COPYFILE_QUIT
@@ -286,7 +294,8 @@ public enum FileTransfer {
         guard let state = copyfile_state_alloc() else { return .failed(String(cString: strerror(ENOMEM))) }
         defer { copyfile_state_free(state) }
 
-        var flags = copyfile_flags_t(COPYFILE_ALL | COPYFILE_RECURSIVE | COPYFILE_NOFOLLOW)
+        // EXCL: never write into an existing item, in clone and non-clone mode alike.
+        var flags = copyfile_flags_t(COPYFILE_ALL | COPYFILE_RECURSIVE | COPYFILE_NOFOLLOW | COPYFILE_EXCL)
         if allowClone { flags |= copyfile_flags_t(COPYFILE_CLONE) }
 
         return withoutActuallyEscaping(report) { report in
@@ -305,6 +314,27 @@ public enum FileTransfer {
                 return .failed(String(cString: strerror(code)))
             }
         }
+    }
+
+    /// Renames the finished staging item to `target` without replacing anything there.
+    /// Returns an error message, or nil on success.
+    private static func commitStaging(_ staging: URL, to target: URL) -> String? {
+        var rc = renamex_np(staging.path, target.path, UInt32(RENAME_EXCL))
+        if rc != 0 && (errno == ENOTSUP || errno == EINVAL) {
+            // Volumes without RENAME_EXCL (some network file systems): check, then plain rename.
+            var info = stat()
+            if lstat(target.path, &info) == 0 {
+                errno = EEXIST
+            } else {
+                rc = rename(staging.path, target.path)
+            }
+        }
+        if rc == 0 { return nil }
+        if errno == EEXIST {
+            return String(
+                localized: "An item named “\(target.lastPathComponent)” appeared in the destination during the transfer. It was left unchanged.")
+        }
+        return String(cString: strerror(errno))
     }
 
     // MARK: - Paths

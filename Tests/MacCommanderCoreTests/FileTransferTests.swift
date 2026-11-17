@@ -156,6 +156,7 @@ private func exists(_ url: URL) -> Bool { (try? FileManager.default.attributesOf
         #expect(exists(ok))
         #expect(exists(locked))
         #expect(!exists(f.dst.appendingPathComponent("dir")))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: f.dst.path).isEmpty)
     }
 
     @Test func cancelKeepsSourceAndRemovesPartial() async throws {
@@ -192,6 +193,7 @@ private func exists(_ url: URL) -> Bool { (try? FileManager.default.attributesOf
         #expect(result.completed.isEmpty)
         #expect((try FileManager.default.attributesOfItem(atPath: big.path)[.size] as? Int64) == size)
         #expect(!exists(dst.appendingPathComponent("big.bin")))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dst.path).isEmpty)
     }
 
     @Test func cancelBeforeStartDoesNothing() async throws {
@@ -247,6 +249,53 @@ private func exists(_ url: URL) -> Bool { (try? FileManager.default.attributesOf
         #expect(resolver.conflicts.count == 1)
         #expect(resolver.conflicts.first?.moreItemsFollow == false)
         #expect(resolver.conflicts.first?.existing == f.dst.appendingPathComponent("a.txt"))
+    }
+
+    /// Replace while another app recreates the replaced item (e.g. autosave) between the trash and the copy:
+    /// the foreign item must survive untouched, nothing is written into it, and the source stays.
+    @Test(arguments: [(true, TransferMode.copy), (false, .copy), (true, .move), (false, .move)])
+    func foreignItemAppearingAtTargetSurvives(allowClone: Bool, mode: TransferMode) async throws {
+        for foreignIsFolder in [false, true] {
+            let f = try Fixture()
+            let source = foreignIsFolder ? try f.tmp.folder("src/a") : try f.tmp.file("src/a", contents: "new")
+            if foreignIsFolder { try f.tmp.file("src/a/inner.txt", contents: "new inner") }
+            try f.tmp.file("dst/a", contents: "old")
+            let target = f.dst.appendingPathComponent("a")
+            let realTrash = f.trash
+            let trash: @Sendable (URL) throws -> URL = { url in
+                let trashed = try realTrash(url)
+                if foreignIsFolder {
+                    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+                    try "foreign".write(to: target.appendingPathComponent("foreign.txt"), atomically: false, encoding: .utf8)
+                } else {
+                    try "foreign".write(to: target, atomically: false, encoding: .utf8)
+                }
+                return trashed
+            }
+
+            let result = await FileTransfer.run(
+                [source], into: f.dst, mode: mode,
+                resolver: ScriptedResolver([.init(choice: .replace, applyToAll: false)]).resolver,
+                trash: trash, sameVolume: { _, _ in false }, allowClone: allowClone)
+
+            guard case .failed(.failed(name: "a", let message)) = result.outcome else {
+                Issue.record("expected failure, got \(result.outcome)")
+                continue
+            }
+            #expect(!message.isEmpty)
+            #expect(result.completed.isEmpty)
+            #expect(result.replaced.count == 1)
+            if foreignIsFolder {
+                #expect(read(target.appendingPathComponent("foreign.txt")) == "foreign")
+                #expect(!exists(target.appendingPathComponent("inner.txt")))
+                #expect(read(source.appendingPathComponent("inner.txt")) == "new inner")
+            } else {
+                #expect(read(target) == "foreign")
+                #expect(read(source) == "new")
+            }
+            let leftovers = try FileManager.default.contentsOfDirectory(atPath: f.dst.path)
+            #expect(leftovers == ["a"])
+        }
     }
 
     @Test func replaceRefusesToTrashAncestorOfSource() async throws {
