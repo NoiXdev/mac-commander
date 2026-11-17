@@ -20,5 +20,13 @@ struct MacCommanderApp: App {
         .commands {
             BrowserCommands(settings: settings)
         }
+
+        // One window per item; opening the same URL again focuses the existing window.
+        WindowGroup(id: "info", for: URL.self) { $url in
+            if let url {
+                InfoWindow(url: url)
+            }
+        }
+        .windowResizability(.contentSize)
     }
 }

@@ -26,7 +26,8 @@ final class ActionMenuItem: NSMenuItem {
 enum FileContextMenu {
     /// Right-click on empty space (spec 2.2.3).
     static func forEmptySpace(
-        model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard, window: NSWindow?
+        model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard, window: NSWindow?,
+        openInfo: @escaping (URL) -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -61,14 +62,14 @@ enum FileContextMenu {
         })
         menu.addItem(.separator())
         let folderURL = model.currentURL
-        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL]) })
+        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL], open: openInfo) })
         return menu
     }
 
     /// Right-click on rows. `items` are the clicked row, or the whole selection if it contains it.
     static func forItems(
         _ items: [FileItem], model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard,
-        window: NSWindow?
+        window: NSWindow?, openInfo: @escaping (URL) -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -122,7 +123,7 @@ enum FileContextMenu {
             menu.addItem(.separator())
         }
 
-        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls) })
+        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls, open: openInfo) })
         menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(items) })
         menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
         menu.addItem(.separator())

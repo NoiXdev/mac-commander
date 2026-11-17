@@ -10,6 +10,8 @@ final class FileListController: NSViewController {
     let settings: ViewSettingsStore
     /// The app's file clipboard (copy/cut/paste).
     let clipboard: FileClipboard
+    /// Opens the info window for a URL (SwiftUI's `openWindow`, supplied by `FileListView`).
+    var openInfo: (URL) -> Void
 
     private(set) var outlineView = FileOutlineView()
     let scrollView = NSScrollView()
@@ -40,8 +42,9 @@ final class FileListController: NSViewController {
     /// Above this many inserted/removed/changed rows, a reload is cheaper than row animations.
     static let maxIncrementalChanges = 500
 
-    init(model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard) {
+    init(model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard, openInfo: @escaping (URL) -> Void) {
         self.model = model
+        self.openInfo = openInfo
         self.settings = settings
         self.clipboard = clipboard
         super.init(nibName: nil, bundle: nil)

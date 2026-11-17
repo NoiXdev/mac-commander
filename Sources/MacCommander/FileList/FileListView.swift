@@ -7,13 +7,17 @@ struct FileListView: NSViewControllerRepresentable {
     let model: BrowserModel
     let settings: ViewSettingsStore
     let clipboard: FileClipboard
+    @Environment(\.openWindow) private var openWindow
 
     func makeNSViewController(context: Context) -> FileListController {
-        FileListController(model: model, settings: settings, clipboard: clipboard)
+        FileListController(
+            model: model, settings: settings, clipboard: clipboard,
+            openInfo: { [openWindow] url in openWindow(id: "info", value: url) })
     }
 
     func updateNSViewController(_ controller: FileListController, context: Context) {
         // The controller observes the model and settings itself.
+        controller.openInfo = { [openWindow] url in openWindow(id: "info", value: url) }
     }
 }
 

@@ -15,7 +15,9 @@ extension FileListController: FileCommandHandler {
             showsCurrentFolder, !isEditingText
         else { return false }
         switch command {
-        case .copy, .cut, .duplicate, .moveToTrash, .getInfo, .copyPath:
+        case .getInfo:
+            return true
+        case .copy, .cut, .duplicate, .moveToTrash, .copyPath:
             return !outlineView.selectedRowIndexes.isEmpty
         case .paste, .pasteAsMove:
             return !clipboard.fileURLs.isEmpty
@@ -56,7 +58,8 @@ extension FileListController: FileCommandHandler {
         case .undo:
             Task { await FileActions.undo(model: model, window: window) }
         case .getInfo:
-            FileActions.getInfo(items.map(\.url))
+            // Nothing selected: the current folder.
+            FileActions.getInfo(items.isEmpty ? [model.currentURL] : items.map(\.url), open: openInfo)
         }
     }
 }

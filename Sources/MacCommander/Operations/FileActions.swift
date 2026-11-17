@@ -24,9 +24,9 @@ enum FileActions {
         pasteboard.setString(items.map(\.url.path).joined(separator: "\n"), forType: .string)
     }
 
-    /// Placeholder until the info panel arrives (Task 11).
-    static func getInfo(_ urls: [URL]) {
-        NSSound.beep()
+    /// Opens one info window per URL through `open` (SwiftUI's `openWindow`, supplied by the caller).
+    static func getInfo(_ urls: [URL], open: (URL) -> Void) {
+        for url in urls { open(url) }
     }
 
     /// Selects `urls` in a Finder window.

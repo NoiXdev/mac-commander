@@ -15,10 +15,11 @@ extension FileListController {
         guard showsCurrentFolder else { return nil }
         if row < 0 {
             return FileContextMenu.forEmptySpace(
-                model: model, settings: settings, clipboard: clipboard, window: outlineView.window)
+                model: model, settings: settings, clipboard: clipboard, window: outlineView.window,
+                openInfo: openInfo)
         }
         return FileContextMenu.forItems(
             actionItems(forClickedRow: row), model: model, settings: settings, clipboard: clipboard,
-            window: outlineView.window)
+            window: outlineView.window, openInfo: openInfo)
     }
 }
