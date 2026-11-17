@@ -20,7 +20,7 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
         case .notADirectory(let url):
             String(localized: "“\(url.lastPathComponent)” is not a folder.")
         case .other(let url, let detail):
-            String(localized: "The folder “\(url.lastPathComponent)” can't be opened: \(detail)")
+            String(localized: "The folder “\(url.lastPathComponent)” can’t be opened: \(detail)")
         case .archivePasswordRequired(let url):
             String(localized: "“\(url.lastPathComponent)” is encrypted. Enter its password to see its contents.")
         case .archiveIncorrectPassword(let url):

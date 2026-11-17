@@ -99,15 +99,18 @@ struct BrowserWindow: View {
         .onChange(of: model.currentURL, initial: true) { _, url in storedPath = url.path }
     }
 
-    /// The restored folder, or home when nothing is stored or the folder is gone.
+    /// The restored folder (also a folder inside an archive), its nearest existing ancestor when it is gone,
+    /// or home when nothing is stored.
     private static func startURL(storedPath: String) -> URL {
+        guard !storedPath.isEmpty else { return FileManager.default.homeDirectoryForCurrentUser }
         var isDirectory: ObjCBool = false
-        if !storedPath.isEmpty,
-            FileManager.default.fileExists(atPath: storedPath, isDirectory: &isDirectory), isDirectory.boolValue
-        {
+        if FileManager.default.fileExists(atPath: storedPath, isDirectory: &isDirectory), isDirectory.boolValue {
             return URL(fileURLWithPath: storedPath, isDirectory: true)
         }
-        return FileManager.default.homeDirectoryForCurrentUser
+        // A few `stat`s, cheap.
+        let url = URL(fileURLWithPath: storedPath, isDirectory: false)
+        if ArchivePath.split(url) != nil { return url }
+        return PathUtilities.nearestExistingAncestor(of: url)
     }
 
     static func displayName(of url: URL) -> String {

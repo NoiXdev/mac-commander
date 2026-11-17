@@ -13,7 +13,7 @@ enum ArchivePasswordSheet {
         if incorrect {
             alert.informativeText = String(localized: "The password you entered is incorrect.")
         }
-        alert.addButton(withTitle: String(localized: "Open"))
+        alert.addButton(withTitle: String(localized: "OK"))
         alert.addButton(withTitle: String(localized: "Cancel"))
 
         let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))

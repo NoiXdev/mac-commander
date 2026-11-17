@@ -38,13 +38,24 @@ struct GoToFolderSheet: View {
     private func go() {
         let path = (text.wrappedValue.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
         var isDirectory: ObjCBool = false
-        guard !path.isEmpty,
-            FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue
-        else {
+        guard !path.isEmpty else {
+            failed = true
+            return
+        }
+        let url: URL
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+            url = URL(fileURLWithPath: path, isDirectory: true)
+        } else if let location = ArchivePath.split(URL(fileURLWithPath: path)),
+            !location.inner.isEmpty || ArchiveFormats.isArchive(location.archive)
+        {
+            // A pure archive, or a path inside any archive file (a few `stat`s, cheap). A missing inner
+            // folder shows its deepest existing one.
+            url = URL(fileURLWithPath: path, isDirectory: false)
+        } else {
             failed = true
             return
         }
         dismiss()
-        Task { await model.navigate(to: URL(fileURLWithPath: path, isDirectory: true)) }
+        Task { await model.navigate(to: url) }
     }
 }

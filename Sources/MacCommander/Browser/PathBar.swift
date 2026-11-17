@@ -8,6 +8,8 @@ struct PathBar: View {
 
     var body: some View {
         let segments = PathUtilities.segments(of: model.currentURL)
+        // A few `stat`s, cheap. Segments inside the archive are virtual: folder icons, no file lookups.
+        let archivePath = ArchivePath.split(model.currentURL)?.archive.path
         ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
@@ -21,7 +23,7 @@ struct PathBar: View {
                         Task { await model.navigate(to: url) }
                     } label: {
                         HStack(spacing: 4) {
-                            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                            Image(nsImage: Self.icon(for: url, archivePath: archivePath))
                                 .resizable()
                                 .frame(width: 16, height: 16)
                             Text(url.path == "/" ? Self.rootName : BrowserWindow.displayName(of: url))
@@ -41,4 +43,12 @@ struct PathBar: View {
     }
 
     private static var rootName: String { FileManager.default.displayName(atPath: "/") }
+
+    /// The archive file itself keeps its file icon; paths inside it get the folder icon.
+    private static func icon(for url: URL, archivePath: String?) -> NSImage {
+        if let archivePath, url.path.hasPrefix(archivePath + "/") {
+            return NSWorkspace.shared.icon(for: .folder)
+        }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
 }
