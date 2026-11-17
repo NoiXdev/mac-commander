@@ -19,8 +19,15 @@ public final class ShareStore {
     /// "Not Now" answers to the remember prompt.
     public private(set) var declinedRemountURLs: Set<ShareURL> = []
 
-    public init(fileURL: URL = ShareStore.defaultURL) {
+    /// Set when the file couldn't be read or moved aside; nothing is written for the rest of the session so the
+    /// original is never overwritten.
+    public private(set) var persistenceError: String?
+
+    @ObservationIgnored private let now: @Sendable () -> Date
+
+    public init(fileURL: URL = ShareStore.defaultURL, now: @escaping @Sendable () -> Date = { Date() }) {
         self.fileURL = fileURL
+        self.now = now
         load()
     }
 
@@ -55,7 +62,13 @@ public final class ShareStore {
         shares.first { $0.url.matches(url) }
     }
 
+    /// Whether the user already answered "Not Now" for this share (compared with `matches`, not `==`).
+    public func isDeclined(_ url: ShareURL) -> Bool {
+        declinedRemountURLs.contains { $0.matches(url) }
+    }
+
     public func decline(_ url: ShareURL) {
+        guard !isDeclined(url) else { return }
         declinedRemountURLs.insert(url)
         persist()
     }
@@ -90,7 +103,15 @@ public final class ShareStore {
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            return
+        } catch {
+            persistenceError = error.localizedDescription
+            return
+        }
         do {
             let model = try JSONDecoder().decode(FileModel.self, from: data)
             shares = model.shares
@@ -104,7 +125,7 @@ public final class ShareStore {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let base = fileURL.lastPathComponent + ".corrupt-" + formatter.string(from: Date())
+        let base = fileURL.lastPathComponent + ".corrupt-" + formatter.string(from: now())
         let directory = fileURL.deletingLastPathComponent()
         var target = directory.appendingPathComponent(base)
         var counter = 2
@@ -112,10 +133,15 @@ public final class ShareStore {
             target = directory.appendingPathComponent("\(base)-\(counter)")
             counter += 1
         }
-        try? FileManager.default.moveItem(at: fileURL, to: target)
+        do {
+            try FileManager.default.moveItem(at: fileURL, to: target)
+        } catch {
+            persistenceError = error.localizedDescription
+        }
     }
 
     private func persist() {
+        guard persistenceError == nil else { return }
         let output = FileOutput(shares: shares, declined: declinedRemountURLs.sorted { $0.url.absoluteString < $1.url.absoluteString })
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

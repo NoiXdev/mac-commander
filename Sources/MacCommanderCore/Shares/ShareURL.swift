@@ -25,6 +25,7 @@ public struct ShareURL: Hashable, Sendable, Codable {
             text = "smb://" + text
         }
         text = text.replacingOccurrences(of: " ", with: "%20")
+        text = Self.strippingUserInfo(text)
         guard let components = URLComponents(string: text),
             let scheme = components.scheme?.lowercased(), Self.supportedSchemes.contains(scheme),
             var host = components.host?.lowercased()
@@ -41,6 +42,15 @@ public struct ShareURL: Hashable, Sendable, Codable {
         self.path = "/" + parts.joined(separator: "/")
     }
 
+    /// Removes `user[:password]@` from the authority by hand: `URLComponents` rejects an unescaped "@" in a password.
+    private static func strippingUserInfo(_ text: String) -> String {
+        guard let schemeEnd = text.range(of: "://") else { return text }
+        let rest = text[schemeEnd.upperBound...]
+        let authorityEnd = rest.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) ?? rest.endIndex
+        guard let at = rest[..<authorityEnd].lastIndex(of: "@") else { return text }
+        return String(text[..<schemeEnd.upperBound]) + String(rest[rest.index(after: at)...])
+    }
+
     /// From a mount-time URL (for example the one a mounted volume reports); credentials are stripped.
     public init?(remountURL: URL) {
         self.init(remountURL.absoluteString)
@@ -48,10 +58,14 @@ public struct ShareURL: Hashable, Sendable, Codable {
 
     /// Canonical URL, without credentials.
     public var url: URL {
-        let hostPart = host.contains(":") ? "[\(host)]" : host
+        canonicalURL ?? URL(string: "\(scheme)://invalid")!
+    }
+
+    private var canonicalURL: URL? {
+        let hostPart = host.contains(":") ? "[\(host.replacingOccurrences(of: "%", with: "%25"))]" : host
         let portPart = port.map { ":\($0)" } ?? ""
         let encoded = path.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? path
-        return URL(string: "\(scheme)://\(hostPart)\(portPart)\(encoded)") ?? URL(string: "\(scheme)://invalid")!
+        return URL(string: "\(scheme)://\(hostPart)\(portPart)\(encoded)")
     }
 
     /// The explicit port, or the scheme's default (445/548/2049/443/80).
@@ -105,6 +119,10 @@ public struct ShareURL: Hashable, Sendable, Codable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        try container.encode(url.absoluteString)
+        guard let canonical = canonicalURL else {
+            throw EncodingError.invalidValue(
+                self, .init(codingPath: encoder.codingPath, debugDescription: "Share URL can't be built"))
+        }
+        try container.encode(canonical.absoluteString)
     }
 }

@@ -53,7 +53,9 @@ import Testing
         let store = ShareStore(fileURL: file)
         #expect(store.shares.isEmpty)
         let names = try FileManager.default.contentsOfDirectory(atPath: dir.url.path)
-        #expect(names.contains { $0.hasPrefix("shares.json.corrupt-") })
+        let moved = try #require(names.first { $0.hasPrefix("shares.json.corrupt-") })
+        #expect(moved.wholeMatch(of: /shares\.json\.corrupt-\d{8}-\d{6}/) != nil)
+        #expect(try String(contentsOf: dir.url.appendingPathComponent(moved), encoding: .utf8) == "{nope")
         #expect(!FileManager.default.fileExists(atPath: file.path))
         store.add(try #require(ShareURL("smb://nas/Media")), username: nil)
         await store.flush()
@@ -88,5 +90,77 @@ import Testing
         let text = String(decoding: try Data(contentsOf: file), as: UTF8.self)
         #expect(text.contains("daniel"))
         #expect(!text.lowercased().contains("password"))
+    }
+
+    @Test func corruptCollisionGetsSuffix() throws {
+        let dir = try TemporaryDirectory()
+        let fixed = Date(timeIntervalSince1970: 1_800_000_000)
+        let file = try dir.file("shares.json", contents: "{one")
+        _ = ShareStore(fileURL: file, now: { fixed })
+        try dir.file("shares.json", contents: "{two")
+        _ = ShareStore(fileURL: file, now: { fixed })
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.url.path).filter { $0.contains("corrupt") }
+        #expect(names.count == 2)
+        #expect(names.contains { $0.hasSuffix("-2") })
+    }
+
+    @Test func declineIsMatchBasedAndNotDuplicated() throws {
+        let dir = try TemporaryDirectory()
+        let store = ShareStore(fileURL: fileURL(dir))
+        store.decline(try #require(ShareURL("smb://nas/Media")))
+        store.decline(try #require(ShareURL("smb://nas:445/media")))
+        #expect(store.declinedRemountURLs.count == 1)
+        #expect(store.isDeclined(try #require(ShareURL("smb://NAS:445/MEDIA"))))
+        #expect(!store.isDeclined(try #require(ShareURL("smb://nas/Other"))))
+    }
+
+    @Test func unreadableFileDisablesPersistence() async throws {
+        let dir = try TemporaryDirectory()
+        let file = try dir.file("shares.json", contents: "{\"version\":1,\"shares\":[{\"url\":\"smb://nas/Media\"}]}")
+        let original = try Data(contentsOf: file)
+        try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: file.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path) }
+        let store = ShareStore(fileURL: file)
+        #expect(store.shares.isEmpty)
+        #expect(store.persistenceError != nil)
+        store.add(try #require(ShareURL("smb://other/Share")), username: nil)
+        await store.flush()
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+        #expect(try Data(contentsOf: file) == original)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.url.path) == ["shares.json"])
+    }
+
+    @Test func failedMoveAsideDisablesPersistence() async throws {
+        let dir = try TemporaryDirectory()
+        let sub = try dir.folder("ro")
+        let file = sub.appendingPathComponent("shares.json")
+        try "{nope".write(to: file, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: sub.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: sub.path) }
+        let store = ShareStore(fileURL: file)
+        #expect(store.persistenceError != nil)
+        store.add(try #require(ShareURL("smb://other/Share")), username: nil)
+        await store.flush()
+        #expect(try String(contentsOf: file, encoding: .utf8) == "{nope")
+    }
+
+    @Test func rapidWritesEndInFinalState() async throws {
+        let dir = try TemporaryDirectory()
+        let file = fileURL(dir)
+        let store = ShareStore(fileURL: file)
+        var last = store.add(try #require(ShareURL("smb://nas/Media")), username: nil)
+        for i in 0..<20 {
+            if i % 2 == 0 {
+                last.name = "name \(i)"
+                store.update(last)
+            } else {
+                store.add(try #require(ShareURL("smb://nas/Share\(i)")), username: nil)
+            }
+        }
+        await store.flush()
+        let again = ShareStore(fileURL: file)
+        #expect(again.shares == store.shares)
+        #expect(again.shares.count == 11)
+        #expect(again.shares[0].name == "name 18")
     }
 }

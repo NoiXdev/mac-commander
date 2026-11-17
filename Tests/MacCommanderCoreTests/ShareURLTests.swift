@@ -62,3 +62,17 @@ import Testing
         #expect(try JSONDecoder().decode([ShareURL].self, from: data) == [a])
     }
 }
+
+@Suite struct ShareURLEdgeTests {
+    @Test func edgeParsing() throws {
+        #expect(ShareURL("smb://host/") == nil)
+        #expect(ShareURL("smb://host:445") == nil)
+        let a = try #require(ShareURL("SMB://Host/Sh"))
+        #expect(a.url.absoluteString == "smb://host/Sh")
+        #expect(ShareURL("smb://user:p@ss@host/x")?.host == "host")
+        let z = try #require(ShareURL("smb://[fe80::1%25en0]/x"))
+        #expect(ShareURL(z.url.absoluteString) == z)
+        let data = try JSONEncoder().encode([z])
+        #expect(try JSONDecoder().decode([ShareURL].self, from: data) == [z])
+    }
+}
