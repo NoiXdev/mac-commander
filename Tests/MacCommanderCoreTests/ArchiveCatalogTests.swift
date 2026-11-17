@@ -149,6 +149,19 @@ struct ArchiveCatalogTests {
         #expect(ContinuousClock.now - start < .seconds(2))
     }
 
+    @Test(arguments: [
+        ("Enter passphrase: Couldn't read passphrase", false, ArchiveError.passwordRequired),
+        ("bsdtar: Incorrect passphrase", true, .incorrectPassword),
+        ("bsdtar: Error opening archive: Unrecognized archive format", false,
+         .unsupported(message: "bsdtar: Error opening archive: Unrecognized archive format")),
+        ("bsdtar: RAR solid archive not supported", false,
+         .unsupported(message: "bsdtar: RAR solid archive not supported")),
+        ("bsdtar: Truncated input file\n", false, .unreadable(message: "bsdtar: Truncated input file")),
+    ])
+    func errorMapping(stderr: String, hadPassword: Bool, expected: ArchiveError) {
+        #expect(ArchiveCatalog.error(stderr: stderr, hadPassword: hadPassword) == expected)
+    }
+
     @Test func formatLists() {
         let url = { (name: String) in URL(fileURLWithPath: "/tmp/\(name)") }
         #expect(ArchiveFormats.isArchive(url("a.TAR.GZ")))

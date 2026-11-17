@@ -81,6 +81,20 @@ struct ArchiveIndexTests {
         #expect(entries.allSatisfy { $0.isSymlink && !$0.isDirectory })
     }
 
+    @Test func hardlinkIsFileNamedBeforeLinkTo() throws {
+        let index = ArchiveIndex(listing: """
+            -rw-r--r--  0 danielelskamp wheel       6 Nov 17 17:45 ./a
+            hrw-r--r--  0 danielelskamp wheel       0 Nov 17 17:45 ./b link to ./a
+            hrw-r--r--  0 danielelskamp wheel       0 Nov 17 17:45 ./c link to ./missing link to x
+            """, now: now)
+        #expect(names(index, "") == ["a", "b", "c"])
+        let entries = try #require(index.entries(in: ""))
+        let b = try #require(entries.first { $0.path == "b" })
+        #expect(!b.isDirectory && !b.isSymlink)
+        #expect(b.size == 6)
+        #expect(entries.first { $0.path == "c" }?.size == nil)
+    }
+
     @Test func synthesizesMissingFolders() throws {
         let index = ArchiveIndex(
             listing: "-rw-r--r--  0 501    0           1 Nov 17 17:41 x/y/z.txt\n", now: now)

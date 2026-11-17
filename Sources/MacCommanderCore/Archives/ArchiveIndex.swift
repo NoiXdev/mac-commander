@@ -86,27 +86,50 @@ public struct ArchiveIndex: Sendable {
         let modeChar = line[tokens[0].lowerBound]
         let isDirectory = modeChar == UInt8(ascii: "d")
         let isSymlink = modeChar == UInt8(ascii: "l")
+        // Hard links (`h…`, listed as "name link to target", size 0) are regular files.
+        let isHardlink = modeChar == UInt8(ascii: "h")
         var nameEnd = line.count
-        if isSymlink, let arrow = Self.firstArrow(line, from: anchor.nameStart) {
+        var hardlinkTarget: [String]?
+        if isSymlink, let arrow = Self.firstOccurrence(of: Self.symlinkSeparator, in: line, from: anchor.nameStart) {
             nameEnd = arrow
+        } else if isHardlink,
+                  let link = Self.firstOccurrence(of: Self.hardlinkSeparator, in: line, from: anchor.nameStart) {
+            nameEnd = link
+            hardlinkTarget = Self.components(
+                Self.unescape(line[(link + Self.hardlinkSeparator.count)..<line.count]))
         }
-        let size = Self.number(line, tokens[anchor.sizeToken])
+        var size = Self.number(line, tokens[anchor.sizeToken]).map(Int64.init)
+        if isHardlink {
+            // The listing says 0; the real size is the target's, when it was listed earlier.
+            size = hardlinkTarget.flatMap { entry(at: $0) }.flatMap { $0.isDirectory ? nil : $0.size }
+        }
         let modified = Self.date(
             line, month: tokens[anchor.sizeToken + 1], day: tokens[anchor.sizeToken + 2],
             timeOrYear: tokens[anchor.sizeToken + 3], currentYear: currentYear, now: now)
 
-        let name = Self.unescape(line[anchor.nameStart..<nameEnd])
-        guard !name.hasPrefix("/") else { return }
-        var components = name.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
-        components.removeAll { $0 == "." }
-        guard !components.isEmpty, !components.contains("..") else { return }
-
+        guard let components = Self.components(Self.unescape(line[anchor.nameStart..<nameEnd])) else { return }
         insert(components, entry: ArchiveEntry(
             path: components.joined(separator: "/"),
             isDirectory: isDirectory,
             isSymlink: isSymlink,
-            size: isDirectory ? nil : size.map(Int64.init),
+            size: isDirectory ? nil : size,
             modified: modified))
+    }
+
+    /// Safe path components of a listed name: "." components and slashes dropped; nil for an empty,
+    /// absolute or ".."-containing name.
+    private static func components(_ name: String) -> [String]? {
+        guard !name.hasPrefix("/") else { return nil }
+        var components = name.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        components.removeAll { $0 == "." }
+        guard !components.isEmpty, !components.contains("..") else { return nil }
+        return components
+    }
+
+    /// The entry already indexed at `components`, if any.
+    private func entry(at components: [String]) -> ArchiveEntry? {
+        let parent = Self.key(components.dropLast().joined(separator: "/"))
+        return folders[parent]?[Self.key(components[components.count - 1])]
     }
 
     private static func isDigits(_ line: UnsafeBufferPointer<UInt8>, _ range: Range<Int>) -> Bool {
@@ -134,12 +157,16 @@ public struct ArchiveIndex: Sendable {
         return false
     }
 
-    /// Index of the first " -> " at or after `start`.
-    private static func firstArrow(_ line: UnsafeBufferPointer<UInt8>, from start: Int) -> Int? {
-        let arrow = Array(" -> ".utf8)
+    private static let symlinkSeparator = Array(" -> ".utf8)
+    private static let hardlinkSeparator = Array(" link to ".utf8)
+
+    /// Index of the first occurrence of `pattern` in `line` at or after `start`.
+    private static func firstOccurrence(
+        of pattern: [UInt8], in line: UnsafeBufferPointer<UInt8>, from start: Int
+    ) -> Int? {
         var i = start
-        while i + arrow.count <= line.count {
-            if line[i] == arrow[0], line[i + 1] == arrow[1], line[i + 2] == arrow[2], line[i + 3] == arrow[3] {
+        while i + pattern.count <= line.count {
+            if line[i] == pattern[0], (1..<pattern.count).allSatisfy({ line[i + $0] == pattern[$0] }) {
                 return i
             }
             i += 1
