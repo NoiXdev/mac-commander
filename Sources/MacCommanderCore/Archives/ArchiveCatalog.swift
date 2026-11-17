@@ -33,15 +33,26 @@ public actor ArchiveCatalog {
     private var passwords: [String: String] = [:]
     /// Number of bsdtar listings started, for tests.
     private(set) var runCount = 0
+    /// Test hook: thrown by `index(of:)` for archives without a session password.
+    private let testError: ArchiveError?
 
     public init(bsdtar: URL = URL(fileURLWithPath: "/usr/bin/bsdtar")) {
         self.bsdtar = bsdtar
+        testError = nil
+    }
+
+    /// Test hook: listings fail with `testError` until a password is set for the archive
+    /// (e.g. `.passwordRequired`, which a real zip only reports for encrypted headers).
+    init(testError: ArchiveError) {
+        bsdtar = URL(fileURLWithPath: "/usr/bin/bsdtar")
+        self.testError = testError
     }
 
     /// Index for `archive`, listed once per (path, size, mtime). Uses the session password if one is set.
     /// Cancelling the calling task terminates bsdtar and throws `.cancelled`.
     public func index(of archive: URL) async throws(ArchiveError) -> ArchiveIndex {
         let path = Self.path(of: archive)
+        if let testError, passwords[path] == nil { throw testError }
         // A single stat; cheap, and the actor never runs on the main thread.
         let attributes: [FileAttributeKey: Any]
         do {

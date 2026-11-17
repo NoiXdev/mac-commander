@@ -5,6 +5,11 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
     case notFound(URL)
     case notADirectory(URL)
     case other(URL, String)
+    /// The archive at the URL is encrypted and no password is known for it.
+    case archivePasswordRequired(URL)
+    case archiveIncorrectPassword(URL)
+    /// The archive can't be listed; the string is bsdtar's message.
+    case archiveUnreadable(URL, String)
 
     public var message: String {
         switch self {
@@ -16,6 +21,12 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
             String(localized: "“\(url.lastPathComponent)” is not a folder.")
         case .other(let url, let detail):
             String(localized: "The folder “\(url.lastPathComponent)” can't be opened: \(detail)")
+        case .archivePasswordRequired(let url):
+            String(localized: "“\(url.lastPathComponent)” is encrypted. Enter its password to see its contents.")
+        case .archiveIncorrectPassword(let url):
+            String(localized: "The password for “\(url.lastPathComponent)” is incorrect.")
+        case .archiveUnreadable(let url, let detail):
+            String(localized: "“\(url.lastPathComponent)” can’t be opened: \(detail)")
         }
     }
 }

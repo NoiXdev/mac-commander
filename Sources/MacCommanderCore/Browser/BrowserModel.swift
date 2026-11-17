@@ -14,6 +14,10 @@ public final class BrowserModel {
     /// The folder `items` were listed from, published together with `items`; nil while nothing
     /// is listed or the listing failed. Lags behind `currentURL` until a new listing arrives.
     public private(set) var listedURL: URL?
+    /// The archive location shown, nil in ordinary folders. Published together with `items` and
+    /// `listedURL` (also after a failed listing of an archive, e.g. one that needs a password), so
+    /// it lags behind `currentURL` while loading. The UI derives read-only mode from it.
+    public private(set) var archiveLocation: ArchiveLocation?
     public private(set) var loadError: DirectoryLoadError?
     public private(set) var isLoading = false
     public var selection: Set<URL> = []
@@ -25,9 +29,15 @@ public final class BrowserModel {
     @ObservationIgnored private let settings: ViewSettingsStore
     @ObservationIgnored private let loader: DirectoryLoader
     @ObservationIgnored private let opener: @MainActor (URL) -> Void
+    @ObservationIgnored private let catalog: ArchiveCatalog
     /// Unsorted items of the last load, and the folder they came from (nil after a failure).
     @ObservationIgnored private var loadedItems: [FileItem] = []
     @ObservationIgnored private var loadedURL: URL?
+    /// The archive location of the last load, published with `loadedItems`.
+    @ObservationIgnored private var loadedLocation: ArchiveLocation?
+    /// An archive entered by `open(_:)` (double-click / ⌘↓): if bsdtar can't read it, the model
+    /// returns and hands it to `opener` instead. nil for Browse Contents, Go to Folder and history.
+    @ObservationIgnored private var pendingOpenFallback: URL?
     /// The folder the newest load is listing; nil when no load is in flight.
     @ObservationIgnored private var inFlightURL: URL?
     /// Set when the folder changed while a load of it was in flight: one more load follows.
@@ -52,13 +62,15 @@ public final class BrowserModel {
         settings: ViewSettingsStore,
         loader: DirectoryLoader = DirectoryLoader(),
         opener: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
-        operations: FileOperationCenter = FileOperationCenter()
+        operations: FileOperationCenter = FileOperationCenter(),
+        catalog: ArchiveCatalog = .shared
     ) {
         history = NavigationHistory(start: start)
         self.settings = settings
         self.loader = loader
         self.opener = opener
         self.operations = operations
+        self.catalog = catalog
         observedSettings = settings.settings
         observeSettings()
         observeUnmounts()
@@ -73,12 +85,41 @@ public final class BrowserModel {
     // MARK: - Navigation
 
     /// Navigates to a folder. A symlink to a folder navigates to its target, because the loader
-    /// can't list through a symlink. Files and missing paths are ignored.
+    /// can't list through a symlink. Also navigates into archives: a pure archive file
+    /// (`ArchiveFormats.isArchive`; a symlink to one keeps its own path), and any virtual path
+    /// inside an archive (Go to Folder `…/a.zip/img`). Other files and missing paths are ignored.
     public func navigate(to requested: URL) async {
-        guard Self.isDirectory(requested) else { return }
-        let isSymlink = (try? requested.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
-        let url = isSymlink ? requested.resolvingSymlinksInPath() : requested
+        await navigate(to: requested, anyBrowsable: false, openFallback: false)
+    }
+
+    /// "Browse Contents": navigates into any browsable file (pure archives and containers such as
+    /// `.docx`). Unreadable files show a load error. Items inside an archive are ignored, since
+    /// nested archives aren't browsable.
+    public func browseContents(_ item: FileItem) async {
+        guard !item.isDirectory, let location = ArchivePath.split(item.url), location.inner.isEmpty else { return }
+        await navigate(to: item.url, anyBrowsable: true, openFallback: false)
+    }
+
+    /// `anyBrowsable` skips the extension check for an archive file; `openFallback` makes an
+    /// unreadable archive go to `opener` instead of showing an error.
+    private func navigate(to requested: URL, anyBrowsable: Bool, openFallback: Bool) async {
+        let url: URL
+        if Self.isDirectory(requested) {
+            let isSymlink = (try? requested.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
+            url = isSymlink ? requested.resolvingSymlinksInPath() : requested
+        } else if let location = ArchivePath.split(requested) {
+            // The archive file itself needs an archive extension, unless it's browsed explicitly or
+            // reached from inside the same archive (goUp, breadcrumbs).
+            let isAccepted = !location.inner.isEmpty || anyBrowsable
+                || ArchiveFormats.isArchive(requested)
+                || ArchivePath.split(currentURL)?.archive == location.archive
+            guard isAccepted else { return }
+            url = requested
+        } else {
+            return
+        }
         guard url.standardizedFileURL != currentURL.standardizedFileURL else { return }
+        pendingOpenFallback = openFallback ? url : nil
         history.visit(url)
         clearSelection()
         await load()
@@ -86,12 +127,14 @@ public final class BrowserModel {
 
     public func goBack() async {
         guard history.goBack() != nil else { return }
+        pendingOpenFallback = nil
         clearSelection()
         await load()
     }
 
     public func goForward() async {
         guard history.goForward() != nil else { return }
+        pendingOpenFallback = nil
         clearSelection()
         await load()
     }
@@ -106,34 +149,62 @@ public final class BrowserModel {
         await load()
     }
 
-    /// Folders (and symlinks to folders) navigate; anything else, packages included, is opened.
+    /// Folders (and symlinks to folders) navigate; pure archives (`ArchiveFormats.isArchive`) open
+    /// as folders, falling back to `opener` if bsdtar can't read them; anything else, packages
+    /// included, is opened. Inside an archive, folders navigate and files are left alone: opening
+    /// an archive entry means extracting it first, which the UI does.
     public func open(_ item: FileItem) async {
-        if item.isDirectory || (!item.isPackage && Self.isDirectory(item.url, excludingPackages: true)) {
+        if ArchivePath.split(currentURL) != nil {
+            if item.isDirectory { await navigate(to: item.url) }
+        } else if item.isDirectory || (!item.isPackage && Self.isDirectory(item.url, excludingPackages: true)) {
             await navigate(to: item.url)
+        } else if ArchiveFormats.isArchive(item.url) {
+            await navigate(to: item.url, anyBrowsable: false, openFallback: true)
         } else {
             opener(item.url)
         }
     }
 
     /// Lists a subfolder for inline expansion, with the same sorting and filtering as `items`.
+    /// Virtual paths inside an archive are listed from the archive catalog.
     public func children(of url: URL) async throws(DirectoryLoadError) -> [FileItem] {
         let current = settings.settings
-        let raw = try await loader.contents(of: url, includeHidden: current.showHiddenFiles)
+        let raw: [FileItem]
+        if let location = ArchivePath.split(url) {
+            do {
+                raw = try await catalog.items(in: location.inner, of: location.archive, includeHidden: current.showHiddenFiles)
+            } catch {
+                throw Self.loadError(error, archive: location.archive)
+            }
+        } else {
+            raw = try await loader.contents(of: url, includeHidden: current.showHiddenFiles)
+        }
         return await Self.sort(raw, by: current.sortOrder)
+    }
+
+    /// Remembers `password` for the current archive (for this app session) and lists it again.
+    public func providePassword(_ password: String) async {
+        guard let location = ArchivePath.split(currentURL) else { return }
+        await catalog.setPassword(password, for: location.archive)
+        await load()
     }
 
     // MARK: - File operations
 
+    /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createFolder(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
+        try refuseWritesInArchive(parent)
         let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createFolder(in: parent) }
         operations.recordCreated(created, isFolder: true)
         return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }
 
+    /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createEmptyFile(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
+        try refuseWritesInArchive(parent)
         let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createEmptyFile(in: parent) }
         operations.recordCreated(created, isFolder: false)
@@ -141,8 +212,14 @@ public final class BrowserModel {
     }
 
     /// Returns the URL as spelled in `items` when the item is in the current folder and no
-    /// navigation happened meanwhile; otherwise the renamed URL as is.
+    /// navigation happened meanwhile; otherwise the renamed URL as is. Inside an archive it throws
+    /// `.underlying` with the `CocoaError(.fileWriteNoPermission)` text (the error type is fixed).
     public func rename(_ url: URL, to name: String) async throws(RenameError) -> URL {
+        do {
+            try refuseWritesInArchive(url.deletingLastPathComponent())
+        } catch {
+            throw .underlying(error.localizedDescription)
+        }
         let historyAtStart = history
         let renamed = try await Self.rename(url, to: name)
         operations.recordRename(from: url, to: renamed)
@@ -167,6 +244,14 @@ public final class BrowserModel {
         selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 
+    /// Archives are read-only; the UI disables writes there, this is the model's own guard.
+    /// `ArchivePath.split` is a few `stat`s, cheap enough for the main actor.
+    private func refuseWritesInArchive(_ folder: URL) throws(CocoaError) {
+        if archiveLocation != nil || ArchivePath.split(folder) != nil {
+            throw CocoaError(.fileWriteNoPermission)
+        }
+    }
+
     // MARK: - Loading
 
     /// Returns whether this load was still the newest one when it finished, i.e. `items` now
@@ -178,38 +263,85 @@ public final class BrowserModel {
         // This listing starts after any change reported so far.
         needsReload = false
 
-        if !FileManager.default.fileExists(atPath: currentURL.path) {
+        // Split first: a virtual path inside an archive doesn't exist on disk. A vanished archive
+        // splits to nil and falls back like a vanished folder. (A few `stat`s, cheap.)
+        var location = ArchivePath.split(currentURL)
+        if location == nil, !FileManager.default.fileExists(atPath: currentURL.path) {
             history.replaceCurrent(with: PathUtilities.nearestExistingAncestor(of: currentURL))
             clearSelection()
+            location = ArchivePath.split(currentURL)
         }
         let url = currentURL
         let current = settings.settings
         // Watch before listing, so a change during the listing still triggers a reload.
-        startWatching(url)
+        // In an archive the archive file itself is watched.
+        startWatching(location?.archive ?? url, isArchive: location != nil)
         inFlightURL = url
         isLoading = true
 
-        let result: Result<[FileItem], DirectoryLoadError>
-        do {
-            result = .success(try await loader.contents(of: url, includeHidden: current.showHiddenFiles))
-        } catch {
-            result = .failure(error)
+        let result: Result<ListedItems, ListingError>
+        if let location {
+            do throws(ArchiveError) {
+                result = .success(try await Self.listArchive(location, catalog: catalog, includeHidden: current.showHiddenFiles))
+            } catch {
+                result = .failure(.archive(error))
+            }
+        } else {
+            do throws(DirectoryLoadError) {
+                let raw = try await loader.contents(of: url, includeHidden: current.showHiddenFiles)
+                result = .success(ListedItems(items: raw, inner: nil))
+            } catch {
+                result = .failure(.folder(error))
+            }
         }
         await afterListingHook?(url)
         guard generation == loadGeneration else { return false }
+        let openFallback = pendingOpenFallback.map { $0.standardizedFileURL == url.standardizedFileURL } ?? false
+        pendingOpenFallback = nil
 
         switch result {
-        case .success(let raw):
-            loadedItems = raw
-            loadedURL = url
+        case .success(let listed):
+            var listedURL = url
+            var listedLocation = location
+            if let location, let inner = listed.inner, inner != location.inner {
+                // The folder isn't in the archive: show the deepest one that is.
+                listedURL = ArchivePath.url(archive: location.archive, inner: inner)
+                listedLocation = ArchiveLocation(archive: location.archive, inner: inner)
+                history.replaceCurrent(with: listedURL)
+                clearSelection()
+            }
+            loadedItems = listed.items
+            loadedURL = listedURL
+            loadedLocation = listedLocation
             loadError = nil
-        case .failure(.notFound) where !FileManager.default.fileExists(atPath: url.path):
+        case .failure(.folder(.notFound)) where !FileManager.default.fileExists(atPath: url.path):
             // Vanished between the existence check and the listing: fall back again.
+            return await load()
+        case .failure(.archive) where location.map({ !FileManager.default.fileExists(atPath: $0.archive.path) }) == true:
+            // The archive vanished during the listing: fall back to an existing folder.
+            return await load()
+        case .failure(.archive(.cancelled)):
+            // The calling task was cancelled; leave the shown items alone.
+            isLoading = false
+            inFlightURL = nil
+            return false
+        case .failure(.archive(.unsupported)) where openFallback, .failure(.archive(.unreadable)) where openFallback:
+            // Opened by double-click but bsdtar can't read it: go back and let the default app
+            // handle it (Archive Utility shows its own error if it can't either).
+            if history.goBack() == nil {
+                history.replaceCurrent(with: url.deletingLastPathComponent())
+            }
+            clearSelection()
+            opener(url)
             return await load()
         case .failure(let error):
             loadedItems = []
             loadedURL = nil
-            loadError = error
+            loadedLocation = location
+            switch error {
+            case .folder(let error): loadError = error
+            case .archive(let error): loadError = Self.loadError(error, archive: location?.archive ?? url)
+            }
         }
         await present(loadGeneration: generation)
         guard generation == loadGeneration else { return false }
@@ -222,6 +354,12 @@ public final class BrowserModel {
             Task { await self.directoryDidChange() }
         }
         return true
+    }
+
+    /// The watched folder or archive changed. An archive's cached listing is dropped first.
+    private func watchedItemDidChange(archive: URL?) async {
+        if let archive { await catalog.invalidate(archive) }
+        await directoryDidChange()
     }
 
     /// A change in the watched folder. Newer navigation supersedes an in-flight load, but a
@@ -243,6 +381,7 @@ public final class BrowserModel {
         guard generation == sortGeneration, expectedLoad == loadGeneration else { return }
         items = sorted
         listedURL = loadedURL
+        archiveLocation = loadedLocation
         pruneSelection()
     }
 
@@ -257,8 +396,14 @@ public final class BrowserModel {
     /// `items` by canonical path (the loader may spell the folder differently, e.g. `/private/var`)
     /// and replaced by the item's URL; entries in its subfolders (inline-expanded) must still
     /// exist; entries anywhere else are dropped, since they can't be visible.
+    /// In an archive, virtual paths don't exist on disk: entries in the current folder are matched
+    /// by name, and entries below it are kept.
     private func pruneSelection() {
         guard !selection.isEmpty else { return }
+        if archiveLocation != nil {
+            pruneArchiveSelection()
+            return
+        }
         let directory = currentURL.resolvingSymlinksInPath().path
         let descendantPrefix = directory.hasSuffix("/") ? directory : directory + "/"
         var byName: [String: URL] = [:]
@@ -277,6 +422,21 @@ public final class BrowserModel {
             }
             guard resolved.hasPrefix(descendantPrefix) else { return nil }
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        })
+        if pruned != selection { selection = pruned }
+    }
+
+    private func pruneArchiveSelection() {
+        let directory = currentURL.standardizedFileURL.path
+        let descendantPrefix = directory.hasSuffix("/") ? directory : directory + "/"
+        var byName: [String: URL] = [:]
+        for item in items { byName[item.url.lastPathComponent] = item.url }
+        let pruned = Set(selection.compactMap { url -> URL? in
+            let path = url.standardizedFileURL.path
+            if url.deletingLastPathComponent().standardizedFileURL.path == directory {
+                return byName[url.lastPathComponent]
+            }
+            return path.hasPrefix(descendantPrefix) ? url : nil
         })
         if pruned != selection { selection = pruned }
     }
@@ -315,7 +475,7 @@ public final class BrowserModel {
         url.resolvingSymlinksInPath().path == currentURL.resolvingSymlinksInPath().path
     }
 
-    /// Device and inode of a folder, to tell a recreated folder from the one being watched.
+    /// Device and inode of a folder (or archive file), to tell a recreated one from the one being watched.
     private struct FolderIdentity: Equatable {
         let device: dev_t
         let inode: ino_t
@@ -330,15 +490,17 @@ public final class BrowserModel {
 
     /// Keeps an existing watcher for the same folder, so frequent reloads don't keep resetting
     /// its maximum-latency window. A folder deleted and recreated at the same path is a new
-    /// vnode, so the old watcher is dead and must be replaced.
-    private func startWatching(_ url: URL) {
+    /// vnode, so the old watcher is dead and must be replaced. An archive file is watched the
+    /// same way (`O_EVTONLY` works on files): writes, and deletion or replacement by rename.
+    private func startWatching(_ url: URL, isArchive: Bool) {
         let identity = FolderIdentity(path: url.path)
         if watcher != nil, watchedURL == url, let identity, identity == watchedIdentity { return }
         watcher?.cancel()
         watchedURL = url
         watchedIdentity = identity
+        let archive = isArchive ? url : nil
         watcher = DirectoryWatcher(url: url) { [weak self] in
-            Task { @MainActor in await self?.directoryDidChange() }
+            Task { @MainActor in await self?.watchedItemDidChange(archive: archive) }
         }
     }
 
@@ -411,6 +573,41 @@ public final class BrowserModel {
     }
 
     // MARK: - Helpers
+
+    /// A listing: the items, and for an archive the inner folder they come from.
+    private struct ListedItems: Sendable {
+        let items: [FileItem]
+        let inner: String?
+    }
+
+    private enum ListingError: Error {
+        case folder(DirectoryLoadError)
+        case archive(ArchiveError)
+    }
+
+    /// Lists `location` from the catalog. An inner folder missing from the index falls back to
+    /// its deepest existing ancestor ("" always exists); the result says which folder was listed.
+    private static func listArchive(
+        _ location: ArchiveLocation, catalog: ArchiveCatalog, includeHidden: Bool
+    ) async throws(ArchiveError) -> ListedItems {
+        let index = try await catalog.index(of: location.archive)
+        var components = location.inner.split(separator: "/").map(String.init)
+        while !components.isEmpty, index.entries(in: components.joined(separator: "/")) == nil {
+            components.removeLast()
+        }
+        let inner = components.joined(separator: "/")
+        let items = try await catalog.items(in: inner, of: location.archive, includeHidden: includeHidden)
+        return ListedItems(items: items, inner: inner)
+    }
+
+    private static func loadError(_ error: ArchiveError, archive: URL) -> DirectoryLoadError {
+        switch error {
+        case .passwordRequired: .archivePasswordRequired(archive)
+        case .incorrectPassword: .archiveIncorrectPassword(archive)
+        case .unsupported(let message), .unreadable(let message): .archiveUnreadable(archive, message)
+        case .cancelled: .archiveUnreadable(archive, String(localized: "The listing was cancelled."))
+        }
+    }
 
     private static func isDirectory(_ url: URL, excludingPackages: Bool = false) -> Bool {
         let resolved = url.resolvingSymlinksInPath()
