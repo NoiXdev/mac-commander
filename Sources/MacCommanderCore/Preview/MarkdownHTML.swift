@@ -123,6 +123,7 @@ public enum MarkdownHTML {
         var used: [String: Int] = [:]
         var tightStack: [Bool] = []
         var alignments: [Table.ColumnAlignment?] = []
+        var linkDepth = 0
 
         mutating func descend(_ node: Markup) {
             for c in node.children { visit(c) }
@@ -134,7 +135,7 @@ public enum MarkdownHTML {
         }
 
         mutating func visitText(_ text: Text) {
-            out += MarkdownHTML.autolinked(text.string)
+            out += linkDepth > 0 ? MarkdownHTML.escape(text.string) : MarkdownHTML.autolinked(text.string)
         }
 
         mutating func visitParagraph(_ p: Paragraph) {
@@ -178,7 +179,7 @@ public enum MarkdownHTML {
         mutating func visitLink(_ l: Link) {
             out += "<a href=\"\(MarkdownHTML.escape(l.destination ?? ""))\""
             if let t = l.title, !t.isEmpty { out += " title=\"\(MarkdownHTML.escape(t))\"" }
-            out += ">"; descend(l); out += "</a>"
+            out += ">"; linkDepth += 1; descend(l); linkDepth -= 1; out += "</a>"
         }
 
         mutating func visitImage(_ i: Image) {

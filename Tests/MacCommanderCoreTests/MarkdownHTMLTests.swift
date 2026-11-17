@@ -50,6 +50,7 @@ struct MarkdownHTMLTests {
     @Test func autolinks() {
         #expect(html("see https://example.com/x.").contains("<a href=\"https://example.com/x\">https://example.com/x</a>."))
         #expect(!html("`https://a.b`").contains("<a "))
+        #expect(!html("[https://a.b](https://a.b)").contains("<a href=\"https://a.b\"><a"))
         #expect(!html("[t](https://a.b) ").contains("<a href=\"https://a.b\">https://a.b</a>"))
         #expect(html("go www.example.com, now").contains("<a href=\"http://www.example.com\">www.example.com</a>,"))
     }
