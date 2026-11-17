@@ -46,11 +46,16 @@ struct BrowserWindow: View {
             }
         }
         .onAppear {
-            guard model == nil else { return }
+            if model != nil {
+                preview?.resume()
+                return
+            }
             let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
             self.model = model
             preview = PreviewController(model: model, settings: settings)
         }
+        // Closing the window: stop extraction and rendering for the preview.
+        .onDisappear { preview?.stop() }
     }
 
     private func content(_ model: BrowserModel, preview: PreviewController) -> some View {

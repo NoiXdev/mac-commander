@@ -65,6 +65,10 @@ final class PreviewController {
     @ObservationIgnored private var pending: Task<Void, Never>?
     /// The running resolution (item lookup, extraction, rendering) or "Show Source" load.
     @ObservationIgnored private var work: Task<Void, Never>?
+    /// The "Show Source" load.
+    @ObservationIgnored private var sourceTask: Task<Void, Never>?
+    /// Set while the window's content is gone (`stop()`): nothing is resolved until `resume()`.
+    @ObservationIgnored private var isStopped = false
     /// The inputs last seen, to ignore unrelated settings changes.
     @ObservationIgnored private var observedSelection: Set<URL>
     @ObservationIgnored private var observedURL: URL
@@ -107,6 +111,7 @@ final class PreviewController {
         observedSelection = selection
         observedURL = url
         observedShown = shown
+        if isStopped { return }
         if !shown {
             if wasShown { reset() }
             return
@@ -129,6 +134,23 @@ final class PreviewController {
         pending = nil
         work?.cancel()
         work = nil
+        sourceTask?.cancel()
+        sourceTask = nil
+    }
+
+    /// The window's content went away (window closed): cancel running work, so no extraction or render keeps
+    /// running (or keeps this controller alive), and resolve nothing until `resume()`.
+    func stop() {
+        isStopped = true
+        cancelWork()
+        generation += 1
+    }
+
+    /// The window's content is shown again after `stop()`: resolve for the current selection.
+    func resume() {
+        guard isStopped else { return }
+        isStopped = false
+        if settings.settings.showPreview { resolve() }
     }
 
     /// The panel was hidden: drop everything (the Quick Look view goes away with the pane).
@@ -168,7 +190,10 @@ final class PreviewController {
         let archive = model.archiveLocation?.archive
         let inner = archive.flatMap { ArchivePath.inner(of: url, in: $0) }
         guard let item = await item(for: url, inArchive: inner != nil), isCurrent(generation, selection) else {
-            if isCurrent(generation, selection) { showUnpreviewable(url.lastPathComponent) }
+            if isCurrent(generation, selection) {
+                header = nil
+                showUnpreviewable(url.lastPathComponent)
+            }
             return
         }
         if let archive, let inner {
@@ -194,6 +219,8 @@ final class PreviewController {
             content = .empty(item.name)
             return
         }
+        // Extraction can take seconds: never show the previous item's content under this header.
+        content = .empty("")
         let extracted: URL
         do {
             guard let file = try await ArchivePreviewCache.shared.files([inner], of: archive).first else {
@@ -223,6 +250,9 @@ final class PreviewController {
             content = .quickLook(url)
             return
         }
+        // Rendering waits: never show the previous item's content under this header meanwhile. (Quick Look
+        // above is set at once, so a Quick Look to Quick Look change reuses the view without a flash.)
+        content = .empty("")
         do {
             let rendered = try await renderer.render(url)
             guard isCurrent(generation, selection) else { return }
@@ -250,10 +280,11 @@ final class PreviewController {
     func perform(_ action: PreviewAction) {
         switch action {
         case .showSource(let file):
-            work?.cancel()
+            // Its own task: `work` may still be loading the header's icon.
+            sourceTask?.cancel()
             let generation = generation
             let selection = model.selection
-            work = Task { [weak self] in
+            sourceTask = Task { [weak self] in
                 let text: String
                 do {
                     text = try await MarkdownPreviewRenderer.sourceText(of: file)

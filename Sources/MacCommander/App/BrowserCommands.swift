@@ -32,6 +32,8 @@ struct BrowserCommands: Commands {
                 .disabled(model?.selection.isEmpty != false || isInArchive)
         }
         // Copy, Cut, Paste and Undo are the standard Edit items; a focused text field keeps them for its text.
+        // No printing: this also frees ⇧⌘P (Page Setup…) for Show/Hide Preview.
+        CommandGroup(replacing: .printItem) {}
         CommandGroup(after: .pasteboard) {
             Button("Move Item Here") { send(#selector(FileOutlineView.pasteAsMove(_:))) }
                 .keyboardShortcut("v", modifiers: [.command, .option])
