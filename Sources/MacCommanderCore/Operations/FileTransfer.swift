@@ -38,11 +38,21 @@ public struct TransferredItem: Sendable, Equatable {
     public let source: URL
     /// The URL actually written — the copy or keep-both name when one was used.
     public let destination: URL
+
+    public init(source: URL, destination: URL) {
+        self.source = source
+        self.destination = destination
+    }
 }
 
 public struct TrashedItem: Sendable, Equatable {
     public let original: URL
     public let trashed: URL
+
+    public init(original: URL, trashed: URL) {
+        self.original = original
+        self.trashed = trashed
+    }
 }
 
 public enum TransferError: Error, Equatable {
@@ -319,22 +329,57 @@ public enum FileTransfer {
     /// Renames the finished staging item to `target` without replacing anything there.
     /// Returns an error message, or nil on success.
     private static func commitStaging(_ staging: URL, to target: URL) -> String? {
-        var rc = renamex_np(staging.path, target.path, UInt32(RENAME_EXCL))
+        let code = exclusiveRename(staging, to: target)
+        if code == 0 { return nil }
+        if code == EEXIST {
+            return String(
+                localized: "An item named “\(target.lastPathComponent)” appeared in the destination during the transfer. It was left unchanged.")
+        }
+        return String(cString: strerror(code))
+    }
+
+    /// Renames `item` to `target` only if nothing exists at `target`; never replaces.
+    /// Returns 0 on success, otherwise the errno (EEXIST if `target` is taken, EXDEV across volumes).
+    static func exclusiveRename(_ item: URL, to target: URL) -> Int32 {
+        var rc = renamex_np(item.path, target.path, UInt32(RENAME_EXCL))
         if rc != 0 && (errno == ENOTSUP || errno == EINVAL) {
             // Volumes without RENAME_EXCL (some network file systems): check, then plain rename.
             var info = stat()
             if lstat(target.path, &info) == 0 {
-                errno = EEXIST
-            } else {
-                rc = rename(staging.path, target.path)
+                return EEXIST
             }
+            rc = rename(item.path, target.path)
         }
-        if rc == 0 { return nil }
-        if errno == EEXIST {
-            return String(
-                localized: "An item named “\(target.lastPathComponent)” appeared in the destination during the transfer. It was left unchanged.")
+        return rc == 0 ? 0 : errno
+    }
+
+    /// Moves `source` to the free path `target` on another volume with the same rules as a cross-volume
+    /// transfer: copy under a staging name next to `target`, rename it into place exclusively, and only
+    /// then delete the source. The name of `target` may differ from the source's.
+    /// Returns an error message, or nil on success.
+    static func moveAcrossVolumes(_ source: URL, to target: URL) -> String? {
+        let fileManager = FileManager()
+        let staging = target.deletingLastPathComponent().appendingPathComponent(".mc-partial-\(UUID().uuidString)")
+        switch copy(source, to: staging, allowClone: true, cancel: CancelFlag(), report: { _ in }) {
+        case .success:
+            if let message = commitStaging(staging, to: target) {
+                try? fileManager.removeItem(at: staging)
+                return message
+            }
+        case .cancelled:
+            // Unreachable: nothing sets the cancel flag.
+            try? fileManager.removeItem(at: staging)
+            return String(cString: strerror(ECANCELED))
+        case .failed(let message):
+            try? fileManager.removeItem(at: staging)
+            return message
         }
-        return String(cString: strerror(errno))
+        do {
+            try fileManager.removeItem(at: source)
+        } catch {
+            return error.localizedDescription
+        }
+        return nil
     }
 
     // MARK: - Paths
@@ -378,7 +423,7 @@ public enum FileTransfer {
         }
     }
 
-    private static func isSameFile(_ a: URL, _ b: URL) -> Bool {
+    static func isSameFile(_ a: URL, _ b: URL) -> Bool {
         guard let ia = try? a.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier,
             let ib = try? b.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier
         else { return false }
@@ -391,7 +436,7 @@ public enum FileTransfer {
     }
 
     /// lstat-based, so a dangling symlink counts as existing.
-    private static func entryExists(_ url: URL, fileManager: FileManager) -> Bool {
+    static func entryExists(_ url: URL, fileManager: FileManager) -> Bool {
         (try? fileManager.attributesOfItem(atPath: url.path)) != nil
     }
 
