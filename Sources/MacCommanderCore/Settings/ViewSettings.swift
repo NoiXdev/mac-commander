@@ -63,11 +63,14 @@ public struct ViewSettings: Codable, Equatable, Sendable {
     public var sortOrder = FileSortOrder.default
     public var showHiddenFiles = false
     public var showCheckboxColumn = true
+    public var showPreview = false
+    public var markdownShowsSource = false
 
     public init() {}
 
     private enum CodingKeys: String, CodingKey {
         case columnLayout, sortOrder, showHiddenFiles, showCheckboxColumn
+        case showPreview, markdownShowsSource
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -79,6 +82,9 @@ public struct ViewSettings: Codable, Equatable, Sendable {
         showHiddenFiles = (try? c.decodeIfPresent(Bool.self, forKey: .showHiddenFiles)) ?? d.showHiddenFiles
         showCheckboxColumn =
             (try? c.decodeIfPresent(Bool.self, forKey: .showCheckboxColumn)) ?? d.showCheckboxColumn
+        showPreview = (try? c.decodeIfPresent(Bool.self, forKey: .showPreview)) ?? d.showPreview
+        markdownShowsSource =
+            (try? c.decodeIfPresent(Bool.self, forKey: .markdownShowsSource)) ?? d.markdownShowsSource
     }
 }
 

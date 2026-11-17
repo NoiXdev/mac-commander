@@ -76,4 +76,22 @@ import Testing
             #expect(store.settings.sortOrder.foldersOnTop)
         }
     }
+
+    @Test func viewSettingsDecodeNewKeysLeniently() {
+        withDefaults { defaults in
+            defaults.set(Data(#"{"showHiddenFiles":true}"#.utf8), forKey: "viewSettings.v1")
+            let old = ViewSettingsStore(defaults: defaults).settings
+            #expect(old.showPreview == false)
+            #expect(old.markdownShowsSource == false)
+            #expect(old.showHiddenFiles)
+
+            defaults.set(
+                Data(#"{"showHiddenFiles":true,"showPreview":true,"markdownShowsSource":"bogus"}"#.utf8),
+                forKey: "viewSettings.v1")
+            let mixed = ViewSettingsStore(defaults: defaults).settings
+            #expect(mixed.showPreview)
+            #expect(mixed.markdownShowsSource == false)
+            #expect(mixed.showHiddenFiles)
+        }
+    }
 }
