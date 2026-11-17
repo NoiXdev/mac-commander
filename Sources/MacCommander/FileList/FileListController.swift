@@ -85,6 +85,7 @@ final class FileListController: NSViewController {
         observeLoadError()
         observeSettings()
         observePendingRename()
+        observeOperationFolders()
     }
 
     override func viewDidAppear() {

@@ -188,6 +188,44 @@ extension FileListController {
         startPendingRename()
     }
 
+    // MARK: - Operations
+
+    /// File operations and undo post the folders they changed (in every window). The model reloads the
+    /// current folder; inline-expanded subfolders are not watched, so the list re-lists those itself.
+    /// The selector-based observer is removed automatically when the controller goes away.
+    func observeOperationFolders() {
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(operationFoldersDidChange(_:)), name: FileOperationCenter.foldersDidChange,
+            object: model.operations)
+    }
+
+    @objc func operationFoldersDidChange(_ notification: Notification) {
+        let folders = notification.userInfo?["folders"] as? [URL] ?? []
+        // Posted on the main actor; re-list on the next turn, after the operation's own updates.
+        Task { @MainActor [weak self] in self?.refreshLoadedSubfolders(matching: folders) }
+    }
+
+    /// Re-lists every loaded subfolder (children cached, expanded or not) whose canonical path is one of
+    /// `folders`. Re-listing is done per node rather than by reloading the root, which Observation may skip
+    /// when the root's items didn't change.
+    func refreshLoadedSubfolders(matching folders: [URL]) {
+        guard !folders.isEmpty, showsCurrentFolder else { return }
+        var loaded: [FileNode] = []
+        func collect(_ nodes: [FileNode]) {
+            for node in nodes {
+                guard let children = node.children else { continue }
+                loaded.append(node)
+                collect(children)
+            }
+        }
+        collect(roots)
+        guard !loaded.isEmpty else { return }
+        let matched = Set(PathUtilities.folders(loaded.map(\.url), matching: folders))
+        for node in loaded where matched.contains(node.url) {
+            loadChildren(of: node, expand: false)
+        }
+    }
+
     func applyingChanges(_ body: () -> Void) {
         changeDepth += 1
         defer { changeDepth -= 1 }

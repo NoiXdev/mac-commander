@@ -41,4 +41,19 @@ struct PathUtilitiesTests {
         #expect(PathUtilities.topLevel([url("/a/F/x"), url("/a/F")]).map(\.path) == ["/a/F"])
         #expect(PathUtilities.topLevel([]).isEmpty)
     }
+
+    @Test func matchingFoldersComparesCanonicalPaths() throws {
+        let tmp = try TemporaryDirectory()
+        let real = try tmp.folder("real")
+        let sub = try tmp.folder("real/sub")
+        let other = try tmp.folder("other")
+        let link = tmp.url.appendingPathComponent("link")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+        let viaLink = link.appendingPathComponent("sub")
+
+        let matched = PathUtilities.folders([viaLink, other, real], matching: [sub, real.appendingPathComponent("../real/")])
+
+        #expect(matched == [viaLink, real])
+        #expect(PathUtilities.folders([other], matching: []).isEmpty)
+    }
 }

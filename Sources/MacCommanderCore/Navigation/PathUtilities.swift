@@ -35,4 +35,13 @@ public enum PathUtilities {
             return true
         }
     }
+
+    /// The URLs of `candidates` that are one of `changed`, compared by canonical path (symlinks resolved,
+    /// standardized), in their order. Touches the file system to resolve symlinks: keep `candidates` small.
+    public static func folders(_ candidates: [URL], matching changed: [URL]) -> [URL] {
+        guard !changed.isEmpty else { return [] }
+        func canonical(_ url: URL) -> String { url.resolvingSymlinksInPath().standardizedFileURL.path }
+        let changedPaths = Set(changed.map(canonical))
+        return candidates.filter { changedPaths.contains(canonical($0)) }
+    }
 }
