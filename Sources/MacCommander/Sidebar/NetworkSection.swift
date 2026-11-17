@@ -46,6 +46,11 @@ struct NetworkSection: View {
                 Task { await ShareActions.disconnect(share, manager: manager, sheets: sheets) }
             }
             .disabled(!(Self.isConnected(status) || (status == .unreachable && manager.hasMountPoint(share.id))))
+            Divider()
+            Button(String(localized: "Edit…")) { sheets.editing = share }
+            Button(String(localized: "Remove…")) {
+                Task { await ShareActions.confirmRemove(share, manager: manager, sheets: sheets) }
+            }
         }
     }
 

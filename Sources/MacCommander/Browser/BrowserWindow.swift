@@ -166,6 +166,9 @@ struct BrowserWindow: View {
         .sheet(item: Bindable(shareSheets).signIn) { share in
             SignInSheet(share: share, model: model, sheets: shareSheets)
         }
+        .sheet(item: Bindable(shareSheets).editing) { share in
+            EditShareSheet(share: share)
+        }
         .background(WindowReader(box: shareSheets.window))
         .task { await model.reload() }
         .onChange(of: model.currentURL, initial: true) { _, url in storedPath = url.path }

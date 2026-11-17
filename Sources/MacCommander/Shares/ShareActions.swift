@@ -10,6 +10,8 @@ final class ShareSheets {
     var showConnectToServer = false
     /// The share the sign-in sheet is shown for.
     var signIn: SavedShare?
+    /// The share the Edit sheet is shown for.
+    var editing: SavedShare?
     /// The window the sheets and alerts belong to (set by `WindowReader`).
     @ObservationIgnored let window = WindowBox()
 }
@@ -87,6 +89,24 @@ enum ShareActions {
                 [String(localized: "“\(share.name)” couldn’t be disconnected: \(message)")],
                 window: sheets.window.window)
         }
+    }
+
+    /// Asks to remove the share from the sidebar. It stays mounted and its Keychain item is kept.
+    static func confirmRemove(_ share: SavedShare, manager: ShareManager, sheets: ShareSheets) async {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = String(localized: "Remove “\(share.name)” from the sidebar?")
+        alert.informativeText = String(
+            localized:
+                "The share stays connected until you disconnect it. Saved passwords are kept in the Keychain.")
+        let remove = alert.addButton(withTitle: String(localized: "Remove"))
+        remove.hasDestructiveAction = true
+        let cancel = alert.addButton(withTitle: String(localized: "Cancel"))
+        // Cancel is the default button (Return); Remove has no key equivalent.
+        remove.keyEquivalent = ""
+        cancel.keyEquivalent = "\r"
+        guard await run(alert, window: sheets.window.window) == .alertFirstButtonReturn else { return }
+        await manager.remove(share.id)
     }
 
     /// As a sheet on the window, or app-modal when there is none or it already shows a sheet.
