@@ -57,6 +57,11 @@ final class FileOutlineView: NSOutlineView {
         return menu
     }
 
+    /// File ▸ Open (⌘O), sent through the responder chain.
+    @objc func openSelectedItems(_ sender: Any?) {
+        onOpenSelection?()
+    }
+
     override func keyDown(with event: NSEvent) {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags.isDisjoint(with: [.command, .option, .control, .shift]) {

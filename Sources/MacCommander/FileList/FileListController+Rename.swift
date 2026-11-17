@@ -96,11 +96,12 @@ extension FileListController: NSTextFieldDelegate {
     func endRename(commit: Bool, restoreFocus: Bool = true) {
         guard let session = rename.session else { return }
         // A reload during the edit may have removed the cell or reused it for another row; its
-        // field then isn't the user's input for this item. Resume on the item's current cell
-        // instead (unless focus is moving elsewhere), so the typed name isn't silently lost.
+        // field then isn't the user's input for this item. On a commit, resume on the item's
+        // current cell instead (unless focus is moving elsewhere), so the typed name isn't
+        // silently lost. A cancel (Escape) just ends the edit.
         guard isIntact(session) else {
             abandonRename(session, restoreFocus: restoreFocus)
-            if restoreFocus, showsCurrentFolder, let node = loadedNode(path: session.url.path) {
+            if commit, restoreFocus, showsCurrentFolder, let node = loadedNode(path: session.url.path) {
                 beginRename(of: node, text: session.text)
             }
             return

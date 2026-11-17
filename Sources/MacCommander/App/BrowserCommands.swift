@@ -1,3 +1,4 @@
+import AppKit
 import MacCommanderCore
 import SwiftUI
 
@@ -9,6 +10,9 @@ struct BrowserCommands: Commands {
     var body: some Commands {
         // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
         CommandGroup(after: .newItem) {
+            Button("Open") { openSelection() }
+                .keyboardShortcut("o")
+                .disabled(model?.selection.isEmpty != false)
             Divider()
             Button("New Folder") { run { await BrowserActions.newFolder($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -48,6 +52,13 @@ struct BrowserCommands: Commands {
             Toggle("Show Checkbox Column", isOn: Binding(
                 get: { settings.settings.showCheckboxColumn },
                 set: { settings.settings.showCheckboxColumn = $0 }))
+        }
+    }
+
+    /// Opens the selection like ⌘↓, through the focused file list (the responder chain).
+    private func openSelection() {
+        if !NSApp.sendAction(#selector(FileOutlineView.openSelectedItems(_:)), to: nil, from: nil) {
+            NSSound.beep()
         }
     }
 

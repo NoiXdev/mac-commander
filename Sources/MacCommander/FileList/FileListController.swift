@@ -39,6 +39,12 @@ final class FileListController: NSViewController {
     private(set) var outlineView = FileOutlineView()
     private let scrollView = NSScrollView()
     private var errorHost: NSHostingView<LoadErrorView>?
+    /// Shown when a load takes longer than `spinnerDelay`.
+    private let spinner = NSProgressIndicator()
+    private var spinnerTask: Task<Void, Never>?
+    private static let spinnerDelay: Duration = .milliseconds(300)
+    /// Shown for a listed folder without items.
+    private let emptyLabel = PassthroughLabel(labelWithString: String(localized: "No items"))
 
     var roots: [FileNode] = []
     /// Folders the user expanded, restored by URL after reloads.
@@ -86,12 +92,15 @@ final class FileListController: NSViewController {
             scrollView.topAnchor.constraint(equalTo: container.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
+        configureStatusViews(in: container)
         view = container
 
         applySettings()
         applyItems()
         applyLoadError()
+        applyLoadingState()
         observeItems()
+        observeLoading()
         observeCurrentFolder()
         observeSelection()
         observeLoadError()
@@ -145,6 +154,25 @@ final class FileListController: NSViewController {
         outline.delegate = self
     }
 
+    /// The spinner and the "No items" label, centered above the list.
+    private func configureStatusViews(in container: NSView) {
+        spinner.style = .spinning
+        spinner.controlSize = .regular
+        spinner.isDisplayedWhenStopped = false
+        spinner.isHidden = true
+        emptyLabel.textColor = .secondaryLabelColor
+        emptyLabel.font = .systemFont(ofSize: NSFont.systemFontSize + 2)
+        emptyLabel.isHidden = true
+        for status in [spinner, emptyLabel] as [NSView] {
+            status.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(status)
+            NSLayoutConstraint.activate([
+                status.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                status.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+            ])
+        }
+    }
+
     private func makeColumns() {
         let checkbox = NSTableColumn(identifier: .checkboxColumn)
         checkbox.headerCell = CheckboxHeaderCell(textCell: "")
@@ -176,6 +204,7 @@ final class FileListController: NSViewController {
     private func observeItems() {
         withObservationTracking {
             _ = model.items
+            _ = model.listedURL
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.observeItems()
@@ -185,7 +214,8 @@ final class FileListController: NSViewController {
     }
 
     /// Navigation changes `currentURL` before the new items arrive: clear the old rows at once,
-    /// so nothing from the previous folder can be selected or opened meanwhile.
+    /// so nothing from the previous folder can be selected or opened meanwhile. (`applyItems`
+    /// shows only a listing of the current folder; going back to the listed folder restores it.)
     private func observeCurrentFolder() {
         withObservationTracking {
             _ = model.currentURL
@@ -198,15 +228,12 @@ final class FileListController: NSViewController {
     }
 
     private func currentFolderDidChange() {
-        guard model.currentURL != displayedFolder, displayedFolder != nil || !roots.isEmpty else { return }
-        endRename(commit: true)
-        outlineView.quickLook?.folderDidChange()
-        displayedFolder = nil
-        roots.forEach { $0.detach() }
-        roots = []
-        expandedURLs = []
-        applyingChanges { outlineView.reloadData() }
-        updateCheckboxStates()
+        guard model.currentURL != displayedFolder else { return }
+        if displayedFolder != nil || !roots.isEmpty {
+            endRename(commit: true)
+            outlineView.quickLook?.folderDidChange()
+        }
+        applyItems()
     }
 
     /// False while the rows still belong to a folder other than `model.currentURL`.
@@ -225,6 +252,17 @@ final class FileListController: NSViewController {
     private func selectionDidChangeInModel() {
         observeSelection()
         if model.selection != syncedSelection { syncSelectionFromModel() }
+    }
+
+    private func observeLoading() {
+        withObservationTracking {
+            _ = model.isLoading
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observeLoading()
+                self?.applyLoadingState()
+            }
+        }
     }
 
     private func observeLoadError() {
@@ -252,6 +290,7 @@ final class FileListController: NSViewController {
     // MARK: - Load error
 
     private func applyLoadError() {
+        updateEmptyLabel()
         guard let error = model.loadError else {
             errorHost?.isHidden = true
             scrollView.isHidden = false
@@ -263,7 +302,7 @@ final class FileListController: NSViewController {
         } else {
             let host = NSHostingView(rootView: LoadErrorView(error: error))
             host.translatesAutoresizingMaskIntoConstraints = false
-            view.addSubview(host)
+            view.addSubview(host, positioned: .below, relativeTo: spinner)
             NSLayoutConstraint.activate([
                 host.leadingAnchor.constraint(equalTo: view.leadingAnchor),
                 host.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -275,14 +314,47 @@ final class FileListController: NSViewController {
         scrollView.isHidden = true
     }
 
+    // MARK: - Loading and empty state
+
+    /// The spinner appears only when loading takes noticeably long, so quick loads don't flicker.
+    private func applyLoadingState() {
+        spinnerTask?.cancel()
+        spinnerTask = nil
+        if model.isLoading {
+            if spinner.isHidden {
+                spinnerTask = Task { [weak self] in
+                    try? await Task.sleep(for: Self.spinnerDelay)
+                    guard !Task.isCancelled, let self, self.model.isLoading else { return }
+                    self.spinner.isHidden = false
+                    self.spinner.startAnimation(nil)
+                }
+            }
+        } else {
+            spinner.stopAnimation(nil)
+            spinner.isHidden = true
+        }
+        updateEmptyLabel()
+    }
+
+    /// "No items" only for a successfully listed, empty current folder (not while loading).
+    private func updateEmptyLabel() {
+        let isEmptyFolder =
+            !model.isLoading && model.loadError == nil && model.items.isEmpty
+            && model.listedURL != nil && model.listedURL == model.currentURL
+        if emptyLabel.isHidden == isEmptyFolder { emptyLabel.isHidden = !isEmptyFolder }
+    }
+
     // MARK: - Items
 
-    /// Shows `model.items`. A new folder resets the tree; the same folder is diffed by URL, keeping
-    /// scroll position, selection and expansion. Loaded subfolders are re-listed if expanded and
-    /// dropped from the cache otherwise.
+    /// Shows `model.items`. Rows belong to `model.listedURL`, the folder the items were listed
+    /// from; items of a folder that is no longer current are not shown. A new folder resets the
+    /// tree; the same folder is diffed by URL, keeping scroll position, selection and expansion.
+    /// Loaded subfolders are re-listed if expanded and dropped from the cache otherwise.
     private func applyItems() {
-        let items = model.items
-        let folder = model.currentURL
+        updateEmptyLabel()
+        let isCurrent = model.listedURL != nil && model.listedURL == model.currentURL
+        let items = isCurrent ? model.items : []
+        let folder = isCurrent ? model.listedURL : nil
         if folder != displayedFolder {
             displayedFolder = folder
             roots.forEach { $0.detach() }
@@ -512,9 +584,10 @@ final class FileListController: NSViewController {
         Task { await model.open(item) }
     }
 
-    /// ⌘↓: a single item opens (folders navigate); with several, only the files are opened.
+    /// ⌘↓ and File ▸ Open (⌘O): a single item opens (folders navigate); with several, only the
+    /// files are opened. Not while a name is being edited.
     private func openSelection() {
-        guard showsCurrentFolder else { return }
+        guard showsCurrentFolder, rename.session == nil else { return }
         let items = outlineView.selectedRowIndexes.compactMap { node(atRow: $0)?.item }
         guard !items.isEmpty else { return }
         let toOpen = items.count == 1 ? items : items.filter { !$0.isDirectory }
@@ -765,4 +838,9 @@ extension FileListController: NSMenuDelegate {
             menu.addItem(item)
         }
     }
+}
+
+/// A label that lets clicks through to the list below (e.g. a right-click for New Folder).
+private final class PassthroughLabel: NSTextField {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
