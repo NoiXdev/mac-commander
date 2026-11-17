@@ -9,14 +9,16 @@ import Foundation
 /// - the only permanent delete is `removeStaging`, of the staging folder this run created.
 ///
 /// Staged folders are made owner-writable (u+rwx): bsdtar restores modes such as `r-x`, and macOS can
-/// neither move a folder without write permission to a new parent nor empty it.
+/// neither move a folder without write permission to a new parent nor empty it. Staged items get the
+/// archive's quarantine attribute (bsdtar doesn't copy it).
 public enum ArchiveExtractor {
     static let bsdtar = URL(fileURLWithPath: "/usr/bin/bsdtar")
     static let stagingPrefix = ".mc-partial-"
 
     /// Extracts `entries` (paths inside the archive, "" = everything) into a new hidden staging folder
     /// `<destination>/.mc-partial-<UUID>` and returns the staged top-level items: for each requested entry
-    /// the item at `staging/<entry>`, or for "" every top-level item of the staging folder.
+    /// the item at `staging/<entry>`, or for "" every top-level item of the staging folder (`__MACOSX`
+    /// folders left out; an archive with nothing else throws "The archive is empty.").
     /// The caller moves them and must call `removeStaging`. On error, staging is removed before throwing.
     ///
     /// A non-zero bsdtar exit is a failure even if every requested item exists, because the data may be
@@ -39,9 +41,14 @@ public enum ArchiveExtractor {
             var arguments = [
                 "-x", "-f", archive.path, "-C", staging.path, "--no-same-owner",
                 // Always pass a passphrase: without one bsdtar prompts "Enter passphrase:" forever.
-                "--passphrase", password ?? UUID().uuidString, "--",
+                "--passphrase", password ?? UUID().uuidString,
             ]
-            if let requested { arguments += requested.map { pattern(for: $0.joined(separator: "/")) } }
+            if let requested {
+                arguments += ["--"] + requested.map { pattern(for: $0.joined(separator: "/")) }
+            } else {
+                // Everything except macOS resource-fork folders; the pattern matches them at any depth.
+                arguments += ["--exclude", "__MACOSX"]
+            }
             let output: ProcessOutput
             do {
                 output = try await ProcessRunner.run(bsdtar, arguments)
@@ -55,6 +62,7 @@ public enum ArchiveExtractor {
             }
             try Task.checkCancellation()
             makeFoldersOwnerWritable(staging)
+            if let quarantine = quarantine(of: archive) { setQuarantine(quarantine, below: staging) }
 
             let items: [URL]
             if let requested {
@@ -62,6 +70,9 @@ public enum ArchiveExtractor {
             } else {
                 items = try fileManager.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
                     .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                if items.isEmpty {
+                    throw ArchiveError.unreadable(message: String(localized: "The archive is empty."))
+                }
             }
             return (staging, items)
         } catch {
@@ -180,6 +191,38 @@ public enum ArchiveExtractor {
         if wanted != info.st_mode { chmod(folder.path, wanted & 0o7777) }
         guard let names = try? FileManager().contentsOfDirectory(atPath: folder.path) else { return }
         for name in names { makeFoldersOwnerWritable(folder.appendingPathComponent(name)) }
+    }
+
+    static let quarantineName = "com.apple.quarantine"
+
+    /// The archive's `com.apple.quarantine` value, or nil when it has none.
+    private static func quarantine(of archive: URL) -> [UInt8]? {
+        let size = getxattr(archive.path, quarantineName, nil, 0, 0, 0)
+        guard size > 0 else { return nil }
+        var value = [UInt8](repeating: 0, count: size)
+        guard getxattr(archive.path, quarantineName, &value, size, 0, 0) == size else { return nil }
+        return value
+    }
+
+    /// Gives every item below `folder` the quarantine `value`, as Archive Utility does, so Gatekeeper still
+    /// checks a downloaded app or script. Items are found with `lstat`, and the attribute is set on links
+    /// themselves (`XATTR_NOFOLLOW`), never on what they point to. Folders are owner-writable already;
+    /// a read-only file gets u+w just for the call. Best effort.
+    private static func setQuarantine(_ value: [UInt8], below folder: URL) {
+        guard let names = try? FileManager().contentsOfDirectory(atPath: folder.path) else { return }
+        for name in names {
+            let url = folder.appendingPathComponent(name)
+            var info = stat()
+            guard lstat(url.path, &info) == 0 else { continue }
+            let type = info.st_mode & S_IFMT
+            if setxattr(url.path, quarantineName, value, value.count, 0, XATTR_NOFOLLOW) != 0, errno == EACCES,
+                type == S_IFREG, chmod(url.path, (info.st_mode | S_IWUSR) & 0o7777) == 0
+            {
+                setxattr(url.path, quarantineName, value, value.count, 0, XATTR_NOFOLLOW)
+                chmod(url.path, info.st_mode & 0o7777)
+            }
+            if type == S_IFDIR { setQuarantine(value, below: url) }
+        }
     }
 
     private static func notInArchive(_ entry: String) -> ArchiveError {

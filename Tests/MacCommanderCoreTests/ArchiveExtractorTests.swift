@@ -289,6 +289,55 @@ struct ArchiveExtractorTests {
         #expect(f.center.undo.records.count == 3)
     }
 
+    /// `__MACOSX` resource folders (at any depth) are left out of "Extract All"; an archive with nothing
+    /// else is reported as empty and leaves nothing behind.
+    @Test func extractAllSkipsMacOSXFoldersAndRefusesEmptyArchives() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(
+            ["a/k.txt": "K", "a/__MACOSX/x": "1", "__MACOSX/a/._k.txt": "2"], format: "zip", in: f.tmp,
+            name: "mac.zip")
+        let result = try await f.center.extractAll(zip, into: f.dst, resolver: failOnConflict)
+        #expect(result.outcome == .finished)
+        #expect(f.dstNames == ["a"])
+        #expect(f.names(in: f.dst.appendingPathComponent("a")) == ["k.txt"])
+
+        let onlyMac = try ArchiveFixtures.makeArchive(
+            ["__MACOSX/._k.txt": "2"], format: "zip", in: f.tmp, name: "only.zip")
+        await #expect(throws: ArchiveError.unreadable(message: "The archive is empty.")) {
+            _ = try await f.center.extractAll(onlyMac, into: f.dst, resolver: failOnConflict)
+        }
+        #expect(f.dstNames == ["a"])
+    }
+
+    /// Like Archive Utility: extracted items inherit the archive's quarantine, so Gatekeeper still checks
+    /// a downloaded app or script. Read-only items get it too.
+    @Test func stagedItemsInheritQuarantine() async throws {
+        let f = try ExtractFixture()
+        let src = try f.tmp.folder("q-src")
+        try f.tmp.file("q-src/run.command", contents: "echo hi")
+        try f.tmp.file("q-src/sub/ro.txt", contents: "R")
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o444], ofItemAtPath: src.appendingPathComponent("sub/ro.txt").path)
+        let archive = f.tmp.url.appendingPathComponent("q.tar")
+        try ArchiveFixtures.run("/usr/bin/bsdtar", ["-c", "-f", archive.path, "-C", src.path, "."])
+        let plain = f.tmp.url.appendingPathComponent("plain.tar")
+        try ArchiveFixtures.run("/usr/bin/bsdtar", ["-c", "-f", plain.path, "-C", src.path, "."])
+        let value = "0083;00000000;MacCommanderTests;"
+        #expect(setxattr(archive.path, "com.apple.quarantine", value, value.utf8.count, 0, 0) == 0)
+
+        let staged = try await ArchiveExtractor.stage([""], from: archive, near: f.dst, password: nil)
+        defer { ArchiveExtractor.removeStaging(staged.staging) }
+        for path in ["run.command", "sub", "sub/ro.txt"] {
+            #expect(quarantine(staged.staging.appendingPathComponent(path)) == value, "\(path)")
+        }
+        // The read-only file stays read-only.
+        #expect(!FileManager.default.isWritableFile(atPath: staged.staging.appendingPathComponent("sub/ro.txt").path))
+
+        let clean = try await ArchiveExtractor.stage(["run.command"], from: plain, near: f.dst, password: nil)
+        defer { ArchiveExtractor.removeStaging(clean.staging) }
+        #expect(quarantine(clean.items[0]) == nil)
+    }
+
     @Test func cancelRemovesStaging() async throws {
         let f = try ExtractFixture()
         let src = try f.tmp.folder("big")
@@ -390,4 +439,13 @@ struct ArchiveExtractorTests {
         #expect(base("doc.docx") == "doc")
         #expect(base("plain.dat") == "plain")
     }
+}
+
+/// The `com.apple.quarantine` value of `url` itself (links not followed), or nil.
+private func quarantine(_ url: URL) -> String? {
+    let size = getxattr(url.path, "com.apple.quarantine", nil, 0, 0, XATTR_NOFOLLOW)
+    guard size >= 0 else { return nil }
+    var buffer = [UInt8](repeating: 0, count: size)
+    guard getxattr(url.path, "com.apple.quarantine", &buffer, size, 0, XATTR_NOFOLLOW) == size else { return nil }
+    return String(decoding: buffer, as: UTF8.self)
 }
