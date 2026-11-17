@@ -90,6 +90,7 @@ final class FileListController: NSViewController {
         applyItems()
         applyLoadError()
         observeItems()
+        observeCurrentFolder()
         observeSelection()
         observeLoadError()
         observeSettings()
@@ -106,6 +107,8 @@ final class FileListController: NSViewController {
         outline.style = .fullWidth
         outline.usesAlternatingRowBackgroundColors = true
         outline.allowsMultipleSelection = true
+        // A header click must never select a column: that would clear the row selection.
+        outline.allowsColumnSelection = false
         outline.allowsEmptySelection = true
         outline.allowsColumnReordering = true
         outline.allowsColumnResizing = true
@@ -169,6 +172,34 @@ final class FileListController: NSViewController {
                 self?.applyItems()
             }
         }
+    }
+
+    /// Navigation changes `currentURL` before the new items arrive: clear the old rows at once,
+    /// so nothing from the previous folder can be selected or opened meanwhile.
+    private func observeCurrentFolder() {
+        withObservationTracking {
+            _ = model.currentURL
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observeCurrentFolder()
+                self?.currentFolderDidChange()
+            }
+        }
+    }
+
+    private func currentFolderDidChange() {
+        guard model.currentURL != displayedFolder, displayedFolder != nil || !roots.isEmpty else { return }
+        displayedFolder = nil
+        roots.forEach { $0.detach() }
+        roots = []
+        expandedURLs = []
+        applyingChanges { outlineView.reloadData() }
+        updateCheckboxStates()
+    }
+
+    /// False while the rows still belong to a folder other than `model.currentURL`.
+    private var showsCurrentFolder: Bool {
+        displayedFolder == model.currentURL
     }
 
     private func observeSelection() {
@@ -409,6 +440,7 @@ final class FileListController: NSViewController {
     }
 
     private func writeSelectionToModel() {
+        guard showsCurrentFolder else { return }
         var urls = Set<URL>()
         for row in outlineView.selectedRowIndexes {
             if let node = node(atRow: row) { urls.insert(node.url) }
@@ -441,18 +473,6 @@ final class FileListController: NSViewController {
         }
     }
 
-    /// A row checkbox toggles only its row, like ⌘-click.
-    @objc private func checkboxClicked(_ sender: NSButton) {
-        let row = outlineView.row(for: sender)
-        guard row >= 0 else { return }
-        if outlineView.isRowSelected(row) {
-            outlineView.deselectRow(row)
-        } else {
-            outlineView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: true)
-        }
-        updateCheckboxStates()
-    }
-
     private func toggleSelectAll() {
         if outlineView.numberOfRows > 0, outlineView.selectedRowIndexes.count == outlineView.numberOfRows {
             outlineView.deselectAll(nil)
@@ -465,13 +485,14 @@ final class FileListController: NSViewController {
 
     @objc private func openClickedRow() {
         let row = outlineView.clickedRow
-        guard row >= 0, let node = node(atRow: row) else { return }
+        guard showsCurrentFolder, row >= 0, let node = node(atRow: row) else { return }
         let item = node.item
         Task { await model.open(item) }
     }
 
     /// ⌘↓: a single item opens (folders navigate); with several, only the files are opened.
     private func openSelection() {
+        guard showsCurrentFolder else { return }
         let items = outlineView.selectedRowIndexes.compactMap { node(atRow: $0)?.item }
         guard !items.isEmpty else { return }
         let toOpen = items.count == 1 ? items : items.filter { !$0.isDirectory }
@@ -601,9 +622,13 @@ extension FileListController: NSOutlineViewDelegate {
     func outlineView(_ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
         guard let tableColumn, let node = item as? FileNode else { return nil }
         if tableColumn.identifier == .checkboxColumn {
-            // The checkbox state is set in `didAdd rowView`, where the row index is known.
-            return outlineView.makeView(withIdentifier: .checkboxCell, owner: self)
-                ?? CheckboxCellView(target: self, action: #selector(checkboxClicked(_:)))
+            // Clicks are handled by `FileOutlineView.mouseDown`; the cell only mirrors the selection.
+            let cell =
+                outlineView.makeView(withIdentifier: .checkboxCell, owner: self) as? CheckboxCellView
+                ?? CheckboxCellView()
+            let row = outlineView.row(forItem: node)
+            cell.checkbox.state = row >= 0 && outlineView.isRowSelected(row) ? .on : .off
+            return cell
         }
         guard let column = FileColumn(rawValue: tableColumn.identifier.rawValue) else { return nil }
         let alpha: CGFloat = node.item.isHidden ? 0.5 : 1

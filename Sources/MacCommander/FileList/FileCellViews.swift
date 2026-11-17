@@ -71,15 +71,14 @@ final class FileTextCellView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 }
 
-/// Checkbox column: mirrors whether the row is selected.
+/// Checkbox column: mirrors whether the row is selected. Not interactive itself: clicks pass
+/// through to `FileOutlineView`, which toggles the row's selection.
 final class CheckboxCellView: NSTableCellView {
     let checkbox = NSButton(checkboxWithTitle: "", target: nil, action: nil)
 
-    init(target: AnyObject, action: Selector) {
+    init() {
         super.init(frame: .zero)
         identifier = .checkboxCell
-        checkbox.target = target
-        checkbox.action = action
         checkbox.refusesFirstResponder = true
         checkbox.imagePosition = .imageOnly
         checkbox.translatesAutoresizingMaskIntoConstraints = false
@@ -91,6 +90,10 @@ final class CheckboxCellView: NSTableCellView {
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
+    }
 }
 
 /// Cell text for the non-name columns.
@@ -151,7 +154,8 @@ final class FileIconProvider {
         let key = item.isDirectory ? "/folder" : item.url.pathExtension.lowercased()
         if let icon = typeIcons[key] { return icon }
         let type: UTType = item.isDirectory ? .folder : (UTType(filenameExtension: key) ?? .data)
-        let icon = NSWorkspace.shared.icon(for: type)
+        // Copy before resizing: NSWorkspace may hand out shared image instances.
+        let icon = NSWorkspace.shared.icon(for: type).copy() as? NSImage ?? NSImage()
         icon.size = Self.iconSize
         typeIcons[key] = icon
         return icon
@@ -159,7 +163,7 @@ final class FileIconProvider {
 
     func loadFileIcon(for url: URL) -> NSImage {
         if let icon = cachedFileIcon(for: url) { return icon }
-        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSImage()
         icon.size = Self.iconSize
         fileIcons.setObject(icon, forKey: url as NSURL)
         return icon
