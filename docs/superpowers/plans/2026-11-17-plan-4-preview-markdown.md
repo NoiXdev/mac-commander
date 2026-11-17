@@ -281,7 +281,7 @@ public enum PreviewResourceURL {
   - New-window requests (`createWebViewWith`) return nil and apply the same rule to the request.
 - **Appearance:** the stylesheet follows the system appearance. The web view's `underPageBackgroundColor = .textBackgroundColor`, and `drawsBackground` is left on.
 - **Rendered/Source:** a segmented control (Rendered | Source) appears in the panel header only for rendered previews and is bound to `settings.markdownShowsSource`. Source is a monospaced, selectable `NSTextView` (read-only) showing `rendered.source`.
-- **Live update:** while a real file (not an archive entry) is previewed, a `DirectoryWatcher` on the file itself is active. A change re-renders after the existing debounce and keeps the scroll position by restoring `window.scrollY`? No: JavaScript is off. Keep it simple and accept that the view scrolls to the top on change.
+- **Live update:** while a real file (not an archive entry) is previewed, a `DirectoryWatcher` on the file itself is active. A change re-renders after the existing debounce. With JavaScript off, the scroll position resets to the top on change; accepted.
 
 - [ ] **Step 1: Write the failing Core test.** `revealNavigatesAndSelects`: from `tmp`, `reveal(tmp/sub/x.md)` makes `currentURL == tmp/sub` and `selection == [x.md's item URL]`.
 - [ ] **Step 2: Run** `scripts/test.sh --filter revealNavigatesAndSelects`. Expected: FAIL.
