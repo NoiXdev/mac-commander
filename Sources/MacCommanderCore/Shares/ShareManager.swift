@@ -55,8 +55,9 @@ public final class ShareManager {
     /// Set when every method was rejected; blocks auto-reconnect.
     @ObservationIgnored private var needsSignIn: [UUID: Bool] = [:]
     @ObservationIgnored private var inFlight: [UUID: Task<ConnectOutcome, Never>] = [:]
-    /// Latest known mount point per share, also while its server is unreachable.
-    @ObservationIgnored private var mountPoints: [UUID: URL] = [:]
+    /// Latest known mount point per share, also while its server is unreachable. Observed, so that views using
+    /// `hasMountPoint` update when it changes.
+    private var mountPoints: [UUID: URL] = [:]
     /// The mounted volumes as of the latest listing.
     @ObservationIgnored private var lastMounted: [MountedShare] = []
     /// Shares disconnected in the app; not auto-reconnected for the rest of the session unless the user
@@ -551,6 +552,12 @@ public final class ShareManager {
             return (share, URL(fileURLWithPath: last))
         }
         return longest(previous)
+    }
+
+    /// Whether the share is mounted as far as the manager knows, also while its server is unreachable (then
+    /// Disconnect force-unmounts it).
+    public func hasMountPoint(_ id: UUID) -> Bool {
+        mountPoints[id] != nil
     }
 
     // MARK: Helpers

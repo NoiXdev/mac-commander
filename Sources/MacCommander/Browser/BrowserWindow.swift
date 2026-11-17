@@ -6,6 +6,7 @@ import SwiftUI
 // focused-value keys are spelled out and `State` is used as a plain property.
 private struct BrowserModelKey: FocusedValueKey { typealias Value = BrowserModel }
 private struct GoToFolderPresentedKey: FocusedValueKey { typealias Value = Binding<Bool> }
+private struct ShareSheetsKey: FocusedValueKey { typealias Value = ShareSheets }
 
 extension FocusedValues {
     var browserModel: BrowserModel? {
@@ -15,6 +16,11 @@ extension FocusedValues {
     var goToFolderPresented: Binding<Bool>? {
         get { self[GoToFolderPresentedKey.self] }
         set { self[GoToFolderPresentedKey.self] = newValue }
+    }
+    /// The focused window's share sheets (Go ▸ Connect to Server…).
+    var shareSheets: ShareSheets? {
+        get { self[ShareSheetsKey.self] }
+        set { self[ShareSheetsKey.self] = newValue }
     }
 }
 
@@ -29,6 +35,7 @@ struct BrowserWindow: View {
     private let modelState = State<BrowserModel?>(initialValue: nil)
     private let previewState = State<PreviewController?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
+    private let shareSheetsState = State(initialValue: ShareSheets())
     /// The Finder name of a folder, resolved off the main actor; the title shows it once it matches.
     private let titleState = State<(url: URL, name: String)?>(initialValue: nil)
     private var model: BrowserModel? {
@@ -40,6 +47,7 @@ struct BrowserWindow: View {
         nonmutating set { previewState.wrappedValue = newValue }
     }
     private var showGoToFolder: Binding<Bool> { goToFolderState.projectedValue }
+    private var shareSheets: ShareSheets { shareSheetsState.wrappedValue }
     private var resolvedTitle: (url: URL, name: String)? {
         get { titleState.wrappedValue }
         nonmutating set { titleState.wrappedValue = newValue }
@@ -63,7 +71,7 @@ struct BrowserWindow: View {
 
     private func content(_ model: BrowserModel, preview: PreviewController) -> some View {
         NavigationSplitView {
-            SidebarView(model: model)
+            SidebarView(model: model, shareSheets: shareSheets)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             VStack(spacing: 0) {
@@ -135,6 +143,14 @@ struct BrowserWindow: View {
         .focusedSceneValue(\.browserModel, model)
         .focusedSceneValue(\.goToFolderPresented, showGoToFolder)
         .sheet(isPresented: showGoToFolder) { GoToFolderSheet(model: model) }
+        .focusedSceneValue(\.shareSheets, shareSheets)
+        .sheet(isPresented: Bindable(shareSheets).showConnectToServer) {
+            ConnectToServerSheet(model: model, sheets: shareSheets)
+        }
+        .sheet(item: Bindable(shareSheets).signIn) { share in
+            SignInSheet(share: share, model: model, sheets: shareSheets)
+        }
+        .background(WindowReader(box: shareSheets.window))
         .task { await model.reload() }
         .onChange(of: model.currentURL, initial: true) { _, url in storedPath = url.path }
         // Refresh on focus: a network folder isn't watched reliably, so it is listed again whenever its window

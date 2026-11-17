@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 
 struct SidebarView: View {
     let model: BrowserModel
+    let shareSheets: ShareSheets
     @Environment(FavoritesStore.self) private var favorites
     private let volumesState = State<[VolumeInfo]>(initialValue: [])
     private let missingState = State<SidebarLocation?>(initialValue: nil)
@@ -62,6 +63,7 @@ struct SidebarView: View {
                     .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: volume.url, enabled: true))
                 }
             }
+            NetworkSection(model: model, sheets: shareSheets)
         }
         .listStyle(.sidebar)
         .background(WindowReader(box: windowState.wrappedValue))
@@ -284,7 +286,7 @@ final class WindowBox {
 }
 
 /// An invisible view that records its window in `box`.
-private struct WindowReader: NSViewRepresentable {
+struct WindowReader: NSViewRepresentable {
     let box: WindowBox
 
     func makeNSView(context: Context) -> ReaderView {

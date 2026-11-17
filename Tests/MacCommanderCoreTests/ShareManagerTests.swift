@@ -607,6 +607,21 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await #expect(throws: MountError.self) { try await h.manager.disconnect(here.id) }
     }
 
+    @Test func hasMountPointFollowsMountsAlsoWhileUnreachable() async throws {
+        let h = try Harness()
+        let gone = try h.share("smb://far/Gone", autoReconnect: false)
+        let idle = try h.share("smb://far/Idle", autoReconnect: false)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/Gone"), url: gone.url)])
+
+        await h.refresh()
+        #expect(h.manager.status[gone.id] == .unreachable)
+        #expect(h.manager.hasMountPoint(gone.id))
+        #expect(!h.manager.hasMountPoint(idle.id))
+
+        try await h.manager.disconnect(gone.id)
+        #expect(!h.manager.hasMountPoint(gone.id))
+    }
+
     @Test func userDisconnectIsNotUndoneByAutoReconnect() async throws {
         let h = try Harness()
         let share = try h.share("smb://nas/A")

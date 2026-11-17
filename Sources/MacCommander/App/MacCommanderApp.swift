@@ -18,6 +18,8 @@ struct MacCommanderApp: App {
                 .environment(favorites)
                 .environment(operations)
                 .environment(clipboard)
+                .environment(appDelegate.shares.store)
+                .environment(appDelegate.shares.manager)
         }
         .commands {
             BrowserCommands(settings: settings)
@@ -34,19 +36,123 @@ struct MacCommanderApp: App {
 }
 
 /// Purges the archive preview cache (extracted copies for Quick Look and Open) at launch, which also removes
-/// leftovers of a session that didn't quit normally, and at quit.
+/// leftovers of a session that didn't quit normally, and at quit. Owns the network shares (one store, manager
+/// and monitor for the whole app), starts them at launch and stops them at quit.
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    let shares = NetworkShares()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await ArchivePreviewCache.shared.purge() }
+        shares.start()
     }
 
     /// Quitting waits for the purge, which runs off the main thread (`.terminateLater`), then goes on to
     /// `applicationWillTerminate` as usual.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        shares.stop()
         Task {
             await ArchivePreviewCache.shared.purge()
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+}
+
+/// The app's network shares: the saved list, the manager that keeps their status, the monitor that feeds it
+/// network and volume events, and the "Remember this share?" prompts. One for the whole app, so a prompt is
+/// shown once however many windows are open.
+@MainActor
+final class NetworkShares {
+    let store = ShareStore()
+    let manager: ShareManager
+    private let monitor: NetworkMonitor
+    private let prompter: RememberSharePrompter
+
+    init() {
+        manager = ShareManager(
+            store: store, mounter: NetFSMounter(), prober: TCPReachabilityProber(), volumes: SystemVolumeLister(),
+            credentials: KeychainCredentialStore())
+        monitor = NetworkMonitor(manager: manager)
+        prompter = RememberSharePrompter(manager: manager)
+    }
+
+    /// Shows a problem with the share list once, then runs the first check and starts listening for changes.
+    func start() {
+        if let error = store.persistenceError {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "MacCommander can’t save your network shares: \(error)")
+            // After launch finished, so the alert doesn't hold up the first window.
+            Task { alert.runModal() }
+        }
+        prompter.start()
+        monitor.start()
+        manager.start()
+    }
+
+    func stop() {
+        monitor.stop()
+        manager.stop()
+        prompter.stop()
+    }
+}
+
+/// Offers each of `ShareManager.rememberPrompts` in turn as an app-modal alert: Remember saves the share, Not Now
+/// declines it for good.
+@MainActor
+final class RememberSharePrompter {
+    private let manager: ShareManager
+    private var isPresenting = false
+    private var isRunning = false
+
+    init(manager: ShareManager) {
+        self.manager = manager
+    }
+
+    func start() {
+        guard !isRunning else { return }
+        isRunning = true
+        observe()
+        presentNext()
+    }
+
+    func stop() {
+        isRunning = false
+    }
+
+    /// Observation fires once per registration, so it registers again on every change.
+    private func observe() {
+        guard isRunning else { return }
+        withObservationTracking {
+            _ = manager.rememberPrompts
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observe()
+                self?.presentNext()
+            }
+        }
+    }
+
+    private func presentNext() {
+        guard isRunning, !isPresenting, let mounted = manager.rememberPrompts.first else { return }
+        isPresenting = true
+        Task {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = String(localized: "Remember this share?")
+            alert.informativeText = String(
+                localized: "MacCommander can keep “\(mounted.url.displayName)” in the sidebar and reconnect it automatically.")
+            alert.addButton(withTitle: String(localized: "Remember"))
+            alert.addButton(withTitle: String(localized: "Not Now"))
+            let response = alert.runModal()
+            isPresenting = false
+            if response == .alertFirstButtonReturn {
+                manager.remember(mounted)
+            } else {
+                manager.decline(mounted)
+            }
+            presentNext()
+        }
     }
 }

@@ -6,6 +6,7 @@ struct BrowserCommands: Commands {
     let settings: ViewSettingsStore
     @FocusedValue(\.browserModel) private var model
     @FocusedValue(\.goToFolderPresented) private var goToFolder
+    @FocusedValue(\.shareSheets) private var shareSheets
 
     var body: some Commands {
         // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
@@ -56,6 +57,9 @@ struct BrowserCommands: Commands {
             Button("Go to Folder…") { goToFolder?.wrappedValue = true }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(goToFolder == nil)
+            Button(String(localized: "Connect to Server…")) { shareSheets?.showConnectToServer = true }
+                .keyboardShortcut("k")
+                .disabled(shareSheets == nil)
             Button("Home") { go(FileManager.default.homeDirectoryForCurrentUser) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
             Button("Desktop") { go(home("Desktop")) }
