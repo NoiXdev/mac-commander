@@ -21,4 +21,11 @@ import Foundation
         try dir.file(".untitled")
         #expect(NameGenerator.uniqueName(base: ".untitled", pathExtension: nil, in: dir.url) == ".untitled 2")
     }
+
+    @Test func danglingSymlinkCountsAsTaken() throws {
+        let dir = try TemporaryDirectory()
+        try FileManager.default.createSymbolicLink(
+            atPath: dir.url.appendingPathComponent("untitled.txt").path, withDestinationPath: "/nonexistent/target")
+        #expect(NameGenerator.uniqueName(base: "untitled", pathExtension: "txt", in: dir.url) == "untitled 2.txt")
+    }
 }

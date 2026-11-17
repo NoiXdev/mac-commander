@@ -28,4 +28,12 @@ import Foundation
         #expect(url.lastPathComponent == "untitled 2.txt")
         #expect(try String(contentsOf: existing, encoding: .utf8) == "keep")
     }
+
+    @Test func createEmptyFileSkipsDanglingSymlink() throws {
+        let dir = try TemporaryDirectory()
+        try FileManager.default.createSymbolicLink(
+            atPath: dir.url.appendingPathComponent("untitled.txt").path, withDestinationPath: "/nonexistent/target")
+        let url = try ItemCreator.createEmptyFile(in: dir.url)
+        #expect(url.lastPathComponent == "untitled 2.txt")
+    }
 }

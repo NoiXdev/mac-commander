@@ -11,7 +11,8 @@ public enum NameGenerator {
             return "\(stem).\(pathExtension)"
         }
         var n = 1
-        while fileManager.fileExists(atPath: directory.appendingPathComponent(name(n)).path) {
+        // attributesOfItem uses lstat, so dangling symlinks count as taken.
+        while (try? fileManager.attributesOfItem(atPath: directory.appendingPathComponent(name(n)).path)) != nil {
             n += 1
         }
         return name(n)
