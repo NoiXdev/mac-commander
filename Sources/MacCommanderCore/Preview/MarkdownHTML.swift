@@ -82,11 +82,14 @@ public enum MarkdownHTML {
         for m in regex.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
             var range = m.range
             var url = ns.substring(with: range)
+            var opens = url.reduce(0) { $0 + ($1 == "(" ? 1 : 0) }
+            var closes = url.reduce(0) { $0 + ($1 == ")" ? 1 : 0) }
             while let c = url.last {
                 if ".,:;!?".contains(c) {
                     url.removeLast()
-                } else if c == ")", url.filter({ $0 == ")" }).count > url.filter({ $0 == "(" }).count {
+                } else if c == ")", closes > opens {
                     url.removeLast()
+                    closes -= 1
                 } else { break }
             }
             range.length = (url as NSString).length

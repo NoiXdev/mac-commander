@@ -126,6 +126,15 @@ struct MarkdownHTMLTests {
         #expect(html("(see https://a.b/x)").contains("<a href=\"https://a.b/x\">https://a.b/x</a>)"))
     }
 
+    @Test func autolinkTrimIsLinear() {
+        for ch in [")", "."] {
+            let start = Date()
+            let h = html("https://a.b" + String(repeating: ch, count: 100_000))
+            #expect(Date().timeIntervalSince(start) < 1)
+            #expect(h.contains("<a href=\"https://a.b\">https://a.b</a>"))
+        }
+    }
+
     @Test func largeDocumentIsFast() {
         var s = ""
         for i in 0..<5000 {
