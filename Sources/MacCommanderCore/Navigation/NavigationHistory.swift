@@ -50,10 +50,12 @@ public struct NavigationHistory: Equatable, Sendable {
         let oldPrefix = oldRoot.hasSuffix("/") ? oldRoot : oldRoot + "/"
         func rewrite(_ url: URL) -> URL {
             let path = url.standardizedFileURL.path
-            if path == oldRoot { return URL(fileURLWithPath: newRoot, isDirectory: true) }
+            if path == oldRoot { return URL(fileURLWithPath: newRoot, isDirectory: true) }  // No stat with a hint.
             guard path.hasPrefix(oldPrefix) else { return url }
             let rest = String(path.dropFirst(oldPrefix.count))
-            return URL(fileURLWithPath: newRoot, isDirectory: true).appendingPathComponent(rest)
+            // `isDirectory: true` (history entries are folders): the one-argument `appendingPathComponent`
+            // stats the result to decide, which on the main actor could hang on a network volume.
+            return URL(fileURLWithPath: newRoot, isDirectory: true).appendingPathComponent(rest, isDirectory: true)
         }
         current = rewrite(current)
         backStack = backStack.map(rewrite)

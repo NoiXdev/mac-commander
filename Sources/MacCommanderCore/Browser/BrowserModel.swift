@@ -26,6 +26,9 @@ public struct DisconnectedShare: Equatable, Sendable {
     }
 }
 
+/// What `BrowserModel.shareResolver` reports for a path on a saved share.
+public typealias ShareLookup = (id: UUID, name: String, mountPoint: URL, isConnected: Bool)
+
 /// Per-window view model: the current folder, its sorted items, selection and navigation.
 ///
 /// `init` does not touch the disk; the UI calls `reload()` once when the window appears. Nothing here
@@ -50,9 +53,14 @@ public final class BrowserModel {
     /// Set together with `loadError = .shareDisconnected`: the share whose folder is shown but gone.
     public private(set) var disconnectedShare: DisconnectedShare?
     /// The saved network share containing a path, if any: a pure main-actor lookup without file-system
-    /// access (the UI wires it to `ShareManager.mountPoint(containing:)`). A vanished folder on such a share
-    /// shows `.shareDisconnected` instead of falling back to an ancestor.
-    @ObservationIgnored public var shareResolver: (@MainActor (URL) -> (id: UUID, name: String, mountPoint: URL)?)?
+    /// access (the UI wires it to `ShareManager.mountPoint(containing:)`). `isConnected` is whether the
+    /// manager reports the share connected at that mount point. A vanished folder on a share that isn't
+    /// connected (or whose mount point is gone too) shows `.shareDisconnected` instead of falling back to an
+    /// ancestor.
+    @ObservationIgnored public var shareResolver: (@MainActor (URL) -> ShareLookup?)?
+    /// The last placeholder recovery (share id, navigation generation after it): until the next navigation,
+    /// a connect of that share counts as the recovery (see `shareDidConnect`).
+    @ObservationIgnored private var recovery: (id: UUID, navigation: Int)?
     public var selection: Set<URL> = []
     /// Set after a create; the list starts inline editing for it, then sets it back to nil.
     public var pendingRename: URL?
@@ -374,7 +382,10 @@ public final class BrowserModel {
         // Navigating resolves a symlinked parent, so the target may need the resolved spelling to match.
         let selected = isCurrentDirectory(parent)
             ? target
-            : URL(fileURLWithPath: canonicalParent, isDirectory: true).appendingPathComponent(target.lastPathComponent)
+            // With an explicit hint: the one-argument `appendingPathComponent` stats the result on the main actor.
+            // Selection matches items by name, so the hint doesn't matter.
+            : URL(fileURLWithPath: canonicalParent, isDirectory: true)
+                .appendingPathComponent(target.lastPathComponent, isDirectory: false)
         await selectAfterOperation([selected])
         return true
     }
@@ -408,9 +419,17 @@ public final class BrowserModel {
         var target = await resolveLoadTarget(currentURL)
         guard generation == loadGeneration else { return false }
         if target.location == nil, !target.info.exists {
-            // On a saved share that dropped: keep the folder and history, show Disconnected.
+            // On a saved share that dropped: keep the folder and history, show Disconnected. On a share that
+            // is still connected, only a folder deleted on it: fall back as usual, unless its mount point is
+            // gone too (one off-main check).
             if let share = shareResolver?(currentURL) {
-                return await showDisconnected(share, generation: generation)
+                var dropped = !share.isConnected
+                if !dropped {
+                    let root = await queries.info(share.mountPoint)
+                    guard generation == loadGeneration else { return false }
+                    dropped = !root.isDirectory
+                }
+                if dropped { return await showDisconnected(share, generation: generation) }
             }
             let fallback = await queries.nearestExistingFolder(currentURL)
             guard generation == loadGeneration else { return false }
@@ -464,7 +483,6 @@ public final class BrowserModel {
 
         let openFallback = pendingOpenFallback.map { $0.standardizedFileURL == url.standardizedFileURL } ?? false
         pendingOpenFallback = nil
-        disconnectedShare = nil
 
         switch result {
         case .success(let listed):
@@ -481,6 +499,7 @@ public final class BrowserModel {
             loadedURL = listedURL
             loadedLocation = listedLocation
             loadError = nil
+            disconnectedShare = nil
         case .failure(.archive(.cancelled)):
             // The calling task was cancelled; leave the shown items alone.
             isLoading = false
@@ -496,6 +515,7 @@ public final class BrowserModel {
             opener(url)
             return await load()
         case .failure(let error):
+            disconnectedShare = nil
             loadedItems = []
             loadedURL = nil
             loadedLocation = location
@@ -520,9 +540,7 @@ public final class BrowserModel {
     /// The current folder is gone and on a saved share: nothing is listed, the watcher stops (the path is
     /// dead), and `currentURL` and the history stay as they are, so a reconnect can return to the folder.
     /// `currentInfo` is cleared, so refresh on focus doesn't stat the dead path again; a reload re-checks once.
-    private func showDisconnected(
-        _ share: (id: UUID, name: String, mountPoint: URL), generation: Int
-    ) async -> Bool {
+    private func showDisconnected(_ share: ShareLookup, generation: Int) async -> Bool {
         watcher?.cancel()
         watcher = nil
         watchedURL = nil
@@ -549,21 +567,33 @@ public final class BrowserModel {
     /// `/Volumes/Media-1`): moves the current folder and the back/forward entries below the old mount point
     /// to the new one, and lists the current folder again. Supersedes pending navigation.
     public func reconnected(oldMountPoint: URL, newMountPoint: URL) async {
+        beginReconnect(oldMountPoint: oldMountPoint, newMountPoint: newMountPoint)
+        await load()
+    }
+
+    /// The synchronous part of `reconnected`, done before any await so a concurrent `shareDidConnect` for
+    /// the same connect sees its result.
+    private func beginReconnect(oldMountPoint: URL, newMountPoint: URL) {
         _ = beginNavigation()
         disconnectedShare = nil
         history.rewritePrefix(from: oldMountPoint, to: newMountPoint)
-        await load()
     }
 
     /// A share was connected (`ShareManager.didConnectNotification`, or the UI's connect flow). If this
     /// window shows that share's Disconnected placeholder, it returns to the same folder under the new
-    /// mount point and returns true. Also true when the current folder is already on that mount point (a
-    /// reconnect handled it first), so the caller doesn't navigate away. False otherwise.
+    /// mount point and returns true. Also true when this window already recovered from that share's
+    /// placeholder for this connect (the notification and the UI's connect flow race; whichever comes
+    /// first recovers) and nothing was navigated since. False otherwise: the caller navigates as usual.
     @discardableResult
     public func shareDidConnect(id: UUID, mountPoint: URL) async -> Bool {
-        guard let disconnected = disconnectedShare else { return Self.isPath(currentURL, within: mountPoint) }
+        guard let disconnected = disconnectedShare else {
+            guard let recovery else { return false }
+            return recovery.id == id && recovery.navigation == navigationGeneration
+        }
         guard disconnected.id == id, shareResolver?(mountPoint)?.id == id else { return false }
-        await reconnected(oldMountPoint: disconnected.mountPoint, newMountPoint: mountPoint)
+        beginReconnect(oldMountPoint: disconnected.mountPoint, newMountPoint: mountPoint)
+        recovery = (id, navigationGeneration)
+        await load()
         return true
     }
 

@@ -35,8 +35,8 @@ enum ShareActions {
     }
 
     /// Connected: a window showing the share's Disconnected placeholder returns to the same folder under the
-    /// (possibly renamed) mount point via `BrowserModel.reconnected`; a window already showing a folder on
-    /// that mount point stays there; otherwise the window goes to the mount point. Needs sign-in: the sign-in
+    /// (possibly renamed) mount point via `BrowserModel.shareDidConnect`; otherwise (⌘K, sign-in, a sidebar
+    /// click) the window goes to the mount point. Needs sign-in: the sign-in
     /// sheet. Unreachable: the "can’t be reached" alert, whose Retry connects again. Failed: an alert with the message.
     static func handle(
         _ outcome: ConnectOutcome, for share: SavedShare, manager: ShareManager, model: BrowserModel,

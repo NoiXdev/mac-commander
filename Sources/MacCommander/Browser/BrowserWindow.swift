@@ -68,7 +68,9 @@ struct BrowserWindow: View {
             let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
             // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
             model.shareResolver = { [weak shareManager] url in
-                shareManager?.mountPoint(containing: url).map { ($0.share.id, $0.share.name, $0.mountPoint) }
+                guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
+                let isConnected = shareManager.status[hit.share.id] == .connected(mountPoint: hit.mountPoint)
+                return (hit.share.id, hit.share.name, hit.mountPoint, isConnected)
             }
             self.model = model
             preview = PreviewController(model: model, settings: settings)

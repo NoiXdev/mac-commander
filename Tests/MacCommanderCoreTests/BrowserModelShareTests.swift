@@ -28,16 +28,90 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
     }
 
     /// Resolves paths under any of `mountPoints` to the "Media" share, like `ShareManager.mountPoint(containing:)`.
-    private func resolver(_ mountPoints: [URL]) -> @MainActor (URL) -> (id: UUID, name: String, mountPoint: URL)? {
+    /// `isConnected` is what the manager would report (false: the share dropped).
+    private func resolver(_ mountPoints: [URL], isConnected: Bool = false) -> @MainActor (URL) -> ShareLookup? {
         let id = shareID
         return { url in
             let path = url.standardizedFileURL.path
             for mountPoint in mountPoints {
                 let root = mountPoint.standardizedFileURL.path
-                if path == root || path.hasPrefix(root + "/") { return (id, "Media", mountPoint) }
+                if path == root || path.hasPrefix(root + "/") { return (id, "Media", mountPoint, isConnected) }
             }
             return nil
         }
+    }
+
+    @Test func deletedSubfolderOnConnectedShareFallsBack() async throws {
+        let dir = try TemporaryDirectory()
+        let share = try dir.folder("share")
+        let sub = try dir.folder("share/sub")
+        let model = BrowserModel(start: share, settings: makeStore())
+        model.shareResolver = resolver([share], isConnected: true)
+        await model.reload()
+        await model.navigate(to: sub)
+
+        try FileManager.default.removeItem(at: sub)
+        await model.reload()
+
+        #expect(samePath(model.currentURL, share))
+        #expect(model.loadError == nil)
+        #expect(model.disconnectedShare == nil)
+    }
+
+    @Test func connectedShareWhoseMountPointIsGoneShowsDisconnected() async throws {
+        let dir = try TemporaryDirectory()
+        let share = try dir.folder("share")
+        let sub = try dir.folder("share/sub")
+        let model = BrowserModel(start: share, settings: makeStore())
+        model.shareResolver = resolver([share], isConnected: true)
+        await model.reload()
+        await model.navigate(to: sub)
+
+        // The manager hasn't noticed yet, but the mount point itself is gone.
+        try FileManager.default.removeItem(at: share)
+        await model.reload()
+
+        #expect(model.loadError == .shareDisconnected(name: "Media"))
+        #expect(samePath(model.currentURL, sub))
+    }
+
+    @Test func connectWithoutPlaceholderIsLeftToTheCaller() async throws {
+        let dir = try TemporaryDirectory()
+        let share = try dir.folder("share")
+        let sub = try dir.folder("share/sub")
+        let model = BrowserModel(start: share, settings: makeStore())
+        model.shareResolver = resolver([share], isConnected: true)
+        await model.reload()
+        await model.navigate(to: sub)
+
+        // Already inside the share, but no placeholder: the UI navigates to the mount point as usual.
+        #expect(await model.shareDidConnect(id: shareID, mountPoint: share) == false)
+    }
+
+    @Test func connectAfterNotificationRecoveryKeepsTheFolder() async throws {
+        let dir = try TemporaryDirectory()
+        let share = try dir.folder("share")
+        let sub = try dir.folder("share/sub")
+        let model = BrowserModel(start: share, settings: makeStore())
+        let newShare = dir.url.appendingPathComponent("share-1", isDirectory: true)
+        model.shareResolver = resolver([share, newShare])
+        await model.reload()
+        await model.navigate(to: sub)
+        try FileManager.default.moveItem(at: share, to: newShare)
+        await model.reload()
+        #expect(model.disconnectedShare != nil)
+
+        // The notification recovers first; the UI's connect flow for the same connect must not navigate away.
+        NotificationCenter.default.post(
+            name: ShareManager.didConnectNotification, object: nil,
+            userInfo: ["mountPoint": newShare, "shareID": shareID])
+        #expect(await waitUntil { model.disconnectedShare == nil })
+        #expect(await model.shareDidConnect(id: shareID, mountPoint: newShare))
+        #expect(samePath(model.currentURL, newShare.appendingPathComponent("sub")))
+
+        // After the user navigates, a later connect is the caller's again.
+        await model.goBack()
+        #expect(await model.shareDidConnect(id: shareID, mountPoint: newShare) == false)
     }
 
     @Test func vanishedShareFolderShowsDisconnected() async throws {

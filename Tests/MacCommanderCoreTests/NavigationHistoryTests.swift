@@ -67,6 +67,8 @@ struct NavigationHistoryRewriteTests {
         h.rewritePrefix(from: URL(fileURLWithPath: "/Volumes/Media"), to: URL(fileURLWithPath: "/Volumes/Media-1"))
 
         #expect(h.current.path == "/Volumes/Media-1/a")
+        // Built with an explicit directory hint (no stat), even though the path doesn't exist.
+        #expect(h.current.hasDirectoryPath)
         #expect(h.goForward()?.path == "/Volumes/MediaX")
         #expect(h.goForward()?.path == "/Volumes/Media-1/a/b")
         _ = h.goBack()
