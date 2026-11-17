@@ -60,8 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         didReplyToTerminate = false
         let store = shares.store
         Task {
-            await ArchivePreviewCache.shared.purge()
-            await store.flush()
+            // Concurrently, so a slow purge doesn't use up the bound before the share list is written.
+            async let purged: Void = ArchivePreviewCache.shared.purge()
+            async let flushed: Void = store.flush()
+            _ = await (purged, flushed)
             replyToTerminate(sender)
         }
         Task {

@@ -186,15 +186,7 @@ public final class ShareManager {
                 guard generation[share.id] == generations[share.id], self.share(share.id) != nil,
                     case .connected? = status[share.id]
                 else { continue }
-                bump(share.id)
-                mountPoints[share.id] = nil
-                if reachable[Self.probeKey(share)] == true {
-                    // Unmounted elsewhere while the server answered: the user's choice, not a dropped link.
-                    ejectedElsewhere.insert(share.id)
-                    status[share.id] = .available(needsSignIn: needsSignIn[share.id] ?? false)
-                } else {
-                    status[share.id] = .unreachable
-                }
+                markVolumeGone(share.id, reachable: reachable[Self.probeKey(share)] == true)
             }
         }
         updatePrompts(lastMounted)
@@ -215,10 +207,30 @@ public final class ShareManager {
             guard let current = self.share(id), self.generation[id] == generations[id], self.inFlight[id] == nil
             else { return }
             self.lastMounted = mounted
-            self.classify(current, mounted: mounted, reachable: reachable)
+            if case .connected? = self.status[id], !mounted.contains(where: { $0.url.matchesMount(current.url) }) {
+                // Same rule as `volumesChanged` (both may run for one Finder eject; whichever finishes first
+                // decides): a connected share whose volume is gone while the server answers was ejected.
+                self.markVolumeGone(id, reachable: reachable)
+            } else {
+                self.classify(current, mounted: mounted, reachable: reachable)
+            }
             self.updatePrompts(mounted)
             self.updateTimer()
             self.autoReconnect()
+        }
+    }
+
+    /// A connected share's volume is gone. If its server answers, it was unmounted elsewhere (for example
+    /// ejected in Finder): the user's choice, not a dropped link, so it isn't auto-reconnected until the next
+    /// network change. Otherwise the link dropped: unreachable.
+    private func markVolumeGone(_ id: UUID, reachable: Bool) {
+        bump(id)
+        mountPoints[id] = nil
+        if reachable {
+            ejectedElsewhere.insert(id)
+            status[id] = .available(needsSignIn: needsSignIn[id] ?? false)
+        } else {
+            status[id] = .unreachable
         }
     }
 

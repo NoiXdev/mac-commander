@@ -71,12 +71,10 @@ struct BrowserWindow: View {
                 guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
                 let status = shareManager.status[hit.share.id]
                 let isConnected = status == .connected(mountPoint: hit.mountPoint)
-                // Checked and not connected: the window shows Disconnected without statting the dead path.
-                let isKnownDisconnected: Bool
-                switch status {
-                case .unreachable?, .available?: isKnownDisconnected = true
-                case .connected?, .checking?, nil: isKnownDisconnected = false
-                }
+                // Server known to be gone: the window shows Disconnected without statting the dead path. Not for
+                // an available share: its lookup may come from the old mount path, where another volume (a USB
+                // disk with the same name) may be mounted now, which must stay browsable.
+                let isKnownDisconnected = status == .unreachable
                 return (hit.share.id, hit.share.name, hit.mountPoint, isConnected, isKnownDisconnected)
             }
             // A window showing Disconnected has the manager re-check that share (its status may be stale).

@@ -96,9 +96,14 @@ private actor FakeProber: ReachabilityProber {
 
     func setGate(_ gate: MountGate?) { self.gate = gate }
 
+    /// One gate per call, in call order (before the shared `gate`).
+    private var callGates: [MountGate] = []
+    func setCallGates(_ gates: [MountGate]) { callGates = gates }
+
     func isReachable(host: String, port: Int, timeout: Duration) async -> Bool {
         probeCount += 1
         timeouts.append(timeout)
+        if !callGates.isEmpty { await callGates.removeFirst().wait() }
         if let gate { await gate.wait() }
         return reachable.contains(host)
     }
@@ -671,6 +676,44 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         await h.manager.waitForRechecks()
         #expect(h.manager.status[share.id] == .unreachable)
         #expect(await h.prober.probeCount == 2)
+    }
+
+    @Test func recheckDuringEjectDoesNotRemount() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://nas/A")
+        await h.prober.set("nas", reachable: true)
+        await h.volumes.set([MountedShare(mountPoint: volume("/Volumes/A"), url: share.url)])
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .connected(mountPoint: volume("/Volumes/A")))
+        #expect(await h.prober.probeCount == 1)
+
+        // Ejected in Finder: the volume notification and a window's placeholder recheck race.
+        await h.volumes.set([])
+        let volumeGate = MountGate(), recheckGate = MountGate()
+        await h.prober.setCallGates([volumeGate, recheckGate])
+        let manager = h.manager
+        let rematch = Task { await manager.volumesChanged() }
+        #expect(await eventually { await h.prober.probeCount == 2 })
+        h.manager.recheck(share.id)
+        #expect(await eventually { await h.prober.probeCount == 3 })
+
+        // The recheck finishes first.
+        await recheckGate.release()
+        await h.manager.waitForRechecks()
+        await h.manager.waitForPendingAttempts()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+        #expect(await h.mounter.mounts.isEmpty)
+
+        await volumeGate.release()
+        await rematch.value
+        await h.manager.waitForPendingAttempts()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+        #expect(await h.mounter.mounts.isEmpty)
+
+        // Still eligible again after a network change.
+        await h.manager.networkChanged()
+        await h.manager.waitForPendingAttempts()
+        #expect(await h.mounter.mounts.count == 1)
     }
 
     @Test func addressEditDoesNotOfferTheOldVolume() async throws {

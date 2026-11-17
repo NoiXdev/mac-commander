@@ -27,8 +27,8 @@ public struct DisconnectedShare: Equatable, Sendable {
 }
 
 /// What `BrowserModel.shareResolver` reports for a path on a saved share. `isConnected`: the manager reports the
-/// share connected at `mountPoint`. `isKnownDisconnected`: the manager has checked the share and doesn't report it
-/// connected (unreachable, or available but not mounted); false while it is still being checked.
+/// share connected at `mountPoint`. `isKnownDisconnected`: the manager knows the share's server is gone (unreachable),
+/// so any stat under it may hang; false otherwise (also while it is still being checked).
 public typealias ShareLookup = (
     id: UUID, name: String, mountPoint: URL, isConnected: Bool, isKnownDisconnected: Bool
 )
