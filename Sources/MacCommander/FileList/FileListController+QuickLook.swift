@@ -5,12 +5,17 @@ import MacCommanderCore
 
 extension FileListController {
     /// Space: shows the panel for the selection, or hides it.
-    /// Inside an archive, Space while the selection is being extracted cancels that instead.
+    /// Inside an archive, Space while the selection is being extracted cancels that instead; with another
+    /// selection it starts over for that one.
     func toggleQuickLook() {
         guard showsCurrentFolder else { return }
         if model.archiveLocation != nil {
-            if quickLookTask != nil {
-                cancelArchiveQuickLook()
+            if let pending = quickLookTask {
+                if pending.selection == selectedNodes.map(\.url) {
+                    cancelArchiveQuickLook()
+                } else {
+                    showArchiveQuickLook()
+                }
             } else if QuickLookController.isPanelVisible {
                 QuickLookController.togglePanel()
             } else {
@@ -22,13 +27,14 @@ extension FileListController {
         QuickLookController.togglePanel()
     }
 
-    /// Inside an archive: extracts the selected files (folders are skipped) through the preview cache, then
+    /// Inside an archive: extracts the selected files (folders and symlinks are skipped) through the preview cache, then
     /// shows the panel with the extracted copies in row order. Beeps when no file is selected. The panel
     /// isn't shown until the extraction finished; it isn't shown at all if the folder or the selection
     /// changed meanwhile.
     func showArchiveQuickLook() {
         guard showsCurrentFolder, let archive = model.archiveLocation?.archive else { return }
-        let files = selectedItems.filter { !$0.isDirectory }
+        // A symlink would be followed out of the cache by the panel.
+        let files = selectedItems.filter { !$0.isDirectory && !$0.isSymlink }
         // Cheap stats only (`ArchivePath.split`).
         let entries = files.compactMap { ArchivePath.split($0.url)?.inner }
         guard !entries.isEmpty, entries.count == files.count else {
@@ -40,7 +46,7 @@ extension FileListController {
         let folder = model.currentURL
         let window = outlineView.window
         let name = files.count == 1 ? files[0].name : archive.lastPathComponent
-        quickLookTask = Task { [weak self] in
+        let task = Task { [weak self] in
             let extracted = await FileActions.extractForPreview(entries, of: archive, name: name, window: window)
             // A cancelled task was already replaced or cleared by whoever cancelled it.
             guard let self, !Task.isCancelled else { return }
@@ -50,12 +56,21 @@ extension FileListController {
             else { return }
             outlineView.quickLook?.show(extracted, for: selection)
         }
+        quickLookTask = (task, selection)
     }
 
     /// Stops a running Quick Look extraction (bsdtar is terminated); the panel isn't shown.
     func cancelArchiveQuickLook() {
-        quickLookTask?.cancel()
+        quickLookTask?.task.cancel()
         quickLookTask = nil
+    }
+
+    /// A different selection makes a running Quick Look extraction pointless: cancel it (bsdtar stops).
+    func selectionDidChangeForQuickLook() {
+        if let pending = quickLookTask, pending.selection != selectedNodes.map(\.url) {
+            cancelArchiveQuickLook()
+        }
+        outlineView.quickLook?.selectionDidChange()
     }
 
     /// `FileOutlineView.menu(for:)` already adjusted the selection: a row's menu acts on it.

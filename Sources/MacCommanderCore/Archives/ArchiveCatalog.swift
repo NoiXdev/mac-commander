@@ -121,7 +121,8 @@ public actor ArchiveCatalog {
                 dateModified: entry.modified,
                 dateCreated: nil,
                 dateAdded: nil,
-                kind: Self.kind(name: name, isDirectory: entry.isDirectory))
+                kind: Self.kind(name: name, isDirectory: entry.isDirectory),
+                isSymlink: entry.isSymlink)
         }
     }
 

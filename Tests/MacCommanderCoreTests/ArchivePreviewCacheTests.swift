@@ -115,4 +115,42 @@ struct ArchivePreviewCacheTests {
         await catalog.setPassword("pw", for: encrypted)
         #expect(contents(try await locked.files(["s.txt"], of: encrypted)) == ["secret"])
     }
+
+    @Test func refusesSymlinkEntries() async throws {
+        let temp = try TemporaryDirectory()
+        let outside = try temp.file("outside.txt", contents: "private")
+        let zip = try ArchiveFixtures.makeArchive(
+            ["notes.txt": "→" + outside.path, "c.txt": "C"], format: "zip", in: temp)
+        let root = temp.url.appendingPathComponent("Previews", isDirectory: true)
+        let cache = ArchivePreviewCache(root: root, catalog: ArchiveCatalog())
+        // The list marks the entry, so the UI skips it before extracting.
+        let listed = try await ArchiveCatalog().items(in: "", of: zip, includeHidden: false)
+        #expect(listed.first { $0.name == "notes.txt" }?.isSymlink == true)
+        #expect(listed.first { $0.name == "c.txt" }?.isSymlink == false)
+
+        await #expect(throws: ArchiveError.unreadable(message: "It’s a link.")) {
+            _ = try await cache.files(["notes.txt"], of: zip)
+        }
+        await #expect(throws: ArchiveError.unreadable(message: "It’s a link.")) {
+            _ = try await cache.files(["c.txt", "notes.txt"], of: zip)
+        }
+        // Nothing of the refused runs is left; ordinary entries still work.
+        #expect(contents(try await cache.files(["c.txt"], of: zip)) == ["C"])
+        #expect(try String(contentsOf: outside, encoding: .utf8) == "private")
+    }
+
+    @Test func extractedFilesAreReadOnly() async throws {
+        let temp = try TemporaryDirectory()
+        let zip = try ArchiveFixtures.makeArchive(files, format: "zip", in: temp)
+        let root = temp.url.appendingPathComponent("Previews", isDirectory: true)
+        let cache = ArchivePreviewCache(root: root, catalog: ArchiveCatalog())
+        let file = try await cache.files(["img/a.png"], of: zip)[0]
+
+        let mode = try #require(
+            try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? NSNumber).intValue
+        #expect(mode & 0o222 == 0)
+        #expect(!FileManager.default.isWritableFile(atPath: file.path))
+        await cache.purge()
+        #expect(!FileManager.default.fileExists(atPath: root.path))
+    }
 }

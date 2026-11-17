@@ -12,6 +12,8 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     public let dateCreated: Date?
     public let dateAdded: Date?
     public let kind: String
+    /// A symlink entry inside an archive (listed, not followed). Always false for real files.
+    public internal(set) var isSymlink = false
 
     /// Every resource key `load` reads, used for prefetching during directory enumeration.
     public static let resourceKeys: [URLResourceKey] = [

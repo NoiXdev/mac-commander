@@ -66,6 +66,8 @@ final class QuickLookController: NSObject, @preconcurrency QLPreviewPanelDataSou
         panel.dataSource = self
         panel.delegate = self
         panel.reloadData()
+        // An extracted set starts at its first file.
+        if !previewsSelection(), !urls.isEmpty { panel.currentPreviewItemIndex = 0 }
     }
 
     func endControl(_ panel: QLPreviewPanel) {

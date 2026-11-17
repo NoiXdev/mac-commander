@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// Temporary copies of archive entries for Quick Look and Open: the system can only preview or open real
@@ -7,7 +8,11 @@ import Foundation
 /// Layout: `root/<UUID>/` is one archive version, keyed by the archive's standardized path, size and mtime.
 /// Each extraction run stages its missing entries into its own `ArchiveExtractor` staging folder inside the
 /// version folder (`root/<UUID>/.mc-partial-<UUID>/<entry>`); the staged files are used in place and never
-/// moved. Changes to an opened copy are not written back: archives are read-only.
+/// moved. Extracted files are made read-only (`a-w`), so an opened copy can't be edited in place and later
+/// previews keep showing the archive's content; archives are read-only.
+///
+/// A symlink entry is refused (`.unreadable`): previewing or opening it would follow it out of the cache,
+/// e.g. to `~/.zshrc`.
 ///
 /// Only the cache's own folders are removed permanently: the version folder of a changed archive, and `root`
 /// on `purge`.
@@ -96,9 +101,15 @@ public actor ArchivePreviewCache {
                 throw .cancelled
             }
             version = versions[path] ?? version
-            for entry in missing {
-                // `stage` verified each entry exists at this path (reached through real folders only).
-                version.files[entry] = staging.appendingPathComponent(entry, isDirectory: false)
+            // `stage` verified each entry exists at this path (reached through real folders only).
+            let staged = missing.map { staging.appendingPathComponent($0, isDirectory: false) }
+            if staged.contains(where: Self.isSymlink) {
+                ArchiveExtractor.removeStaging(staging)
+                throw .unreadable(message: String(localized: "It’s a link."))
+            }
+            for (entry, file) in zip(missing, staged) {
+                Self.makeReadOnly(file)
+                version.files[entry] = file
             }
             versions[path] = version
         }
@@ -121,6 +132,19 @@ public actor ArchivePreviewCache {
     /// No leading, trailing or doubled "/", no "." components; matches `ArchivePath` inner paths.
     private static func normalized(_ entry: String) -> String {
         entry.split(separator: "/").filter { $0 != "." }.joined(separator: "/")
+    }
+
+    /// `lstat`: true for a symlink itself, never following it.
+    private static func isSymlink(_ url: URL) -> Bool {
+        var info = stat()
+        return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFLNK
+    }
+
+    /// Removes write permission (a-w) from a regular file, found with `lstat`. Best effort.
+    private static func makeReadOnly(_ url: URL) {
+        var info = stat()
+        guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return }
+        chmod(url.path, info.st_mode & 0o7777 & ~(S_IWUSR | S_IWGRP | S_IWOTH))
     }
 
     private static func key(of path: String) throws(ArchiveError) -> VersionKey {

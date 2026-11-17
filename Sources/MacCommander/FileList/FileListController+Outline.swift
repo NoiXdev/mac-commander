@@ -163,7 +163,7 @@ extension FileListController: NSOutlineViewDelegate {
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         updateCheckboxStates()
-        outlineView.quickLook?.selectionDidChange()
+        selectionDidChangeForQuickLook()
         guard !isApplyingChanges else { return }
         writeSelectionToModel()
     }

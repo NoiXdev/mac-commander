@@ -151,7 +151,11 @@ enum FileActions {
             return
         }
         for item in items where item.isDirectory { await model.open(item) }
-        let files = items.filter { !$0.isDirectory }
+        // A symlink would be followed out of the cache, e.g. to `~/.zshrc`.
+        let links = items.filter { !$0.isDirectory && $0.isSymlink }
+        showAlert(
+            links.map { String(localized: "“\($0.name)” couldn’t be opened: It’s a link.") }, window: window)
+        let files = items.filter { !$0.isDirectory && !$0.isSymlink }
         // Cheap stats only (`ArchivePath.split`).
         let entries = files.compactMap { ArchivePath.split($0.url)?.inner }
         guard !entries.isEmpty else { return }

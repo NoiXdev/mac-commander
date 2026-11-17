@@ -38,8 +38,9 @@ final class FileListController: NSViewController {
     var iconPassScheduled = false
     /// Inline rename state (see `FileListController+Rename.swift`).
     var rename = InlineRenameState()
-    /// Extracts archive entries for Quick Look; a second Space cancels it (see `toggleQuickLook`).
-    var quickLookTask: Task<Void, Never>?
+    /// Extracts archive entries for Quick Look, for `selection` (row URLs). Space with the same selection or a
+    /// selection change cancels it (see `toggleQuickLook`).
+    var quickLookTask: (task: Task<Void, Never>, selection: [URL])?
 
     /// Above this many inserted/removed/changed rows, a reload is cheaper than row animations.
     static let maxIncrementalChanges = 500
