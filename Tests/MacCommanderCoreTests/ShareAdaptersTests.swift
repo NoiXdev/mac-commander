@@ -84,6 +84,7 @@ import Testing
         #expect(!shares.contains { $0.mountPoint.standardizedFileURL.path == "/" })
     }
 
+    // The gated keychain tests each use their own server name: Swift Testing runs them in parallel.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["MC_KEYCHAIN_TESTS"] == "1",
         "Writes to the login keychain; set MC_KEYCHAIN_TESTS=1"))
     func keychainRoundTrip() async throws {
@@ -111,8 +112,8 @@ import Testing
         "Writes to the login keychain; set MC_KEYCHAIN_TESTS=1"))
     func keychainItemIsPerServer() async throws {
         let store = KeychainCredentialStore()
-        let first = try #require(ShareURL("smb://mc-test.invalid/One"))
-        let second = try #require(ShareURL("smb://mc-test.invalid/Two"))
+        let first = try #require(ShareURL("smb://mc-test-perserver.invalid/One"))
+        let second = try #require(ShareURL("smb://mc-test-perserver.invalid/Two"))
         let username = #"CORP\tester"#
         defer { KeychainCredentialStore.deleteNow(for: first, username: username) }
         await store.delete(for: first, username: username)
@@ -123,6 +124,61 @@ import Testing
         #expect(await store.password(for: first, username: username) == "changed")
         await store.delete(for: second, username: username)
         #expect(await store.password(for: first, username: username) == nil)
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MC_KEYCHAIN_TESTS"] == "1",
+        "Writes to the login keychain; set MC_KEYCHAIN_TESTS=1"))
+    func keychainSaveUpdatesItemDifferingInCase() async throws {
+        let store = KeychainCredentialStore()
+        let url = try #require(ShareURL("smb://mc-test-case.invalid/Share"))
+        let username = #"CORP\tester"#
+        let account: [String: Any] = [
+            kSecClass as String: kSecClassInternetPassword,
+            kSecAttrProtocol as String: kSecAttrProtocolSMB,
+            kSecAttrAccount as String: username,
+        ]
+        let servers = ["MC-Test-Case.Invalid", "mc-test-case.invalid"]
+        func deleteAll() {
+            // Exact server names: `kSecMatchCaseInsensitive` doesn't apply to the server in the login keychain.
+            for server in servers {
+                SecItemDelete(account.merging([kSecAttrServer as String: server]) { $1 } as CFDictionary)
+            }
+        }
+        defer { deleteAll() }
+        deleteAll()
+
+        // Seed the item the way Finder might have saved it: mixed-case server.
+        let seed = account.merging([
+            kSecAttrServer as String: "MC-Test-Case.Invalid",
+            kSecAttrLabel as String: "MC-Test-Case.Invalid",
+            kSecValueData as String: Data("old".utf8),
+        ]) { $1 }
+        try #require(SecItemAdd(seed as CFDictionary, nil) == errSecSuccess)
+
+        try await store.save(password: "new", for: url, username: username)
+
+        // Every item for this protocol and account, filtered by server ignoring case.
+        var all = account
+        all[kSecMatchLimit as String] = kSecMatchLimitAll
+        all[kSecReturnAttributes as String] = true
+        var result: CFTypeRef?
+        try #require(SecItemCopyMatching(all as CFDictionary, &result) == errSecSuccess)
+        let items = (result as? [[String: Any]] ?? []).filter {
+            ($0[kSecAttrServer as String] as? String)?.caseInsensitiveCompare("mc-test-case.invalid") == .orderedSame
+        }
+        #expect(items.count == 1)
+        #expect(items.first?[kSecAttrServer as String] as? String == "MC-Test-Case.Invalid")
+
+        var seeded = account
+        seeded[kSecAttrServer as String] = "MC-Test-Case.Invalid"
+        seeded[kSecReturnData as String] = true
+        var data: CFTypeRef?
+        try #require(SecItemCopyMatching(seeded as CFDictionary, &data) == errSecSuccess)
+        #expect((data as? Data).map { String(decoding: $0, as: UTF8.self) } == "new")
+        #expect(await store.password(for: url, username: username) == "new")
+
+        await store.delete(for: url, username: username)
+        #expect(await store.password(for: url, username: username) == nil)
     }
 
     @Test func keychainSkipsNFS() async throws {
