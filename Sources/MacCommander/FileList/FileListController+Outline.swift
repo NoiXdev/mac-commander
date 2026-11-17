@@ -15,6 +15,8 @@ extension FileListController {
     /// Replaces type placeholders by the files' own icons for the visible rows, in small batches.
     func loadVisibleIcons() {
         iconPassScheduled = false
+        // Archive entries have virtual paths: their type icons are final (see `outlineView(_:viewFor:item:)`).
+        guard !isInArchive else { return }
         let columnIndex = outlineView.column(withIdentifier: NSUserInterfaceItemIdentifier(FileColumn.name))
         guard columnIndex >= 0, let visible = Range(outlineView.rows(in: outlineView.visibleRect)) else { return }
         var loaded = 0
@@ -70,7 +72,8 @@ extension FileListController: NSOutlineViewDataSource {
         _ outlineView: NSOutlineView, validateDrop info: any NSDraggingInfo, proposedItem item: Any?,
         proposedChildIndex index: Int
     ) -> NSDragOperation {
-        guard showsCurrentFolder else { return [] }
+        // Archives are read-only: nothing can be dropped into one.
+        guard showsCurrentFolder, !isInArchive else { return [] }
         let destination: URL
         if let node = item as? FileNode, node.item.isDirectory, index == NSOutlineViewDropOnItemIndex {
             destination = node.url
@@ -86,7 +89,7 @@ extension FileListController: NSOutlineViewDataSource {
     func outlineView(
         _ outlineView: NSOutlineView, acceptDrop info: any NSDraggingInfo, item: Any?, childIndex index: Int
     ) -> Bool {
-        guard showsCurrentFolder else { return false }
+        guard showsCurrentFolder, !isInArchive else { return false }
         let sources = FileActions.fileURLs(on: info.draggingPasteboard)
         let destination = (item as? FileNode).flatMap { $0.item.isDirectory ? $0.url : nil } ?? model.currentURL
         guard let mode = FileActions.dropMode(for: sources, into: destination) else { return false }
@@ -127,7 +130,11 @@ extension FileListController: NSOutlineViewDelegate {
                 outlineView.makeView(withIdentifier: .nameCell, owner: self) as? FileNameCellView
                 ?? FileNameCellView()
             cell.textField?.stringValue = node.item.name
-            if let icon = icons.cachedFileIcon(for: node.url) {
+            if isInArchive {
+                // Entries inside an archive don't exist on disk: the type icon is all there is.
+                cell.imageView?.image = icons.placeholder(for: node.item)
+                cell.hasFileIcon = true
+            } else if let icon = icons.cachedFileIcon(for: node.url) {
                 cell.imageView?.image = icon
                 cell.hasFileIcon = true
             } else {

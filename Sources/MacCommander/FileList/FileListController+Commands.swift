@@ -9,12 +9,18 @@ extension FileListController: FileCommandHandler {
 
     var undoTitle: String? { model.operations.undo.undoTitle }
 
+    /// True while the list shows a folder inside an archive: everything that writes is disabled.
+    var isInArchive: Bool { model.archiveLocation != nil }
+
     func canPerform(_ command: FileCommand) -> Bool {
         // Only in the key window without a sheet: `sendAction` also tries the main window, which stays main
         // under a sheet (e.g. Go to Folder), and ⌘⌫ there must not trash the list's selection.
         guard let window = outlineView.window, window.isKeyWindow, window.attachedSheet == nil,
             showsCurrentFolder, !isEditingText
         else { return false }
+        // Archives are read-only, and their entries have no real paths to copy or inspect. Undo acts on
+        // the app-wide history, not on this folder, so it stays available.
+        if isInArchive, command != .undo { return false }
         switch command {
         case .getInfo:
             return true

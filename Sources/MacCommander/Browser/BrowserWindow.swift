@@ -81,6 +81,8 @@ struct BrowserWindow: View {
                 } label: {
                     Label(String(localized: "New Folder"), systemImage: "folder.badge.plus")
                 }
+                // Archives are read-only.
+                .disabled(model.archiveLocation != nil)
                 Button {
                     settings.settings.showHiddenFiles.toggle()
                 } label: {
@@ -117,11 +119,14 @@ struct BrowserWindow: View {
 enum BrowserActions {
     @MainActor
     static func newFolder(_ model: BrowserModel, in directory: URL? = nil) async {
+        // Archives are read-only (the menus are disabled there; this covers a shortcut that slips through).
+        guard model.archiveLocation == nil else { return NSSound.beep() }
         do { _ = try await model.createFolder(in: directory) } catch { show(error) }
     }
 
     @MainActor
     static func newFile(_ model: BrowserModel, in directory: URL? = nil) async {
+        guard model.archiveLocation == nil else { return NSSound.beep() }
         do { _ = try await model.createEmptyFile(in: directory) } catch { show(error) }
     }
 

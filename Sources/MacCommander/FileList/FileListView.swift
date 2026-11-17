@@ -21,22 +21,34 @@ struct FileListView: NSViewControllerRepresentable {
     }
 }
 
-/// Shown instead of the list when the folder can't be read.
+/// Shown instead of the list when the folder can't be read. An encrypted archive gets an
+/// "Enter Password…" button, which runs `enterPassword`.
 struct LoadErrorView: View {
     let error: DirectoryLoadError
+    var enterPassword: (() -> Void)? = nil
 
     private static let privacySettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
 
     var body: some View {
         ContentUnavailableView {
-            Label(error.message, systemImage: isPermissionError ? "lock" : "exclamationmark.triangle")
+            Label(error.message, systemImage: isPermissionError || needsPassword ? "lock" : "exclamationmark.triangle")
         } actions: {
             if isPermissionError, let url = Self.privacySettingsURL {
                 Button(String(localized: "Open Privacy Settings")) {
                     NSWorkspace.shared.open(url)
                 }
             }
+            if needsPassword, let enterPassword {
+                Button(String(localized: "Enter Password…"), action: enterPassword)
+            }
+        }
+    }
+
+    private var needsPassword: Bool {
+        switch error {
+        case .archivePasswordRequired, .archiveIncorrectPassword: true
+        default: false
         }
     }
 

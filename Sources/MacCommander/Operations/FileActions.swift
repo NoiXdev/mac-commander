@@ -76,6 +76,97 @@ enum FileActions {
         return result
     }
 
+    // MARK: - Archives
+
+    /// Extracts `entries` (paths inside `archive`) into `destination`, asking about conflicts on `window`,
+    /// then selects the results. A password error asks for the password and tries again.
+    static func extract(_ entries: [String], from archive: URL, into destination: URL, model: BrowserModel, window: NSWindow?)
+        async
+    {
+        guard !entries.isEmpty else { return }
+        await runExtraction(of: archive, model: model, window: window) { resolver in
+            try await model.operations.extract(entries, from: archive, into: destination, resolver: resolver)
+        }
+    }
+
+    /// Extracts the whole `archive` into `destination` (several top-level items arrive in a new folder).
+    static func extractAll(_ archive: URL, into destination: URL, model: BrowserModel, window: NSWindow?) async {
+        await runExtraction(of: archive, model: model, window: window) { resolver in
+            try await model.operations.extractAll(archive, into: destination, resolver: resolver)
+        }
+    }
+
+    /// Runs `extraction` until it doesn't fail for want of a password. On a password error the user is asked
+    /// (Cancel stops silently), the password is remembered for the session and the extraction runs again.
+    private static func runExtraction(
+        of archive: URL, model: BrowserModel, window: NSWindow?,
+        _ extraction: (@escaping ConflictResolver) async throws -> TransferResult
+    ) async {
+        let resolver = ConflictPrompter.shared.resolver(for: window)
+        let name = archive.lastPathComponent
+        while true {
+            do {
+                let result = try await extraction(resolver)
+                let destinations = result.completed.map(\.destination)
+                if !destinations.isEmpty { await model.selectAfterOperation(destinations) }
+                if case .failed(let error) = result.outcome {
+                    let detail =
+                        switch error {
+                        case .failed(_, let message): message
+                        case .intoItself(let item): String(localized: "“\(item)” can’t be moved into itself.")
+                        }
+                    showAlert([String(localized: "“\(name)” couldn’t be extracted: \(detail)")], window: window)
+                }
+                return
+            } catch is CancellationError {
+                return
+            } catch let error as ArchiveError {
+                switch error {
+                case .passwordRequired, .incorrectPassword:
+                    guard
+                        let password = await ArchivePasswordSheet.ask(
+                            for: archive, incorrect: error == .incorrectPassword, window: window)
+                    else { return }
+                    await ArchiveCatalog.shared.setPassword(password, for: archive)
+                case .cancelled:
+                    return
+                case .unsupported(let message), .unreadable(let message):
+                    showAlert([String(localized: "“\(name)” couldn’t be extracted: \(message)")], window: window)
+                    return
+                }
+            } catch {
+                showAlert(
+                    [String(localized: "“\(name)” couldn’t be extracted: \(error.localizedDescription)")], window: window)
+                return
+            }
+        }
+    }
+
+    /// Asks for a destination folder ("Extract To…", "Extract All…"), as a sheet on `window`; nil when cancelled.
+    static func chooseExtractionFolder(startingAt directory: URL?, window: NSWindow?) async -> URL? {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "Extract")
+        panel.directoryURL = directory
+        let response: NSApplication.ModalResponse
+        if let window, window.isVisible, window.attachedSheet == nil {
+            response = await panel.beginSheetModal(for: window)
+        } else {
+            response = panel.runModal()
+        }
+        guard response == .OK else { return nil }
+        return panel.url
+    }
+
+    /// Opens `archive` with Archive Utility, which unpacks it next to itself (or shows its own error).
+    static func openWithArchiveUtility(_ archive: URL) {
+        let app = URL(fileURLWithPath: "/System/Library/CoreServices/Applications/Archive Utility.app")
+        NSWorkspace.shared.open([archive], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+    }
+
     // MARK: - Drag and drop
 
     /// The modifier keys held right now, as `DropPolicy` reads them (⌥ forces copy, ⌘ forces move).

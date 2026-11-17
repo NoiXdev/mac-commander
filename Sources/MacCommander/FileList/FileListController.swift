@@ -280,11 +280,12 @@ final class FileListController: NSViewController {
             scrollView.isHidden = false
             return
         }
+        let errorView = LoadErrorView(error: error) { [weak self] in self?.askForArchivePassword() }
         if let errorHost {
-            errorHost.rootView = LoadErrorView(error: error)
+            errorHost.rootView = errorView
             errorHost.isHidden = false
         } else {
-            let host = NSHostingView(rootView: LoadErrorView(error: error))
+            let host = NSHostingView(rootView: errorView)
             host.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(host, positioned: .below, relativeTo: spinner)
             NSLayoutConstraint.activate([
@@ -296,6 +297,22 @@ final class FileListController: NSViewController {
             errorHost = host
         }
         scrollView.isHidden = true
+    }
+
+    /// "Enter Password…" in the load error view: asks for the shown archive's password and lists it
+    /// again with it. A cancelled sheet leaves the error showing.
+    func askForArchivePassword() {
+        let archive: URL
+        switch model.loadError {
+        case .archivePasswordRequired(let url)?, .archiveIncorrectPassword(let url)?: archive = url
+        default: return
+        }
+        let model = model
+        let window = view.window
+        Task {
+            guard let password = await ArchivePasswordSheet.ask(for: archive, window: window) else { return }
+            await model.providePassword(password)
+        }
     }
 
     // MARK: - Loading and empty state

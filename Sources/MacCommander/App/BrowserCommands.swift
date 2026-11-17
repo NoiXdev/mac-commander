@@ -16,29 +16,29 @@ struct BrowserCommands: Commands {
             Divider()
             Button("New Folder") { run { await BrowserActions.newFolder($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(model == nil)
+                .disabled(model == nil || isInArchive)
             Button("New Empty File") { run { await BrowserActions.newFile($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .option])
-                .disabled(model == nil)
+                .disabled(model == nil || isInArchive)
             Divider()
             Button("Duplicate") { send(#selector(FileOutlineView.duplicate(_:))) }
                 .keyboardShortcut("d")
-                .disabled(model?.selection.isEmpty != false)
+                .disabled(model?.selection.isEmpty != false || isInArchive)
             Button("Move to Trash") { send(#selector(FileOutlineView.moveToTrash(_:))) }
                 .keyboardShortcut(.delete)
-                .disabled(model?.selection.isEmpty != false)
+                .disabled(model?.selection.isEmpty != false || isInArchive)
             Button("Get Info") { send(#selector(FileOutlineView.getInfo(_:))) }
                 .keyboardShortcut("i")
-                .disabled(model?.selection.isEmpty != false)
+                .disabled(model?.selection.isEmpty != false || isInArchive)
         }
         // Copy, Cut, Paste and Undo are the standard Edit items; a focused text field keeps them for its text.
         CommandGroup(after: .pasteboard) {
             Button("Move Item Here") { send(#selector(FileOutlineView.pasteAsMove(_:))) }
                 .keyboardShortcut("v", modifiers: [.command, .option])
-                .disabled(model == nil)
+                .disabled(model == nil || isInArchive)
             Button("Copy Path") { send(#selector(FileOutlineView.copyPath(_:))) }
                 .keyboardShortcut("c", modifiers: [.command, .option])
-                .disabled(model?.selection.isEmpty != false)
+                .disabled(model?.selection.isEmpty != false || isInArchive)
         }
         CommandMenu("Go") {
             Button("Back") { run { await $0.goBack() } }
@@ -73,6 +73,9 @@ struct BrowserCommands: Commands {
                 set: { settings.settings.showCheckboxColumn = $0 }))
         }
     }
+
+    /// Inside an archive the window is read-only: commands that write are disabled.
+    private var isInArchive: Bool { model?.archiveLocation != nil }
 
     /// Opens the selection like ⌘↓, through the focused file list (the responder chain).
     private func openSelection() {

@@ -31,8 +31,22 @@ enum FileContextMenu {
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
-        addNewItemActions(to: menu, model: model, in: nil)
-        menu.addItem(pasteItem(into: model.currentURL, model: model, clipboard: clipboard, window: window))
+        // Inside an archive (read-only): Extract All… replaces New, Paste and Get Info.
+        let archive = model.archiveLocation?.archive
+        if let archive {
+            menu.addItem(ActionMenuItem(String(localized: "Extract All…")) {
+                Task { @MainActor in
+                    guard
+                        let destination = await FileActions.chooseExtractionFolder(
+                            startingAt: archive.deletingLastPathComponent(), window: window)
+                    else { return }
+                    await FileActions.extractAll(archive, into: destination, model: model, window: window)
+                }
+            })
+        } else {
+            addNewItemActions(to: menu, model: model, in: nil)
+            menu.addItem(pasteItem(into: model.currentURL, model: model, clipboard: clipboard, window: window))
+        }
         menu.addItem(.separator())
 
         let sortItem = NSMenuItem(title: String(localized: "Sort By"), action: nil, keyEquivalent: "")
@@ -60,6 +74,7 @@ enum FileContextMenu {
         ) {
             settings.settings.showCheckboxColumn.toggle()
         })
+        guard archive == nil else { return menu }
         menu.addItem(.separator())
         let folderURL = model.currentURL
         menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL], open: openInfo) })
@@ -89,6 +104,16 @@ enum FileContextMenu {
             all.count == 1
             ? String(localized: "Quick Look “\(all[0].name)”")
             : String(localized: "Quick Look \(all.count) items")
+        if let location = model.archiveLocation {
+            // Entries inside an archive (read-only): Open, Quick Look and the extract actions only.
+            menu.addItem(ActionMenuItem(quickLookTitle) { QuickLookController.showPanel() })
+            menu.addItem(.separator())
+            addExtractEntriesActions(to: menu, entries: all, archive: location.archive, model: model, window: window)
+            return menu
+        }
+        if all.count == 1, !all[0].isDirectory {
+            addArchiveFileActions(to: menu, file: all[0], model: model, window: window)
+        }
         menu.addItem(OpenWithMenu.make(for: urls))
         // The right-click selected exactly these items, so the panel previews them.
         menu.addItem(ActionMenuItem(quickLookTitle) { QuickLookController.showPanel() })
@@ -132,6 +157,50 @@ enum FileContextMenu {
 
         addNewItemActions(to: menu, model: model, in: folder)
         return menu
+    }
+
+    /// For an archive file (outside an archive), after Open: Extract All Here and Open with Archive Utility for
+    /// pure archives; Browse Contents for containers such as `.docx` (pure archives browse on Open).
+    private static func addArchiveFileActions(
+        to menu: NSMenu, file: FileItem, model: BrowserModel, window: NSWindow?
+    ) {
+        let url = file.url
+        if ArchiveFormats.isArchive(url) {
+            menu.addItem(ActionMenuItem(String(localized: "Extract All Here")) {
+                Task { @MainActor in
+                    await FileActions.extractAll(url, into: url.deletingLastPathComponent(), model: model, window: window)
+                }
+            })
+            menu.addItem(ActionMenuItem(String(localized: "Open with Archive Utility")) {
+                FileActions.openWithArchiveUtility(url)
+            })
+        } else if ArchiveFormats.isBrowsable(url) {
+            menu.addItem(ActionMenuItem(String(localized: "Browse Contents")) {
+                Task { @MainActor in await model.browseContents(file) }
+            })
+        }
+    }
+
+    /// For entries inside `archive`: Extract to the archive's own folder, or to a chosen one. A folder
+    /// selected along with rows of its expanded contents is extracted once.
+    private static func addExtractEntriesActions(
+        to menu: NSMenu, entries items: [FileItem], archive: URL, model: BrowserModel, window: NSWindow?
+    ) {
+        let entries = PathUtilities.topLevel(items.map(\.url)).compactMap { ArchivePath.split($0)?.inner }
+        let parent = archive.deletingLastPathComponent()
+        let parentName = FileManager.default.displayName(atPath: parent.path)
+        menu.addItem(ActionMenuItem(String(localized: "Extract to “\(parentName)”")) {
+            Task { @MainActor in
+                await FileActions.extract(entries, from: archive, into: parent, model: model, window: window)
+            }
+        })
+        menu.addItem(ActionMenuItem(String(localized: "Extract To…")) {
+            Task { @MainActor in
+                guard let destination = await FileActions.chooseExtractionFolder(startingAt: parent, window: window)
+                else { return }
+                await FileActions.extract(entries, from: archive, into: destination, model: model, window: window)
+            }
+        })
     }
 
     /// Paste into `destination`; disabled while the clipboard is empty.

@@ -26,7 +26,7 @@ extension FileListController: NSTextFieldDelegate {
     /// Return: renames the single selected row.
     func renameSelection() {
         repairRenameSession()
-        guard showsCurrentFolder, rename.session == nil else { return }
+        guard showsCurrentFolder, rename.session == nil, !isInArchive else { return }
         let nodes = selectedNodes
         guard nodes.count == 1 else { return }
         beginRename(of: nodes[0])
@@ -48,6 +48,10 @@ extension FileListController: NSTextFieldDelegate {
     /// again from `didLoadChildren`.
     func startPendingRename() {
         guard let url = model.pendingRename, showsCurrentFolder else { return }
+        if isInArchive {
+            model.pendingRename = nil
+            return
+        }
         if let node = loadedNode(path: url.path) {
             model.pendingRename = nil
             rename.relistedFor = nil
@@ -65,6 +69,7 @@ extension FileListController: NSTextFieldDelegate {
     /// Edits the node's name cell, with the name before the extension preselected (all of it for
     /// folders and names without an extension). `text` replaces the name, e.g. after a failed try.
     func beginRename(of node: FileNode, text: String? = nil) {
+        guard !isInArchive else { return }
         let row = outlineView.row(forItem: node)
         let column = outlineView.column(withIdentifier: NSUserInterfaceItemIdentifier(FileColumn.name))
         guard row >= 0, column >= 0 else { return }
