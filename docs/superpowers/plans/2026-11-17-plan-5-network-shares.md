@@ -349,7 +349,7 @@ public enum ConnectOutcome: Equatable, Sendable { case connected(URL), needsSign
 - **`SystemVolumeLister`:** `FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: [.volumeURLForRemountingKey, .volumeIsLocalKey], options: [])` runs off main. Every non-local volume with a remount URL that `ShareURL(remountURL:)` accepts becomes a `MountedShare`.
 - **`KeychainCredentialStore`:**
   - Uses the Global Constraints item format, with `SecItemCopyMatching` / `SecItemAdd` / `SecItemUpdate` (update if the item exists) / `SecItemDelete`, all off main.
-  - Protocol constants: smb → `kSecAttrProtocolSMB`, afp → `kSecAttrProtocolAFP`, nfs → `kSecAttrProtocolNFS`? NFS has no Keychain protocol constant, so store nothing for nfs and return nil.
+  - Protocol constants: smb → `kSecAttrProtocolSMB`, afp → `kSecAttrProtocolAFP`, nfs → none (NFS has no Keychain protocol constant: `password` returns nil, `save` is a no-op).
   - https → `kSecAttrProtocolHTTPS`, http → `kSecAttrProtocolHTTP`.
 - **`NetworkMonitor`** (`@MainActor`):
   - Owns an `NWPathMonitor` on a private queue. Path updates are debounced by 2 s, then call `manager.networkChanged()`.
