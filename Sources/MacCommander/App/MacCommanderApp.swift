@@ -6,12 +6,16 @@ struct MacCommanderApp: App {
     // The App value is created once, so plain properties are enough (no `@State`).
     private let settings = ViewSettingsStore()
     private let favorites = FavoritesStore()
+    private let operations = FileOperationCenter()
+    private let clipboard = FileClipboard()
 
     var body: some Scene {
         WindowGroup {
             BrowserWindow()
                 .environment(settings)
                 .environment(favorites)
+                .environment(operations)
+                .environment(clipboard)
         }
         .commands {
             BrowserCommands(settings: settings)

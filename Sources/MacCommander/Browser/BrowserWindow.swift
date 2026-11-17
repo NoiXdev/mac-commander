@@ -21,6 +21,7 @@ extension FocusedValues {
 /// One browser window: sidebar, file list, path bar and toolbar.
 struct BrowserWindow: View {
     @Environment(ViewSettingsStore.self) private var settings
+    @Environment(FileOperationCenter.self) private var operations
     @SceneStorage("currentFolderPath") private var storedPath = ""
     private let modelState = State<BrowserModel?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
@@ -40,7 +41,7 @@ struct BrowserWindow: View {
         }
         .onAppear {
             guard model == nil else { return }
-            model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings)
+            model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
         }
     }
 

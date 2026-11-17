@@ -1,10 +1,11 @@
 import AppKit
+import Observation
 
 /// Copy/cut intent on top of the system pasteboard. Cut is only a marker: nothing moves until paste.
-@MainActor public final class FileClipboard {
-    private let pasteboard: NSPasteboard
+@MainActor @Observable public final class FileClipboard {
+    @ObservationIgnored private let pasteboard: NSPasteboard
     /// `changeCount` right after this app's cut; any later pasteboard write invalidates it.
-    private var cutChangeCount: Int?
+    @ObservationIgnored private var cutChangeCount: Int?
 
     public init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard

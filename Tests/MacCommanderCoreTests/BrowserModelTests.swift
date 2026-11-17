@@ -576,4 +576,63 @@ private final class Counter {
         #expect(listings.count == 2)
         #expect(names(model) == ["x.txt"])
     }
+
+    // MARK: - File operation center
+
+    private func makeCenter(trash trashFolder: URL) -> FileOperationCenter {
+        let trash = fakeTrash(into: trashFolder)
+        return FileOperationCenter(undo: FileUndoStack(trash: trash), trash: trash)
+    }
+
+    @Test func renameAndCreateAreUndoable() async throws {
+        let dir = try TemporaryDirectory()
+        let trashFolder = try dir.folder("Trash")
+        let work = try dir.folder("work")
+        let center = makeCenter(trash: trashFolder)
+        let model = BrowserModel(start: work, settings: makeStore(), operations: center)
+        await model.reload()
+
+        let created = try await model.createEmptyFile()
+        #expect(center.undo.undoTitle == "New File")
+        _ = try await model.rename(created, to: "x.txt")
+        #expect(center.undo.undoTitle == "Rename")
+
+        _ = try await center.performUndo()
+        _ = try await center.performUndo()
+        let left = try FileManager.default.contentsOfDirectory(atPath: work.path)
+        #expect(left.isEmpty)
+        let trashed = try FileManager.default.contentsOfDirectory(atPath: trashFolder.path)
+        #expect(trashed.count == 1)
+    }
+
+    @Test func operationInCurrentFolderReloads() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.folder("src")
+        let dst = try dir.folder("dst")
+        let a = try dir.file("src/a.txt")
+        let center = makeCenter(trash: try dir.folder("Trash"))
+        let model = BrowserModel(start: dst, settings: makeStore(), operations: center)
+        await model.reload()
+
+        _ = await center.transfer([a], into: dst, mode: .copy) { _ in
+            ConflictDecision(choice: .keepBoth, applyToAll: true)
+        }
+        // The folder watcher debounces for 200 ms; only the notification can be this fast.
+        #expect(await waitUntil(timeout: 0.15) { names(model) == ["a.txt"] })
+    }
+
+    @Test func selectAfterOperationSelectsItems() async throws {
+        let dir = try TemporaryDirectory()
+        let work = try dir.folder("work")
+        let a = try dir.file("work/a.txt")
+        let center = makeCenter(trash: try dir.folder("Trash"))
+        let model = BrowserModel(start: work, settings: makeStore(), operations: center)
+        await model.reload()
+
+        let result = await center.duplicate([a])
+        await model.selectAfterOperation(result.completed.map(\.destination))
+
+        let copy = try #require(model.items.first { $0.url.lastPathComponent == "a copy.txt" })
+        #expect(model.selection == [copy.url])
+    }
 }

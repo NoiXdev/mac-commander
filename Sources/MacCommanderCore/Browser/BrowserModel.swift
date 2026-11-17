@@ -20,6 +20,8 @@ public final class BrowserModel {
     /// Set after a create; the list starts inline editing for it, then sets it back to nil.
     public var pendingRename: URL?
 
+    /// The app-wide operation center: undo history and operation notifications.
+    @ObservationIgnored public let operations: FileOperationCenter
     @ObservationIgnored private let settings: ViewSettingsStore
     @ObservationIgnored private let loader: DirectoryLoader
     @ObservationIgnored private let opener: @MainActor (URL) -> Void
@@ -40,6 +42,8 @@ public final class BrowserModel {
     @ObservationIgnored private var watchedIdentity: FolderIdentity?
     /// Removes the unmount observer when the model goes away.
     @ObservationIgnored private var unmountObservation: NotificationObservation?
+    /// Removes the folders-changed observer when the model goes away.
+    @ObservationIgnored private var foldersObservation: NotificationObservation?
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
     @ObservationIgnored var afterListingHook: (@MainActor (URL) async -> Void)?
 
@@ -47,15 +51,18 @@ public final class BrowserModel {
         start: URL,
         settings: ViewSettingsStore,
         loader: DirectoryLoader = DirectoryLoader(),
-        opener: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
+        opener: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+        operations: FileOperationCenter = FileOperationCenter()
     ) {
         history = NavigationHistory(start: start)
         self.settings = settings
         self.loader = loader
         self.opener = opener
+        self.operations = operations
         observedSettings = settings.settings
         observeSettings()
         observeUnmounts()
+        observeFolderChanges()
     }
 
     deinit {
@@ -121,6 +128,7 @@ public final class BrowserModel {
         let parent = directory ?? currentURL
         let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createFolder(in: parent) }
+        operations.recordCreated(created, isFolder: true)
         return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }
 
@@ -128,6 +136,7 @@ public final class BrowserModel {
         let parent = directory ?? currentURL
         let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createEmptyFile(in: parent) }
+        operations.recordCreated(created, isFolder: false)
         return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }
 
@@ -136,6 +145,7 @@ public final class BrowserModel {
     public func rename(_ url: URL, to name: String) async throws(RenameError) -> URL {
         let historyAtStart = history
         let renamed = try await Self.rename(url, to: name)
+        operations.recordRename(from: url, to: renamed)
         let oldPath = Self.canonicalPath(url)
         if let selected = selection.first(where: { Self.canonicalPath($0) == oldPath }) {
             selection.remove(selected)
@@ -145,6 +155,16 @@ public final class BrowserModel {
             return renamed
         }
         return itemURL(matching: renamed)
+    }
+
+    /// After an operation: when any of `urls` is in the current folder (and no navigation happened
+    /// meanwhile), reloads and selects them, spelled as in `items`.
+    public func selectAfterOperation(_ urls: [URL]) async {
+        let historyAtStart = history
+        let inFolder = urls.filter { isCurrentDirectory($0.deletingLastPathComponent()) }
+        guard !inFolder.isEmpty else { return }
+        guard await reloadIfStillShowing(currentURL, since: historyAtStart) else { return }
+        selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 
     // MARK: - Loading
@@ -345,6 +365,25 @@ public final class BrowserModel {
             guard currentPath == volumePath || currentPath.hasPrefix(prefix) else { return }
         }
         await load()
+    }
+
+    /// Operations and undo post the folders they changed; reload when one is the current folder,
+    /// without waiting for the watcher. Goes through `directoryDidChange()` to coalesce with a
+    /// load in flight.
+    private func observeFolderChanges() {
+        let center = NotificationCenter.default
+        let token = center.addObserver(
+            forName: FileOperationCenter.foldersDidChange, object: operations, queue: nil
+        ) { [weak self] note in
+            let folders = note.userInfo?["folders"] as? [URL] ?? []
+            Task { @MainActor in await self?.foldersDidChange(folders) }
+        }
+        foldersObservation = NotificationObservation(center: center, token: token)
+    }
+
+    private func foldersDidChange(_ folders: [URL]) async {
+        guard folders.contains(where: { isCurrentDirectory($0) }) else { return }
+        await directoryDidChange()
     }
 
     // MARK: - Settings
