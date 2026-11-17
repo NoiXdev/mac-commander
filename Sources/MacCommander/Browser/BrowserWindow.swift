@@ -113,13 +113,13 @@ struct BrowserWindow: View {
 
 enum BrowserActions {
     @MainActor
-    static func newFolder(_ model: BrowserModel) async {
-        do { _ = try await model.createFolder() } catch { show(error) }
+    static func newFolder(_ model: BrowserModel, in directory: URL? = nil) async {
+        do { _ = try await model.createFolder(in: directory) } catch { show(error) }
     }
 
     @MainActor
-    static func newFile(_ model: BrowserModel) async {
-        do { _ = try await model.createEmptyFile() } catch { show(error) }
+    static func newFile(_ model: BrowserModel, in directory: URL? = nil) async {
+        do { _ = try await model.createEmptyFile(in: directory) } catch { show(error) }
     }
 
     @MainActor

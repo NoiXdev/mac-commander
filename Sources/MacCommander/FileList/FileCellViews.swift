@@ -18,6 +18,9 @@ extension NSUserInterfaceItemIdentifier {
 /// Name column: icon + name. `hasFileIcon` is false while a type placeholder is shown.
 final class FileNameCellView: NSTableCellView {
     var hasFileIcon = false
+    private(set) var isEditing = false
+    /// Active while editing: the field spans the cell instead of hugging the text.
+    private var editingTrailing: NSLayoutConstraint?
 
     init() {
         super.init(frame: .zero)
@@ -43,9 +46,29 @@ final class FileNameCellView: NSTableCellView {
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
+        editingTrailing = label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// Turns the label into an editable, scrolling field for inline rename, and back.
+    func setEditing(_ editing: Bool) {
+        guard editing != isEditing, let label = textField else { return }
+        isEditing = editing
+        label.isEditable = editing
+        label.isSelectable = editing
+        label.drawsBackground = editing
+        label.backgroundColor = editing ? .textBackgroundColor : nil
+        label.focusRingType = editing ? .exterior : .none
+        label.lineBreakMode = editing ? .byClipping : .byTruncatingMiddle
+        label.cell?.isScrollable = editing
+        editingTrailing?.isActive = editing
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        setEditing(false)
+    }
 }
 
 /// Date, size, kind and tags columns: a single secondary-colored label.

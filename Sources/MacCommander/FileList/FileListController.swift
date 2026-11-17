@@ -40,7 +40,7 @@ final class FileListController: NSViewController {
     private let scrollView = NSScrollView()
     private var errorHost: NSHostingView<LoadErrorView>?
 
-    private var roots: [FileNode] = []
+    var roots: [FileNode] = []
     /// Folders the user expanded, restored by URL after reloads.
     private var expandedURLs: Set<URL> = []
     private var displayedFolder: URL?
@@ -53,6 +53,8 @@ final class FileListController: NSViewController {
     private var isApplyingLayout = false
     private let icons = FileIconProvider()
     private var iconPassScheduled = false
+    /// Inline rename state (see `FileListController+Rename.swift`).
+    var rename = InlineRenameState()
 
     /// Above this many inserted/removed/changed rows, a reload is cheaper than row animations.
     private static let maxIncrementalChanges = 500
@@ -94,6 +96,7 @@ final class FileListController: NSViewController {
         observeSelection()
         observeLoadError()
         observeSettings()
+        observePendingRename()
     }
 
     override func viewDidAppear() {
@@ -130,6 +133,13 @@ final class FileListController: NSViewController {
         outline.onGoUp = { [weak self] in
             guard let model = self?.model else { return }
             Task { await model.goUp() }
+        }
+        outline.onRename = { [weak self] in self?.renameSelection() }
+        outline.onToggleQuickLook = { [weak self] in self?.toggleQuickLook() }
+        outline.contextMenu = { [weak self] row in self?.contextMenu(forRow: row) }
+        outline.allowsInteraction = { [weak self] in self?.showsCurrentFolder ?? false }
+        outline.quickLook = QuickLookController(keyTarget: outline) { [weak self] in
+            self?.selectedNodes.map(\.url) ?? []
         }
         outline.dataSource = self
         outline.delegate = self
@@ -189,6 +199,7 @@ final class FileListController: NSViewController {
 
     private func currentFolderDidChange() {
         guard model.currentURL != displayedFolder, displayedFolder != nil || !roots.isEmpty else { return }
+        endRename(commit: true)
         displayedFolder = nil
         roots.forEach { $0.detach() }
         roots = []
@@ -198,7 +209,7 @@ final class FileListController: NSViewController {
     }
 
     /// False while the rows still belong to a folder other than `model.currentURL`.
-    private var showsCurrentFolder: Bool {
+    var showsCurrentFolder: Bool {
         displayedFolder == model.currentURL
     }
 
@@ -279,6 +290,7 @@ final class FileListController: NSViewController {
             applyingChanges { outlineView.reloadData() }
             if outlineView.numberOfRows > 0 { outlineView.scrollRowToVisible(0) }
             syncSelectionFromModel()
+            startPendingRename()
             return
         }
         applyingChanges {
@@ -287,6 +299,7 @@ final class FileListController: NSViewController {
         }
         refreshLoadedFolders(in: roots)
         syncSelectionFromModel()
+        startPendingRename()
     }
 
     /// Replaces the children of `parent` (nil = root) by `items`, reusing nodes by URL. Uses row
@@ -376,7 +389,7 @@ final class FileListController: NSViewController {
     }
 
     /// Lists a folder's children through the model, then shows them (and expands if asked).
-    private func loadChildren(of node: FileNode, expand: Bool) {
+    func loadChildren(of node: FileNode, expand: Bool) {
         node.loadTask?.cancel()
         node.loadTask = Task { [weak self, model] in
             let items: [FileItem]
@@ -409,6 +422,7 @@ final class FileListController: NSViewController {
             }
         }
         syncSelectionFromModel()
+        startPendingRename()
     }
 
     private func applyingChanges(_ body: () -> Void) {
@@ -417,8 +431,13 @@ final class FileListController: NSViewController {
         body()
     }
 
-    private func node(atRow row: Int) -> FileNode? {
+    func node(atRow row: Int) -> FileNode? {
         outlineView.item(atRow: row) as? FileNode
+    }
+
+    /// The selected rows' nodes, in row order.
+    var selectedNodes: [FileNode] {
+        outlineView.selectedRowIndexes.compactMap { node(atRow: $0) }
     }
 
     // MARK: - Selection
@@ -667,6 +686,7 @@ extension FileListController: NSOutlineViewDelegate {
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
         updateCheckboxStates()
+        outlineView.quickLook?.selectionDidChange()
         guard !isApplyingChanges else { return }
         writeSelectionToModel()
     }
