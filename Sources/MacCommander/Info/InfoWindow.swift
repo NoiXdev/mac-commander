@@ -34,10 +34,15 @@ struct ItemInfo: Sendable {
 struct InfoWindow: View {
     let url: URL
     private let infoState = State<ItemInfo?>(initialValue: nil)
+    private let iconState = State<NSImage?>(initialValue: nil)
     private let sizeState = State(initialValue: "")
     private var info: ItemInfo? {
         get { infoState.wrappedValue }
         nonmutating set { infoState.wrappedValue = newValue }
+    }
+    private var icon: NSImage? {
+        get { iconState.wrappedValue }
+        nonmutating set { iconState.wrappedValue = newValue }
     }
     private var sizeText: String {
         get { sizeState.wrappedValue }
@@ -49,7 +54,7 @@ struct InfoWindow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Image(nsImage: Self.icon(for: url))
+                Image(nsImage: icon ?? NSImage())
                     .resizable()
                     .frame(width: 64, height: 64)
                 Text(info?.name ?? url.lastPathComponent)
@@ -82,11 +87,8 @@ struct InfoWindow: View {
         }
     }
 
-    private static func icon(for url: URL) -> NSImage {
-        NSWorkspace.shared.icon(forFile: url.path)
-    }
-
     private func load() async {
+        icon = NSWorkspace.shared.icon(forFile: url.path)
         let loaded = await ItemInfo.load(url)
         info = loaded
         guard loaded.isDirectory else {
@@ -96,8 +98,9 @@ struct InfoWindow: View {
         sizeText = String(localized: "Calculating…")
         do {
             let size = try await FolderSizeCalculator.size(of: url)
-            let items = size.items.formatted()
-            sizeText = String(localized: "\(Self.byteString(size.bytes)) for \(items) items (\(size.bytes.formatted()) bytes)")
+            let count = size.items.formatted()
+            let items = size.items == 1 ? String(localized: "1 item") : String(localized: "\(count) items")
+            sizeText = String(localized: "\(Self.byteString(size.bytes)) for \(items) (\(size.bytes.formatted()) bytes)")
         } catch is CancellationError {
             sizeText = ""
         } catch {
