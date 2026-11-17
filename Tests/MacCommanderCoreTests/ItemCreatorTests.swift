@@ -36,4 +36,12 @@ import Foundation
         let url = try ItemCreator.createEmptyFile(in: dir.url)
         #expect(url.lastPathComponent == "untitled 2.txt")
     }
+
+    @Test func createFolderSkipsDanglingSymlink() throws {
+        let dir = try TemporaryDirectory()
+        try FileManager.default.createSymbolicLink(
+            atPath: dir.url.appendingPathComponent("untitled folder").path, withDestinationPath: "/nonexistent/target")
+        let url = try ItemCreator.createFolder(in: dir.url)
+        #expect(url.lastPathComponent == "untitled folder 2")
+    }
 }

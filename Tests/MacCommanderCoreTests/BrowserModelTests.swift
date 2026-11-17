@@ -29,6 +29,29 @@ private final class Flag {
     var isSet = false
 }
 
+/// Suspends callers of `wait()` until `open()`.
+@MainActor
+private final class Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+}
+
+@MainActor
+private final class Counter {
+    var count = 0
+}
+
 @MainActor
 @Suite struct BrowserModelTests {
     /// Makes the first listing of `folder` stale by navigating to `other` before it is checked.
@@ -460,5 +483,80 @@ private final class Flag {
 
         #expect(samePath(model.currentURL, a))
         #expect(model.selection.isEmpty)
+    }
+
+    @Test func listedURLFollowsPublishedListing() async throws {
+        let dir = try TemporaryDirectory()
+        let a = try dir.folder("a")
+        let b = try dir.folder("b")
+        try dir.file("b/y.txt")
+        let model = BrowserModel(start: a, settings: makeStore())
+        #expect(model.listedURL == nil)
+        await model.reload()
+        #expect(model.listedURL == model.currentURL)
+
+        var duringListing: URL?
+        model.afterListingHook = { [weak model] url in
+            guard samePath(url, b), let model else { return }
+            duringListing = model.listedURL
+        }
+        await model.navigate(to: b)
+
+        #expect(duringListing.map { samePath($0, a) } == true)
+        #expect(model.listedURL == model.currentURL)
+        #expect(names(model) == ["y.txt"])
+    }
+
+    @Test func selectionOutsideCurrentFolderIsPruned() async throws {
+        let dir = try TemporaryDirectory()
+        let a = try dir.folder("a")
+        let x = try dir.file("a/x.txt")
+        let b = try dir.folder("b")
+        let model = BrowserModel(start: a, settings: makeStore())
+        await model.reload()
+        model.selection = [x]
+        await model.navigate(to: b)
+
+        model.selection = [x]
+        await model.reload()
+
+        #expect(model.selection.isEmpty)
+    }
+
+    @Test func selectionInExpandedSubfolderSurvivesReload() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.folder("sub")
+        let inner = try dir.file("sub/inner.txt")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+
+        model.selection = [inner]
+        await model.reload()
+
+        #expect(model.selection == [inner])
+    }
+
+    @Test func changesDuringSlowLoadCoalesceIntoOneFollowUp() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.file("x.txt")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        let gate = Gate()
+        let listings = Counter()
+        model.afterListingHook = { _ in
+            listings.count += 1
+            if listings.count == 1 { await gate.wait() }
+        }
+
+        let first = Task { await model.reload() }
+        #expect(await waitUntil { listings.count == 1 })
+        for _ in 0..<3 { await model.directoryDidChange() }
+        gate.open()
+        await first.value
+
+        #expect(names(model) == ["x.txt"])
+        #expect(await waitUntil { listings.count == 2 && !model.isLoading })
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(listings.count == 2)
+        #expect(names(model) == ["x.txt"])
     }
 }

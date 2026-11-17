@@ -11,6 +11,9 @@ public final class BrowserModel {
     public var currentURL: URL { history.current }
     /// Sorted by `settings.settings.sortOrder`; hidden files are filtered by the loader.
     public private(set) var items: [FileItem] = []
+    /// The folder `items` were listed from, published together with `items`; nil while nothing
+    /// is listed or the listing failed. Lags behind `currentURL` until a new listing arrives.
+    public private(set) var listedURL: URL?
     public private(set) var loadError: DirectoryLoadError?
     public private(set) var isLoading = false
     public var selection: Set<URL> = []
@@ -20,14 +23,20 @@ public final class BrowserModel {
     @ObservationIgnored private let settings: ViewSettingsStore
     @ObservationIgnored private let loader: DirectoryLoader
     @ObservationIgnored private let opener: @MainActor (URL) -> Void
-    /// Unsorted items of the last successful load.
+    /// Unsorted items of the last load, and the folder they came from (nil after a failure).
     @ObservationIgnored private var loadedItems: [FileItem] = []
+    @ObservationIgnored private var loadedURL: URL?
+    /// The folder the newest load is listing; nil when no load is in flight.
+    @ObservationIgnored private var inFlightURL: URL?
+    /// Set when the folder changed while a load of it was in flight: one more load follows.
+    @ObservationIgnored private var needsReload = false
     /// Bumped per load: a stale load result never overwrites a newer one.
     @ObservationIgnored private var loadGeneration = 0
     /// Bumped per sort: a stale sort result never overwrites a newer one.
     @ObservationIgnored private var sortGeneration = 0
     @ObservationIgnored private var observedSettings: ViewSettings
     @ObservationIgnored private var watcher: DirectoryWatcher?
+    @ObservationIgnored private var watchedURL: URL?
     /// Removes the unmount observer when the model goes away.
     @ObservationIgnored private var unmountObservation: NotificationObservation?
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
@@ -145,6 +154,8 @@ public final class BrowserModel {
     private func load() async -> Bool {
         loadGeneration += 1
         let generation = loadGeneration
+        // This listing starts after any change reported so far.
+        needsReload = false
 
         if !FileManager.default.fileExists(atPath: currentURL.path) {
             history.replaceCurrent(with: PathUtilities.nearestExistingAncestor(of: currentURL))
@@ -154,6 +165,7 @@ public final class BrowserModel {
         let current = settings.settings
         // Watch before listing, so a change during the listing still triggers a reload.
         startWatching(url)
+        inFlightURL = url
         isLoading = true
 
         let result: Result<[FileItem], DirectoryLoadError>
@@ -168,18 +180,38 @@ public final class BrowserModel {
         switch result {
         case .success(let raw):
             loadedItems = raw
+            loadedURL = url
             loadError = nil
         case .failure(.notFound) where !FileManager.default.fileExists(atPath: url.path):
             // Vanished between the existence check and the listing: fall back again.
             return await load()
         case .failure(let error):
             loadedItems = []
+            loadedURL = nil
             loadError = error
         }
         await present(loadGeneration: generation)
         guard generation == loadGeneration else { return false }
         isLoading = false
+        inFlightURL = nil
+        if needsReload {
+            // Run the follow-up separately, so callers waiting for this load aren't held up
+            // by a folder that keeps changing.
+            needsReload = false
+            Task { await self.directoryDidChange() }
+        }
         return true
+    }
+
+    /// A change in the watched folder. Newer navigation supersedes an in-flight load, but a
+    /// change of the folder being listed must not: in a busy folder each change would discard
+    /// the running listing and nothing would ever be shown. It schedules one more load instead.
+    func directoryDidChange() async {
+        if let inFlightURL, inFlightURL == currentURL {
+            needsReload = true
+            return
+        }
+        await load()
     }
 
     /// Sorts `loadedItems` off the main actor and publishes them, unless something newer started.
@@ -189,6 +221,7 @@ public final class BrowserModel {
         let sorted = await Self.sort(loadedItems, by: settings.settings.sortOrder)
         guard generation == sortGeneration, expectedLoad == loadGeneration else { return }
         items = sorted
+        listedURL = loadedURL
         pruneSelection()
     }
 
@@ -201,10 +234,12 @@ public final class BrowserModel {
 
     /// Drops selected entries that disappeared. Entries in the current folder are matched against
     /// `items` by canonical path (the loader may spell the folder differently, e.g. `/private/var`)
-    /// and replaced by the item's URL; entries elsewhere (inline-expanded subfolders) must still exist.
+    /// and replaced by the item's URL; entries in its subfolders (inline-expanded) must still
+    /// exist; entries anywhere else are dropped, since they can't be visible.
     private func pruneSelection() {
         guard !selection.isEmpty else { return }
         let directory = currentURL.resolvingSymlinksInPath().path
+        let descendantPrefix = directory.hasSuffix("/") ? directory : directory + "/"
         var byName: [String: URL] = [:]
         for item in items { byName[item.url.lastPathComponent] = item.url }
         // Selected entries usually share a few parents: resolve each parent once, not per entry.
@@ -219,6 +254,7 @@ public final class BrowserModel {
             if resolved == directory {
                 return byName[url.lastPathComponent]
             }
+            guard resolved.hasPrefix(descendantPrefix) else { return nil }
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
         })
         if pruned != selection { selection = pruned }
@@ -258,10 +294,14 @@ public final class BrowserModel {
         url.resolvingSymlinksInPath().path == currentURL.resolvingSymlinksInPath().path
     }
 
+    /// Keeps an existing watcher for the same folder, so frequent reloads don't keep resetting
+    /// its maximum-latency window.
     private func startWatching(_ url: URL) {
+        if watcher != nil, watchedURL == url { return }
         watcher?.cancel()
+        watchedURL = url
         watcher = DirectoryWatcher(url: url) { [weak self] in
-            Task { @MainActor in await self?.reload() }
+            Task { @MainActor in await self?.directoryDidChange() }
         }
     }
 

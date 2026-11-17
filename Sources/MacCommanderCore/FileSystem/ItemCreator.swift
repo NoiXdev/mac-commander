@@ -2,10 +2,18 @@ import Foundation
 
 public enum ItemCreator {
     public static func createFolder(in directory: URL) throws -> URL {
-        let name = NameGenerator.uniqueName(base: "untitled folder", pathExtension: nil, in: directory)
-        let url = directory.appendingPathComponent(name, isDirectory: true)
-        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
-        return url
+        for _ in 0..<100 {
+            let name = NameGenerator.uniqueName(base: "untitled folder", pathExtension: nil, in: directory)
+            let url = directory.appendingPathComponent(name, isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+                return url
+            } catch CocoaError.fileWriteFileExists {
+                // The name was taken after it was chosen: pick the next one.
+                continue
+            }
+        }
+        throw POSIXError(.EEXIST)
     }
 
     public static func createEmptyFile(in directory: URL) throws -> URL {

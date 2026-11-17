@@ -93,4 +93,12 @@ import Testing
             #expect(defaults.string(forKey: FavoritesStore.key) == "not an array")
         }
     }
+
+    @Test func storedPathsAreCleanedAndDeduplicated() {
+        withDefaults { defaults in
+            defaults.set(["", "/tmp", "/tmp/", "relative"], forKey: FavoritesStore.key)
+            let store = FavoritesStore(defaults: defaults)
+            #expect(store.favorites.map(\.url.path) == ["/tmp"])
+        }
+    }
 }

@@ -21,7 +21,15 @@ public final class FavoritesStore {
         self.defaults = defaults
         self.fileManager = fileManager
         if let paths = defaults.object(forKey: Self.key) as? [String] {
-            favorites = paths.map { location(for: URL(fileURLWithPath: $0)) }
+            // Skip entries that can't be a favorite (empty or relative paths would resolve against
+            // the working directory) and duplicates, which would break the sidebar's identities.
+            var seen = Set<String>()
+            favorites = paths.compactMap { path in
+                guard path.hasPrefix("/") else { return nil }
+                let url = URL(fileURLWithPath: path)
+                guard seen.insert(Self.normalizedPath(url)).inserted else { return nil }
+                return location(for: url)
+            }
         } else {
             // Absent or not a [String]: use defaults without touching the stored value.
             let home = fileManager.homeDirectoryForCurrentUser
