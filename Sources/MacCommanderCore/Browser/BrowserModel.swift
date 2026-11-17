@@ -37,6 +37,7 @@ public final class BrowserModel {
     @ObservationIgnored private var observedSettings: ViewSettings
     @ObservationIgnored private var watcher: DirectoryWatcher?
     @ObservationIgnored private var watchedURL: URL?
+    @ObservationIgnored private var watchedIdentity: FolderIdentity?
     /// Removes the unmount observer when the model goes away.
     @ObservationIgnored private var unmountObservation: NotificationObservation?
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
@@ -294,12 +295,28 @@ public final class BrowserModel {
         url.resolvingSymlinksInPath().path == currentURL.resolvingSymlinksInPath().path
     }
 
+    /// Device and inode of a folder, to tell a recreated folder from the one being watched.
+    private struct FolderIdentity: Equatable {
+        let device: dev_t
+        let inode: ino_t
+
+        init?(path: String) {
+            var info = stat()
+            guard stat(path, &info) == 0 else { return nil }
+            device = info.st_dev
+            inode = info.st_ino
+        }
+    }
+
     /// Keeps an existing watcher for the same folder, so frequent reloads don't keep resetting
-    /// its maximum-latency window.
+    /// its maximum-latency window. A folder deleted and recreated at the same path is a new
+    /// vnode, so the old watcher is dead and must be replaced.
     private func startWatching(_ url: URL) {
-        if watcher != nil, watchedURL == url { return }
+        let identity = FolderIdentity(path: url.path)
+        if watcher != nil, watchedURL == url, let identity, identity == watchedIdentity { return }
         watcher?.cancel()
         watchedURL = url
+        watchedIdentity = identity
         watcher = DirectoryWatcher(url: url) { [weak self] in
             Task { @MainActor in await self?.directoryDidChange() }
         }

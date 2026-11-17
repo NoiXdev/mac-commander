@@ -102,6 +102,23 @@ private final class Counter {
         #expect(names(model) == ["a.txt"])
     }
 
+    @Test func recreatedFolderIsWatchedAgain() async throws {
+        let dir = try TemporaryDirectory()
+        let work = try dir.folder("work")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        await model.navigate(to: work)
+
+        try FileManager.default.removeItem(at: work)
+        try FileManager.default.createDirectory(at: work, withIntermediateDirectories: false)
+        await model.reload()
+        // Let stale events from the old folder drain (longer than the watcher's 1 s max latency).
+        try await Task.sleep(for: .milliseconds(1500))
+        try dir.file("work/new.txt")
+
+        #expect(await waitUntil { names(model) == ["new.txt"] })
+    }
+
     @Test func goBackAndForward() async throws {
         let dir = try TemporaryDirectory()
         let a = try dir.folder("a")
