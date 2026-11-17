@@ -395,4 +395,70 @@ private final class Flag {
 
         #expect(await waitUntil { samePath(model.currentURL, dir.url) })
     }
+
+    @Test func navigationClearsSelection() async throws {
+        let dir = try TemporaryDirectory()
+        let a = try dir.folder("a")
+        try dir.file("a/x.txt")
+        let b = try dir.folder("b")
+        let model = BrowserModel(start: a, settings: makeStore())
+        await model.reload()
+        model.selection = Set(model.items.map(\.url))
+        model.pendingRename = model.items.first?.url
+
+        await model.navigate(to: b)
+
+        #expect(model.selection.isEmpty)
+        #expect(model.pendingRename == nil)
+    }
+
+    @Test func goBackClearsSelection() async throws {
+        let dir = try TemporaryDirectory()
+        let a = try dir.folder("a")
+        let b = try dir.folder("b")
+        try dir.file("b/y.txt")
+        let model = BrowserModel(start: a, settings: makeStore())
+        await model.reload()
+        await model.navigate(to: b)
+        model.selection = Set(model.items.map(\.url))
+        #expect(model.selection.count == 1)
+
+        await model.goBack()
+
+        #expect(model.selection.isEmpty)
+    }
+
+    @Test func reloadKeepsSelection() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.file("x.txt")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        let selected = Set(model.items.map(\.url))
+        model.selection = selected
+
+        await model.reload()
+
+        #expect(model.selection == selected)
+        #expect(!selected.isEmpty)
+    }
+
+    @Test func ancestorFallbackClearsSelection() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.file("a/x.txt")
+        let a = dir.url.appendingPathComponent("a")
+        let b = try dir.folder("a/b")
+        try dir.file("a/b/inner.txt")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        await model.navigate(to: b)
+        model.selection = Set(model.items.map(\.url))
+        // Also select an entry in the fallback folder: it must not survive the fallback.
+        model.selection.insert(a.appendingPathComponent("x.txt"))
+
+        try FileManager.default.removeItem(at: b)
+        await model.reload()
+
+        #expect(samePath(model.currentURL, a))
+        #expect(model.selection.isEmpty)
+    }
 }

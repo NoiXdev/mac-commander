@@ -63,16 +63,19 @@ public final class BrowserModel {
         let url = isSymlink ? requested.resolvingSymlinksInPath() : requested
         guard url.standardizedFileURL != currentURL.standardizedFileURL else { return }
         history.visit(url)
+        clearSelection()
         await load()
     }
 
     public func goBack() async {
         guard history.goBack() != nil else { return }
+        clearSelection()
         await load()
     }
 
     public func goForward() async {
         guard history.goForward() != nil else { return }
+        clearSelection()
         await load()
     }
 
@@ -145,6 +148,7 @@ public final class BrowserModel {
 
         if !FileManager.default.fileExists(atPath: currentURL.path) {
             history.replaceCurrent(with: PathUtilities.nearestExistingAncestor(of: currentURL))
+            clearSelection()
         }
         let url = currentURL
         let current = settings.settings
@@ -186,6 +190,13 @@ public final class BrowserModel {
         guard generation == sortGeneration, expectedLoad == loadGeneration else { return }
         items = sorted
         pruneSelection()
+    }
+
+    /// A different folder is shown: nothing from the previous one may stay selected, since
+    /// actions on `selection` (e.g. Move to Trash) would hit invisible items.
+    private func clearSelection() {
+        selection = []
+        pendingRename = nil
     }
 
     /// Drops selected entries that disappeared. Entries in the current folder are matched against
