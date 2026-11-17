@@ -20,6 +20,25 @@ struct BrowserCommands: Commands {
             Button("New Empty File") { run { await BrowserActions.newFile($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .disabled(model == nil)
+            Divider()
+            Button("Duplicate") { send(#selector(FileOutlineView.duplicate(_:))) }
+                .keyboardShortcut("d")
+                .disabled(model?.selection.isEmpty != false)
+            Button("Move to Trash") { send(#selector(FileOutlineView.moveToTrash(_:))) }
+                .keyboardShortcut(.delete)
+                .disabled(model?.selection.isEmpty != false)
+            Button("Get Info") { send(#selector(FileOutlineView.getInfo(_:))) }
+                .keyboardShortcut("i")
+                .disabled(model?.selection.isEmpty != false)
+        }
+        // Copy, Cut, Paste and Undo are the standard Edit items; a focused text field keeps them for its text.
+        CommandGroup(after: .pasteboard) {
+            Button("Move Item Here") { send(#selector(FileOutlineView.pasteAsMove(_:))) }
+                .keyboardShortcut("v", modifiers: [.command, .option])
+                .disabled(model == nil)
+            Button("Copy Path") { send(#selector(FileOutlineView.copyPath(_:))) }
+                .keyboardShortcut("c", modifiers: [.command, .option])
+                .disabled(model?.selection.isEmpty != false)
         }
         CommandMenu("Go") {
             Button("Back") { run { await $0.goBack() } }
@@ -57,7 +76,12 @@ struct BrowserCommands: Commands {
 
     /// Opens the selection like ⌘↓, through the focused file list (the responder chain).
     private func openSelection() {
-        if !NSApp.sendAction(#selector(FileOutlineView.openSelectedItems(_:)), to: nil, from: nil) {
+        send(#selector(FileOutlineView.openSelectedItems(_:)))
+    }
+
+    /// Sends `action` to the focused file list through the responder chain; beeps if nothing handles it.
+    private func send(_ action: Selector) {
+        if !NSApp.sendAction(action, to: nil, from: nil) {
             NSSound.beep()
         }
     }

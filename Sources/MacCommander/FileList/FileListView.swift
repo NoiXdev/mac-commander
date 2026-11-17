@@ -6,9 +6,10 @@ import SwiftUI
 struct FileListView: NSViewControllerRepresentable {
     let model: BrowserModel
     let settings: ViewSettingsStore
+    let clipboard: FileClipboard
 
     func makeNSViewController(context: Context) -> FileListController {
-        FileListController(model: model, settings: settings)
+        FileListController(model: model, settings: settings, clipboard: clipboard)
     }
 
     func updateNSViewController(_ controller: FileListController, context: Context) {

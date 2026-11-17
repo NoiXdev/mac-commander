@@ -22,6 +22,7 @@ extension FocusedValues {
 struct BrowserWindow: View {
     @Environment(ViewSettingsStore.self) private var settings
     @Environment(FileOperationCenter.self) private var operations
+    @Environment(FileClipboard.self) private var clipboard
     @SceneStorage("currentFolderPath") private var storedPath = ""
     private let modelState = State<BrowserModel?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
@@ -51,10 +52,11 @@ struct BrowserWindow: View {
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             VStack(spacing: 0) {
-                FileListView(model: model, settings: settings)
+                FileListView(model: model, settings: settings, clipboard: clipboard)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 PathBar(model: model)
+                OperationsStrip()
             }
         }
         .navigationTitle(Self.displayName(of: model.currentURL))

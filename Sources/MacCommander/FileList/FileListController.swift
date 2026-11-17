@@ -3,10 +3,13 @@ import MacCommanderCore
 import Observation
 import SwiftUI
 
+/// The file list: a view-based NSOutlineView showing model.items, with inline folder expansion,
 /// persistent columns (`settings.columnLayout`) and a checkbox column mirroring the selection.
 final class FileListController: NSViewController {
     let model: BrowserModel
     let settings: ViewSettingsStore
+    /// The app's file clipboard (copy/cut/paste).
+    let clipboard: FileClipboard
 
     private(set) var outlineView = FileOutlineView()
     let scrollView = NSScrollView()
@@ -37,9 +40,10 @@ final class FileListController: NSViewController {
     /// Above this many inserted/removed/changed rows, a reload is cheaper than row animations.
     static let maxIncrementalChanges = 500
 
-    init(model: BrowserModel, settings: ViewSettingsStore) {
+    init(model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard) {
         self.model = model
         self.settings = settings
+        self.clipboard = clipboard
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -119,6 +123,7 @@ final class FileListController: NSViewController {
         outline.onToggleQuickLook = { [weak self] in self?.toggleQuickLook() }
         outline.contextMenu = { [weak self] row in self?.contextMenu(forRow: row) }
         outline.allowsInteraction = { [weak self] in self?.showsCurrentFolder ?? false }
+        outline.commandHandler = self
         outline.quickLook = QuickLookController(keyTarget: outline) { [weak self] in
             self?.selectedNodes.map(\.url) ?? []
         }
