@@ -31,6 +31,15 @@ private struct ExtractFixture {
     func contents(_ url: URL) -> String? { try? String(contentsOf: url, encoding: .utf8) }
 }
 
+/// chmod 0755 on every folder below `root` (a sync helper: enumerators can't be iterated in async code).
+private func makeFoldersWritable(_ root: URL) {
+    let fm = FileManager.default
+    guard let all = fm.enumerator(atPath: root.path) else { return }
+    for case let path as String in all where all.fileAttributes?[.type] as? FileAttributeType == .typeDirectory {
+        try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent(path).path)
+    }
+}
+
 private let keepBoth: ConflictResolver = { _ in ConflictDecision(choice: .keepBoth, applyToAll: true) }
 private let failOnConflict: ConflictResolver = { conflict in
     Issue.record("unexpected conflict for \(conflict.existing.lastPathComponent)")
@@ -88,6 +97,9 @@ struct ArchiveExtractorTests {
         let f = try ExtractFixture()
         let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
 
+        await #expect(throws: ArchiveError.unreadable(message: "“nope.txt” isn’t in the archive.")) {
+            _ = try await f.center.extract(["img/a.png", "nope.txt"], from: zip, into: f.dst, resolver: failOnConflict)
+        }
         for entry in ["nope.txt", "../c.txt", "img/../c.txt"] {
             await #expect(throws: ArchiveError.self) {
                 _ = try await f.center.extract([entry], from: zip, into: f.dst, resolver: failOnConflict)
@@ -120,12 +132,16 @@ struct ArchiveExtractorTests {
             "-C", tree.path, "ok/evil", "ok/evil2", "ok/abs", "ok/l",
             "-C", tree2.path, "l/x",
         ])
+        // The plants really are in the fixture.
+        let listing = try await ProcessRunner.run(
+            URL(fileURLWithPath: "/usr/bin/bsdtar"), ["-tf", archive.path, "-P"])
+        let listed = Set(String(decoding: listing.stdout, as: UTF8.self).split(separator: "\n").map(String.init))
+        #expect(listed == ["../evil", "../../evil2", "\(outside.path)/abs", "l", "l/x"])
         let rootBefore = f.names(in: f.tmp.url)
 
-        do {
+        // bsdtar refuses the hostile entries and exits non-zero.
+        await #expect(throws: ArchiveError.self) {
             _ = try await f.center.extractAll(archive, into: f.dst, resolver: failOnConflict)
-        } catch {
-            // bsdtar refuses the hostile entries and exits non-zero; failing is fine, escaping is not.
         }
 
         #expect(f.names(in: outside) == ["existing.txt"])
@@ -168,11 +184,87 @@ struct ArchiveExtractorTests {
         #expect(f.contents(f.dst.appendingPathComponent("c.txt")) == "mine")
         #expect(f.contents(f.dst.appendingPathComponent("c 2.txt")) == "C")
         #expect(f.center.undo.undoTitle == "Extract")
-        #expect(f.center.undo.records.last?.action == .created([f.dst.appendingPathComponent("c 2.txt")]))
+        guard case .transferred(.copy, let items, let replaced) = f.center.undo.records.last?.action else {
+            Issue.record("expected a copy record")
+            return
+        }
+        #expect(items.map(\.destination.lastPathComponent) == ["c 2.txt"])
+        #expect(replaced.isEmpty)
 
         _ = try await f.center.performUndo()
         #expect(f.dstNames == ["c.txt"])
         #expect(f.names(in: f.trashFolder) == ["c 2.txt"])
+    }
+
+    @Test func replaceIsUndoneByRestoringTheOriginal() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
+        let mine = f.dst.appendingPathComponent("c.txt")
+        try "mine".write(to: mine, atomically: true, encoding: .utf8)
+
+        _ = try await f.center.extract(["c.txt"], from: zip, into: f.dst) { _ in
+            ConflictDecision(choice: .replace, applyToAll: true)
+        }
+        #expect(f.contents(mine) == "C")
+        #expect(f.center.undo.undoTitle == "Extract")
+
+        _ = try await f.center.performUndo()
+        #expect(f.dstNames == ["c.txt"])
+        #expect(f.contents(mine) == "mine")
+    }
+
+    @Test func duplicateAndNestedEntriesAreMovedOnce() async throws {
+        let f = try ExtractFixture()
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
+
+        let result = try await f.center.extract(
+            ["c.txt", "img/a.png", "img", "c.txt", "img/b.png"], from: zip, into: f.dst, resolver: failOnConflict)
+
+        #expect(result.outcome == .finished)
+        #expect(result.completed.map(\.destination.lastPathComponent) == ["c.txt", "img"])
+        #expect(f.names(in: f.dst.appendingPathComponent("img")) == ["a.png", "b.png"])
+    }
+
+    /// bsdtar restores `r-x` folders; a folder without write permission can't be moved to a new parent or
+    /// emptied, so staging makes its folders owner-writable.
+    @Test func readOnlyFoldersExtractAndLeaveNoStaging() async throws {
+        let f = try ExtractFixture()
+        let src = try f.tmp.folder("ro-src")
+        try f.tmp.file("ro-src/ro/f.txt", contents: "F")
+        try f.tmp.file("ro-src/ro/sub/g.txt", contents: "G")
+        try f.tmp.file("ro-src/c.txt", contents: "C")
+        let fm = FileManager.default
+        let readOnly = [src.appendingPathComponent("ro/sub"), src.appendingPathComponent("ro")]
+        for folder in readOnly { try fm.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path) }
+        let tree = f.tmp.url
+        defer {
+            // Let TemporaryDirectory clean up whatever is left.
+            makeFoldersWritable(tree)
+            for folder in readOnly { try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path) }
+        }
+        let onlyRo = f.tmp.url.appendingPathComponent("onlyro.tar")
+        try ArchiveFixtures.run("/usr/bin/bsdtar", ["-c", "-f", onlyRo.path, "-C", src.path, "ro"])
+        let mixed = f.tmp.url.appendingPathComponent("mixed.tar")
+        try ArchiveFixtures.run("/usr/bin/bsdtar", ["-c", "-f", mixed.path, "-C", src.path, "ro", "c.txt"])
+
+        // One top-level read-only folder, moved as is.
+        let all = try await f.center.extractAll(onlyRo, into: f.dst, resolver: failOnConflict)
+        #expect(all.outcome == .finished)
+        #expect(f.contents(f.dst.appendingPathComponent("ro/sub/g.txt")) == "G")
+        // Several items: the read-only folder is moved into the wrapper folder first.
+        let wrapped = try await f.center.extractAll(mixed, into: f.dst, resolver: failOnConflict)
+        #expect(wrapped.outcome == .finished)
+        #expect(f.contents(f.dst.appendingPathComponent("mixed/ro/f.txt")) == "F")
+        // An entry inside a read-only folder.
+        let one = try await f.center.extract(["ro/f.txt"], from: mixed, into: f.dst, resolver: failOnConflict)
+        #expect(one.outcome == .finished)
+        #expect(f.contents(f.dst.appendingPathComponent("f.txt")) == "F")
+        // Skip leaves the staged copy behind; it must still be removed.
+        let skipped = try await f.center.extract(["ro"], from: mixed, into: f.dst) { _ in
+            ConflictDecision(choice: .skip, applyToAll: true)
+        }
+        #expect(skipped.skipped.count == 1)
+        #expect(f.dstNames == ["f.txt", "mixed", "ro"])
     }
 
     @Test func extractAllSingleVsMultiple() async throws {
@@ -213,7 +305,13 @@ struct ArchiveExtractorTests {
             try await center.extractAll(archive, into: dst, resolver: failOnConflict)
         }
         // Cancel as soon as the staging folder exists, i.e. while bsdtar is starting or running.
+        let deadline = ContinuousClock.now + .seconds(5)
         while !f.dstNames.contains(where: { $0.hasPrefix(".mc-partial-") }) {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("staging never appeared")
+                task.cancel()
+                return
+            }
             try await Task.sleep(for: .microseconds(200))
         }
         task.cancel()

@@ -156,7 +156,7 @@ public final class FileOperationCenter {
     /// Throws `ArchiveError` when bsdtar fails, `CancellationError` when cancelled (while unpacking or
     /// moving), and `CocoaError(.fileWriteNoPermission)` when `destination` is inside an archive. Otherwise
     /// the move's outcome (finished, stopped, failed) is reported in the result like `transfer`. Completed
-    /// items are undoable as "Extract", which moves them to the Trash.
+    /// items are undoable as "Extract", which moves them to the Trash and restores replaced items.
     public func extract(
         _ entries: [String], from archive: URL, into destination: URL, resolver: @escaping ConflictResolver
     ) async throws -> TransferResult {
@@ -221,10 +221,12 @@ public final class FileOperationCenter {
             await Self.removeStaging(staged.staging)
             return .success(result)
         }
-        if case .success(let result) = outcome, !result.completed.isEmpty {
+        // Recorded like a copy: undo trashes the extracted items and puts replaced originals back.
+        if case .success(let result) = outcome, !result.completed.isEmpty || !result.replaced.isEmpty {
             undo.push(
                 FileUndoRecord(
-                    action: .created(result.completed.map(\.destination)), title: String(localized: "Extract")))
+                    action: .transferred(.copy, result.completed, replaced: result.replaced),
+                    title: String(localized: "Extract")))
         }
         postFoldersDidChange([destination])
         let result = try outcome.get()

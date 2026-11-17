@@ -7,6 +7,9 @@ import Foundation
 /// - bsdtar runs without `-P`, so it refuses `..` and absolute entry names and won't extract through symlinks;
 /// - staged items are found with `lstat` and never through a symlink, so nothing outside staging is ever moved;
 /// - the only permanent delete is `removeStaging`, of the staging folder this run created.
+///
+/// Staged folders are made owner-writable (u+rwx): bsdtar restores modes such as `r-x`, and macOS can
+/// neither move a folder without write permission to a new parent nor empty it.
 public enum ArchiveExtractor {
     static let bsdtar = URL(fileURLWithPath: "/usr/bin/bsdtar")
     static let stagingPrefix = ".mc-partial-"
@@ -48,9 +51,10 @@ public enum ArchiveExtractor {
                 throw ArchiveError.unreadable(message: error.localizedDescription)
             }
             if output.status != 0 {
-                throw ArchiveCatalog.error(stderr: output.stderr, hadPassword: password != nil)
+                throw error(stderr: output.stderr, hadPassword: password != nil, requested: requested ?? [])
             }
             try Task.checkCancellation()
+            makeFoldersOwnerWritable(staging)
 
             let items: [URL]
             if let requested {
@@ -69,6 +73,7 @@ public enum ArchiveExtractor {
     /// Permanently removes a staging folder made by `stage`. Only `.mc-partial-*` folders are touched.
     public static func removeStaging(_ staging: URL) {
         guard staging.lastPathComponent.hasPrefix(stagingPrefix) else { return }
+        makeFoldersOwnerWritable(staging)
         try? FileManager().removeItem(at: staging)
     }
 
@@ -100,14 +105,15 @@ public enum ArchiveExtractor {
     // MARK: - Helpers
 
     /// Entry paths split into components; nil when everything ("") is requested. `.` components are
-    /// dropped and `..` is refused. An entry inside another requested entry is dropped, since the folder brings it along.
+    /// dropped and `..` is refused. Duplicates are dropped (first one kept, in order), and so is an entry
+    /// inside another requested entry, since the folder brings it along.
     private static func normalized(_ entries: [String]) throws -> [[String]]? {
         var result: [[String]] = []
         for entry in entries {
             let components = entry.split(separator: "/").map(String.init).filter { $0 != "." }
             if components.isEmpty { return nil }
             if components.contains("..") { throw notInArchive(entry) }
-            result.append(components)
+            if !result.contains(components) { result.append(components) }
         }
         return result.filter { item in
             !result.contains { other in other.count < item.count && Array(item.prefix(other.count)) == other }
@@ -126,6 +132,32 @@ public enum ArchiveExtractor {
             if !isLast && info.st_mode & S_IFMT != S_IFDIR { throw notInArchive(components.joined(separator: "/")) }
         }
         return url
+    }
+
+    /// Maps a failed run: bsdtar's "<pattern>: Not found in archive" names the first missing entry;
+    /// everything else is mapped like a listing error.
+    private static func error(stderr: String, hadPassword: Bool, requested: [[String]]) -> ArchiveError {
+        let mapped = ArchiveCatalog.error(stderr: stderr, hadPassword: hadPassword)
+        guard case .unreadable = mapped else { return mapped }
+        let suffix = ": Not found in archive"
+        for line in stderr.split(separator: "\n") where line.hasSuffix(suffix) {
+            var pattern = String(line.dropLast(suffix.count))
+            if pattern.hasPrefix("bsdtar: ") { pattern.removeFirst("bsdtar: ".count) }
+            let entry = requested.first { Self.pattern(for: $0.joined(separator: "/")) == pattern }
+            return notInArchive(entry?.joined(separator: "/") ?? pattern)
+        }
+        return mapped
+    }
+
+    /// Adds u+rwx to `folder` and every folder below it, found with `lstat` (symlinks are never followed),
+    /// adding permission before listing so unreadable folders can be entered. Best effort.
+    static func makeFoldersOwnerWritable(_ folder: URL) {
+        var info = stat()
+        guard lstat(folder.path, &info) == 0, info.st_mode & S_IFMT == S_IFDIR else { return }
+        let wanted = info.st_mode | S_IRWXU
+        if wanted != info.st_mode { chmod(folder.path, wanted & 0o7777) }
+        guard let names = try? FileManager().contentsOfDirectory(atPath: folder.path) else { return }
+        for name in names { makeFoldersOwnerWritable(folder.appendingPathComponent(name)) }
     }
 
     private static func notInArchive(_ entry: String) -> ArchiveError {
