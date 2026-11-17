@@ -71,8 +71,6 @@ extension FileListController: NSOutlineViewDataSource {
         proposedChildIndex index: Int
     ) -> NSDragOperation {
         guard showsCurrentFolder else { return [] }
-        let sources = FileActions.fileURLs(on: info.draggingPasteboard)
-        guard !sources.isEmpty else { return [] }
         let destination: URL
         if let node = item as? FileNode, node.item.isDirectory, index == NSOutlineViewDropOnItemIndex {
             destination = node.url
@@ -80,7 +78,8 @@ extension FileListController: NSOutlineViewDataSource {
             outlineView.setDropItem(nil, dropChildIndex: NSOutlineViewDropOnItemIndex)
             destination = model.currentURL
         }
-        guard let mode = FileActions.dropMode(for: sources, into: destination) else { return [] }
+        // Cached per drag, destination and modifier keys: this runs on every mouse move.
+        guard let mode = FileActions.hoverDropMode(on: info.draggingPasteboard, into: destination) else { return [] }
         return Self.dragOperation(for: mode, allowed: info.draggingSourceOperationMask)
     }
 

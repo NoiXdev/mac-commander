@@ -205,10 +205,10 @@ private struct FolderDropDelegate: DropDelegate {
         return true
     }
 
+    /// Cached per drag, destination and modifier keys: `dropUpdated` runs on every mouse move.
     private func currentMode() -> TransferMode? {
         guard enabled else { return nil }
-        let sources = FileActions.fileURLs(on: NSPasteboard(name: .drag))
-        return FileActions.dropMode(for: sources, into: destination)
+        return FileActions.hoverDropMode(on: NSPasteboard(name: .drag), into: destination)
     }
 }
 

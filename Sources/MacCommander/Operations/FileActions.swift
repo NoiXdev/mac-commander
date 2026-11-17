@@ -96,6 +96,12 @@ enum FileActions {
         DropPolicy.operation(for: sources, into: destination, modifiers: currentDropModifiers())
     }
 
+    /// `dropMode` while hovering: the drag pasteboard's files with the current modifier keys, answered from
+    /// `DropValidationCache` (validation runs on every mouse move). The drop itself re-checks uncached.
+    static func hoverDropMode(on pasteboard: NSPasteboard, into destination: URL) -> TransferMode? {
+        DropValidationCache.shared.mode(on: pasteboard, into: destination, modifiers: currentDropModifiers())
+    }
+
     static func duplicate(_ items: [FileItem], model: BrowserModel, window: NSWindow? = nil) async {
         guard !items.isEmpty else { return }
         let result = await model.operations.duplicate(items.map(\.url))
@@ -172,5 +178,43 @@ enum FileActions {
         } else {
             alert.runModal()
         }
+    }
+}
+
+/// Drop validation results for the drag in progress. Validation runs on every mouse move, and each pass would
+/// decode the pasteboard and run `DropPolicy` (symlink resolution, lstat, ancestor walk, volume lookups) again.
+/// A drag is identified by its pasteboard's name and `changeCount` (a new drag writes the pasteboard anew);
+/// within one drag the sources are decoded once and each destination + modifier combination is decided once.
+@MainActor
+final class DropValidationCache {
+    static let shared = DropValidationCache()
+
+    private struct Drag: Equatable {
+        let pasteboard: NSPasteboard.Name
+        let changeCount: Int
+    }
+
+    private struct Key: Hashable {
+        let destination: String
+        let modifiers: Int
+    }
+
+    private var drag: Drag?
+    private var sources: [URL] = []
+    private var modes: [Key: TransferMode?] = [:]
+
+    func mode(on pasteboard: NSPasteboard, into destination: URL, modifiers: DropModifiers) -> TransferMode? {
+        let current = Drag(pasteboard: pasteboard.name, changeCount: pasteboard.changeCount)
+        if current != drag {
+            drag = current
+            sources = FileActions.fileURLs(on: pasteboard)
+            modes = [:]
+        }
+        guard !sources.isEmpty else { return nil }
+        let key = Key(destination: destination.path, modifiers: modifiers.rawValue)
+        if let cached = modes[key] { return cached }
+        let mode = DropPolicy.operation(for: sources, into: destination, modifiers: modifiers)
+        modes[key] = mode
+        return mode
     }
 }
