@@ -66,17 +66,53 @@ import Testing
     }
 
     @Test func volumeListerKeepsOnlyNetworkShares() throws {
-        let file = { (path: String) in URL(fileURLWithPath: path, isDirectory: true) }
         let shares = SystemVolumeLister.shares(from: [
-            (file("/"), true, nil),
-            (file("/Volumes/USB"), true, URL(string: "smb://nas/Local")),
-            (file("/Volumes/Unknown"), nil, URL(string: "smb://nas/Unknown")),
-            (file("/Volumes/NoRemount"), false, nil),
-            (file("/Volumes/FTP"), false, URL(string: "ftp://host/files")),
-            (file("/Volumes/Media"), false, URL(string: "smb://user@NAS.local/Media")),
+            ("apfs", "/dev/disk3s1s1", "/"),
+            ("devfs", "devfs", "/dev"),
+            ("msdos", "/dev/disk5s1", "/Volumes/USB"),
+            ("autofs", "map auto_home", "/System/Volumes/Data/home"),
+            ("smbfs", "//bob@NAS.local/Media", "/Volumes/Media"),
+            ("smbfs", "garbage", "/Volumes/Garbage"),
+            ("nfs", "files:/export/home", "/Volumes/home"),
         ])
-        let expected = try #require(ShareURL("smb://nas.local/Media"))
-        #expect(shares == [MountedShare(mountPoint: file("/Volumes/Media"), url: expected)])
+        #expect(shares == [
+            MountedShare(
+                mountPoint: URL(fileURLWithPath: "/Volumes/Media", isDirectory: true),
+                url: try #require(ShareURL("smb://nas.local/Media"))),
+            MountedShare(
+                mountPoint: URL(fileURLWithPath: "/Volumes/home", isDirectory: true),
+                url: try #require(ShareURL("nfs://files/export/home"))),
+        ])
+    }
+
+    @Test func volumeListerParsesMountedFrom() throws {
+        func parsed(_ type: String, _ from: String) -> String? {
+            SystemVolumeLister.shareURL(fsType: type, mountFrom: from)?.url.absoluteString
+        }
+        // smbfs: user, domain and password dropped; percent-encoded share names decoded.
+        #expect(parsed("smbfs", "//nas/Share") == "smb://nas/Share")
+        #expect(parsed("smbfs", "//bob@nas/Share") == "smb://nas/Share")
+        #expect(parsed("smbfs", "//CORP;bob@fs01.corp.example/Team") == "smb://fs01.corp.example/Team")
+        #expect(parsed("smbfs", "//bob:pw@nas:4450/Share") == "smb://nas:4450/Share")
+        #expect(SystemVolumeLister.shareURL(fsType: "smbfs", mountFrom: "//nas/My%20Files")?.path == "/My Files")
+        #expect(SystemVolumeLister.shareURL(fsType: "smbfs", mountFrom: "//nas/Caf%C3%A9")?.shareName == "Café")
+        #expect(parsed("smbfs", "nas/Share") == nil)
+        // afpfs: both spellings.
+        #expect(parsed("afpfs", "afp://mac.local/Share") == "afp://mac.local/Share")
+        #expect(parsed("afpfs", "afp://ann;AUTH=No%20User%20Authent@mac.local/Share") == "afp://mac.local/Share")
+        #expect(parsed("afpfs", "//ann@mac.local/Share") == "afp://mac.local/Share")
+        // nfs: host:/path, IPv6 in brackets, raw spaces.
+        #expect(parsed("nfs", "files:/export/home") == "nfs://files/export/home")
+        #expect(parsed("nfs", "[fe80::1]:/export") == "nfs://[fe80::1]/export")
+        #expect(SystemVolumeLister.shareURL(fsType: "nfs", mountFrom: "files:/a b")?.path == "/a b")
+        #expect(parsed("nfs", "files") == nil)
+        // webdav: the URL as given.
+        #expect(parsed("webdav", "https://dav.example.com/remote.php/dav") == "https://dav.example.com/remote.php/dav")
+        #expect(parsed("webdav", "http://h:8080/dav") == "http://h:8080/dav")
+        #expect(parsed("webdav", "ftp://h/x") == nil)
+        // Anything else.
+        #expect(parsed("apfs", "/dev/disk1s1") == nil)
+        #expect(parsed("ftp", "ftp://h/x") == nil)
     }
 
     @Test func volumeListerRuns() async {
