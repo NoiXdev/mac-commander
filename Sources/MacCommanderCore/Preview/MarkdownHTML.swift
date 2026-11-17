@@ -140,6 +140,9 @@ public enum MarkdownHTML {
         var tightStack: [Bool] = []
         var alignments: [Table.ColumnAlignment?] = []
         var linkDepth = 0
+        /// A task item's checkbox, written at the start of the item's first paragraph (inside its `<p>` in a
+        /// loose list, as GitHub does).
+        var pendingCheckbox: String?
 
         mutating func descend(_ node: Markup) {
             for c in node.children { visit(c) }
@@ -155,11 +158,14 @@ public enum MarkdownHTML {
         }
 
         mutating func visitParagraph(_ p: Paragraph) {
+            let checkbox = pendingCheckbox ?? ""
+            pendingCheckbox = nil
             if p.parent is ListItem, tightStack.last == true {
+                out += checkbox
                 descend(p)
                 out += "\n"
             } else {
-                out += "<p>"; descend(p); out += "</p>\n"
+                out += "<p>" + checkbox; descend(p); out += "</p>\n"
             }
         }
 
@@ -220,7 +226,9 @@ public enum MarkdownHTML {
 
         mutating func visitListItem(_ item: ListItem) {
             if let cb = item.checkbox {
-                out += "<li class=\"task\"><input type=\"checkbox\" disabled\(cb == .checked ? " checked" : "")> "
+                out += "<li class=\"task\">"
+                let checkbox = "<input type=\"checkbox\" disabled\(cb == .checked ? " checked" : "")> "
+                if item.child(at: 0) is Paragraph { pendingCheckbox = checkbox } else { out += checkbox }
             } else {
                 out += "<li>"
             }

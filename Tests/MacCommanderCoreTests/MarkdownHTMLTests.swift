@@ -31,6 +31,14 @@ struct MarkdownHTMLTests {
         #expect(h.components(separatedBy: "<input type=\"checkbox\" disabled>").count == 2)
     }
 
+    @Test func looseTaskListPutsCheckboxInsideFirstParagraph() {
+        let h = html("- [x] done\n\n- [ ] todo\n\n  more")
+        #expect(h.contains("<li class=\"task\"><p><input type=\"checkbox\" disabled checked> done</p>"))
+        #expect(h.contains("<li class=\"task\"><p><input type=\"checkbox\" disabled> todo</p>\n<p>more</p>"))
+        // Tight lists keep the checkbox right inside the item.
+        #expect(html("- [x] a").contains("<li class=\"task\"><input type=\"checkbox\" disabled checked> a"))
+    }
+
     @Test func strikethroughAndEmphasis() {
         let h = html("~~a~~ *b* **c**")
         #expect(h.contains("<del>a</del>") && h.contains("<em>b</em>") && h.contains("<strong>c</strong>"))
