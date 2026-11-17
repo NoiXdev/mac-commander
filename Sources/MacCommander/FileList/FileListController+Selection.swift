@@ -79,19 +79,19 @@ extension FileListController {
         let row = outlineView.clickedRow
         guard showsCurrentFolder, row >= 0, let node = node(atRow: row) else { return }
         let item = node.item
-        Task { await model.open(item) }
+        let window = outlineView.window
+        Task { await FileActions.open([item], model: model, window: window) }
     }
 
     /// ⌘↓ and File ▸ Open (⌘O): a single item opens (folders navigate); with several, only the
-    /// files are opened. Not while a name is being edited.
+    /// files are opened. Not while a name is being edited. Archive entries are extracted first (`FileActions.open`).
     func openSelection() {
         guard showsCurrentFolder, rename.session == nil else { return }
         let items = selectedItems
         guard !items.isEmpty else { return }
         let toOpen = items.count == 1 ? items : items.filter { !$0.isDirectory }
-        Task {
-            for item in toOpen { await model.open(item) }
-        }
+        let window = outlineView.window
+        Task { await FileActions.open(toOpen, model: model, window: window) }
     }
 }
 

@@ -38,6 +38,8 @@ final class FileListController: NSViewController {
     var iconPassScheduled = false
     /// Inline rename state (see `FileListController+Rename.swift`).
     var rename = InlineRenameState()
+    /// Extracts archive entries for Quick Look; a second Space cancels it (see `toggleQuickLook`).
+    var quickLookTask: Task<Void, Never>?
 
     /// Above this many inserted/removed/changed rows, a reload is cheaper than row animations.
     static let maxIncrementalChanges = 500
@@ -131,7 +133,10 @@ final class FileListController: NSViewController {
         outline.contextMenu = { [weak self] row in self?.contextMenu(forRow: row) }
         outline.allowsInteraction = { [weak self] in self?.showsCurrentFolder ?? false }
         outline.commandHandler = self
-        outline.quickLook = QuickLookController(keyTarget: outline) { [weak self] in
+        // Inside an archive the rows' URLs are virtual: the panel shows extracted copies instead.
+        outline.quickLook = QuickLookController(
+            keyTarget: outline, previewsSelection: { [weak self] in self?.model.archiveLocation == nil }
+        ) { [weak self] in
             self?.selectedNodes.map(\.url) ?? []
         }
         outline.dataSource = self
@@ -215,6 +220,7 @@ final class FileListController: NSViewController {
         guard model.currentURL != displayedFolder else { return }
         if displayedFolder != nil || !roots.isEmpty {
             endRename(commit: true)
+            cancelArchiveQuickLook()
             outlineView.quickLook?.folderDidChange()
         }
         applyItems()

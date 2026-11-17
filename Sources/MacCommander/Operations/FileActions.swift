@@ -142,6 +142,53 @@ enum FileActions {
         }
     }
 
+    /// Opens `items` like ⌘↓ (the caller picks them: one item, or only the files of several). Outside an
+    /// archive `model.open`. Inside one, folders navigate and files are extracted through the preview cache
+    /// and opened with their default app; changes to those copies aren't written back (archives are read-only).
+    static func open(_ items: [FileItem], model: BrowserModel, window: NSWindow?) async {
+        guard let archive = model.archiveLocation?.archive else {
+            for item in items { await model.open(item) }
+            return
+        }
+        for item in items where item.isDirectory { await model.open(item) }
+        let files = items.filter { !$0.isDirectory }
+        // Cheap stats only (`ArchivePath.split`).
+        let entries = files.compactMap { ArchivePath.split($0.url)?.inner }
+        guard !entries.isEmpty else { return }
+        let name = files.count == 1 ? files[0].name : archive.lastPathComponent
+        guard let extracted = await extractForPreview(entries, of: archive, name: name, window: window) else { return }
+        for url in extracted { NSWorkspace.shared.open(url) }
+    }
+
+    /// Extracts `entries` (files) of `archive` through `ArchivePreviewCache` and returns the temporary copies in
+    /// the same order. A password error asks for the password and tries again. nil when the user cancelled,
+    /// the task was cancelled, or it failed; a failure is reported as "“`name`” couldn’t be opened".
+    static func extractForPreview(_ entries: [String], of archive: URL, name: String, window: NSWindow?) async
+        -> [URL]?
+    {
+        while true {
+            do {
+                return try await ArchivePreviewCache.shared.files(entries, of: archive)
+            } catch {
+                guard !Task.isCancelled else { return nil }
+                switch error {
+                case .passwordRequired, .incorrectPassword:
+                    guard
+                        let password = await ArchivePasswordSheet.ask(
+                            for: archive, incorrect: error == .incorrectPassword, window: window),
+                        !Task.isCancelled
+                    else { return nil }
+                    await ArchiveCatalog.shared.setPassword(password, for: archive)
+                case .cancelled:
+                    return nil
+                case .unsupported(let message), .unreadable(let message):
+                    showAlert([String(localized: "“\(name)” couldn’t be opened: \(message)")], window: window)
+                    return nil
+                }
+            }
+        }
+    }
+
     /// Asks for a destination folder ("Extract To…", "Extract All…"), as a sheet on `window`; nil when cancelled.
     static func chooseExtractionFolder(startingAt directory: URL?, window: NSWindow?) async -> URL? {
         let panel = NSOpenPanel()

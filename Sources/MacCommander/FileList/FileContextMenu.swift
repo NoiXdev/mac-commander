@@ -86,7 +86,8 @@ enum FileContextMenu {
     /// `items`, so a folder selected with its expanded contents is handled once; the rest go by `all`.
     static func forItems(
         _ items: [FileItem], all: [FileItem], model: BrowserModel, settings: ViewSettingsStore,
-        clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void
+        clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void,
+        archiveQuickLook: @escaping @MainActor () -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -96,17 +97,16 @@ enum FileContextMenu {
         menu.addItem(ActionMenuItem(String(localized: "Open")) {
             // Like ⌘↓: a single item opens (folders navigate); with several, only the files open.
             let toOpen = all.count == 1 ? all : all.filter { !$0.isDirectory }
-            Task { @MainActor in
-                for item in toOpen { await model.open(item) }
-            }
+            Task { @MainActor in await FileActions.open(toOpen, model: model, window: window) }
         })
         let quickLookTitle =
             all.count == 1
             ? String(localized: "Quick Look “\(all[0].name)”")
             : String(localized: "Quick Look \(all.count) items")
         if let location = model.archiveLocation {
-            // Entries inside an archive (read-only): Open, Quick Look and the extract actions only.
-            menu.addItem(ActionMenuItem(quickLookTitle) { QuickLookController.showPanel() })
+            // Entries inside an archive (read-only): Open, Quick Look and the extract actions only. The
+            // right-click selected exactly these items; Quick Look extracts their files first.
+            menu.addItem(ActionMenuItem(quickLookTitle) { archiveQuickLook() })
             menu.addItem(.separator())
             addExtractEntriesActions(to: menu, entries: all, archive: location.archive, model: model, window: window)
             return menu
