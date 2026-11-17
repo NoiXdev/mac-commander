@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>dev.noix.MacCommander</string>
+    <key>CFBundleName</key><string>MacCommander</string>
+    <key>CFBundleDisplayName</key><string>MacCommander</string>
+    <key>CFBundleExecutable</key><string>MacCommander</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
+    <key>CFBundleVersion</key><string>1</string>
+    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+    <key>NSDesktopFolderUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+    <key>NSRemovableVolumesUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+    <key>NSNetworkVolumesUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+</dict>
+</plist>
