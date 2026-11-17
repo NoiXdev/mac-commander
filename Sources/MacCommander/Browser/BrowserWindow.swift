@@ -18,7 +18,7 @@ extension FocusedValues {
     }
 }
 
-/// One browser window: sidebar, file list placeholder, path bar and toolbar.
+/// One browser window: sidebar, file list, path bar and toolbar.
 struct BrowserWindow: View {
     @Environment(ViewSettingsStore.self) private var settings
     @SceneStorage("currentFolderPath") private var storedPath = ""
@@ -50,9 +50,7 @@ struct BrowserWindow: View {
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             VStack(spacing: 0) {
-                // Replaced by the NSOutlineView file list in Task 10.
-                Text(model.currentURL.path)
-                    .foregroundStyle(.secondary)
+                FileListView(model: model, settings: settings)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
                 PathBar(model: model)
