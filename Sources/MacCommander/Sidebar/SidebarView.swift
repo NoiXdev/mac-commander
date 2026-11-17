@@ -65,9 +65,9 @@ struct SidebarView: View {
         }
         .listStyle(.sidebar)
         .background(WindowReader(box: windowState.wrappedValue))
-        .onAppear { favorites.refreshExistence() }
+        .onAppear { Task { await favorites.refreshExistence() } }
         .task {
-            volumes = VolumeProvider.localVolumes()
+            volumes = await VolumeProvider.localVolumes()
             await observeVolumes()
         }
         .alert(
@@ -108,12 +108,17 @@ struct SidebarView: View {
         try NSWorkspace.shared.unmountAndEjectDevice(at: url)
     }
 
+    /// Checks the favorite off the main actor (it may be on a network volume), then navigates or offers
+    /// to remove it. The sidebar's grey state is refreshed alongside.
     private func select(_ location: SidebarLocation) {
-        favorites.refreshExistence()
-        if FileManager.default.fileExists(atPath: location.url.path) {
-            Task { await model.navigate(to: location.url) }
-        } else {
-            missing = location
+        Task {
+            async let refreshed: Void = favorites.refreshExistence()
+            if await PathQueries.info(location.url).exists {
+                await model.navigate(to: location.url)
+            } else {
+                missing = location
+            }
+            await refreshed
         }
     }
 
@@ -125,11 +130,11 @@ struct SidebarView: View {
         for provider in providers {
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
                 guard let url else { return }
-                var isDirectory: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
-                    isDirectory.boolValue
-                else { return }
-                Task { @MainActor in favorites.add(url, at: index) }
+                // The completion runs off the main thread, but check through `PathQueries` all the same.
+                Task { @MainActor in
+                    guard await PathQueries.info(url).isDirectory else { return }
+                    favorites.add(url, at: index)
+                }
             }
         }
     }
@@ -144,7 +149,7 @@ struct SidebarView: View {
             let box = TokenBox(tokens)
             continuation.onTermination = { _ in box.tokens.forEach { center.removeObserver($0) } }
         }
-        for await _ in stream { volumes = VolumeProvider.localVolumes() }
+        for await _ in stream { volumes = await VolumeProvider.localVolumes() }
     }
 
     private static func symbol(for url: URL) -> String {
@@ -169,6 +174,8 @@ struct SidebarView: View {
 /// is the only operation. Their payload is read synchronously from the drag pasteboard
 /// (`NSPasteboard(name: .drag)`) rather than through `NSItemProvider`: the type isn't declared in Info.plist,
 /// and the pasteboard is what the hover check reads anyway. That works for drags from any MacCommander window.
+/// Rows are real folders (favorites are only ever added as existing folders, volumes are mount points), so
+/// archive entries are accepted without a path check.
 @MainActor
 private struct FolderDropDelegate: DropDelegate {
     /// The types the rows register for: archive entries first, then files.
@@ -182,12 +189,12 @@ private struct FolderDropDelegate: DropDelegate {
 
     func validateDrop(info: DropInfo) -> Bool {
         guard enabled else { return false }
-        if isArchiveDrag { return acceptsArchiveDrop }
+        if isArchiveDrag { return true }
         return info.hasItemsConforming(to: [.fileURL]) && currentMode() != nil
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        if isArchiveDrag { return DropProposal(operation: acceptsArchiveDrop ? .copy : .forbidden) }
+        if isArchiveDrag { return DropProposal(operation: .copy) }
         switch currentMode() {
         case .copy?: return DropProposal(operation: .copy)
         case .move?: return DropProposal(operation: .move)
@@ -198,7 +205,7 @@ private struct FolderDropDelegate: DropDelegate {
     func performDrop(info: DropInfo) -> Bool {
         guard enabled else { return false }
         if isArchiveDrag {
-            guard acceptsArchiveDrop, let payload = ArchiveDragPayload(pasteboard: NSPasteboard(name: .drag)) else {
+            guard let payload = ArchiveDragPayload(pasteboard: NSPasteboard(name: .drag)) else {
                 return false
             }
             let destination = destination
@@ -231,9 +238,6 @@ private struct FolderDropDelegate: DropDelegate {
 
     /// The drag carries entries of an archive (a type check on the drag pasteboard).
     private var isArchiveDrag: Bool { ArchiveDragPayload.isOn(NSPasteboard(name: .drag)) }
-
-    /// Archive entries go into real folders only (cheap stats, see `FileListController.acceptsArchiveDrop`).
-    private var acceptsArchiveDrop: Bool { FileListController.acceptsArchiveDrop(into: destination) }
 
     /// Cached per drag, destination and modifier keys: `dropUpdated` runs on every mouse move.
     private func currentMode() -> TransferMode? {

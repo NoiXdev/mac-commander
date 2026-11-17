@@ -278,7 +278,7 @@ final class PreviewController {
         await render(
             url, name: name, with: renderer, fromArchive: !watches, generation: generation, selection: selection)
         if watches, isCurrent(generation, selection), case .rendered = content {
-            watchFile(url, name: name, generation: generation, selection: selection)
+            await watchFile(url, name: name, generation: generation, selection: selection)
         }
     }
 
@@ -308,7 +308,7 @@ final class PreviewController {
     // MARK: - Live update
 
     /// Device and inode of the watched file, to tell a file replaced by rename from the watched vnode.
-    private struct FileIdentity: Equatable {
+    private struct FileIdentity: Equatable, Sendable {
         let device: dev_t
         let inode: ino_t
 
@@ -322,18 +322,42 @@ final class PreviewController {
     }
 
     /// Watches `url` unless the same file (same identity) is watched already. A file that can't be opened
-    /// (gone meanwhile) leaves nothing watched.
-    private func watchFile(_ url: URL, name: String, generation: Int, selection: Set<URL>) {
-        let identity = FileIdentity(path: url.path)
-        if fileWatcher != nil, watchedFile == url, let identity, identity == watchedIdentity { return }
-        stopWatchingFile()
-        watchedFile = url
-        watchedIdentity = identity
-        fileWatcher = DirectoryWatcher(url: url) { [weak self] in
+    /// (gone meanwhile) leaves nothing watched. The `stat` and `open` run off the main actor (the file may be
+    /// on a network volume); nothing changes when the selection moved on meanwhile.
+    private func watchFile(_ url: URL, name: String, generation: Int, selection: Set<URL>) async {
+        let watching = fileWatcher != nil && watchedFile == url ? watchedIdentity : nil
+        let setup = await Self.prepareWatcher(url, keepingIdentity: watching) { [weak self] in
             Task { @MainActor in
                 self?.watchedFileDidChange(url, name: name, generation: generation, selection: selection)
             }
         }
+        guard isCurrent(generation, selection), !isStopped else {
+            setup.watcher?.cancel()
+            return
+        }
+        guard !setup.keepsCurrent else { return }
+        stopWatchingFile()
+        watchedFile = url
+        watchedIdentity = setup.identity
+        fileWatcher = setup.watcher
+    }
+
+    private struct WatcherSetup: Sendable {
+        /// True when the existing watcher still watches the same file; `watcher` is then nil.
+        let keepsCurrent: Bool
+        let identity: FileIdentity?
+        let watcher: DirectoryWatcher?
+    }
+
+    @concurrent
+    private static func prepareWatcher(
+        _ url: URL, keepingIdentity watched: FileIdentity?, onChange: @escaping @Sendable () -> Void
+    ) async -> WatcherSetup {
+        let identity = FileIdentity(path: url.path)
+        if let identity, identity == watched {
+            return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
+        }
+        return WatcherSetup(keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
     }
 
     private func stopWatchingFile() {
@@ -359,7 +383,7 @@ final class PreviewController {
             }
             guard isCurrent(generation, selection) else { return }
             if case .rendered = content {
-                watchFile(url, name: name, generation: generation, selection: selection)
+                await watchFile(url, name: name, generation: generation, selection: selection)
             } else {
                 // Too large or unreadable now: the message stays until the selection changes.
                 stopWatchingFile()

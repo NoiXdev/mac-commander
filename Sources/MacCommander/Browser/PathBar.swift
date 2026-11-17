@@ -8,8 +8,9 @@ struct PathBar: View {
 
     var body: some View {
         let segments = PathUtilities.segments(of: model.currentURL)
-        // A few `stat`s, cheap. Segments inside the archive are virtual: folder icons, no file lookups.
-        let archivePath = ArchivePath.split(model.currentURL)?.archive.path
+        // Segments inside the shown archive are virtual: folder icons, no file lookups. Taken from the model
+        // (no disk access); it lags behind while a new folder loads, which only affects icons meanwhile.
+        let archivePath = model.archiveLocation?.archive.path
         ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 2) {
@@ -22,12 +23,7 @@ struct PathBar: View {
                     Button {
                         Task { await model.navigate(to: url) }
                     } label: {
-                        HStack(spacing: 4) {
-                            Image(nsImage: Self.icon(for: url, archivePath: archivePath))
-                                .resizable()
-                                .frame(width: 16, height: 16)
-                            Text(url.path == "/" ? Self.rootName : BrowserWindow.displayName(of: url))
-                        }
+                        PathSegmentLabel(url: url, isVirtual: archivePath.map { url.path.hasPrefix($0 + "/") } ?? false)
                     }
                     .buttonStyle(.plain)
                     .id(index)
@@ -41,14 +37,44 @@ struct PathBar: View {
         }
         .background(.bar)
     }
+}
 
-    private static var rootName: String { FileManager.default.displayName(atPath: "/") }
+/// One breadcrumb: a folder icon and the last path component at once, then the Finder name and the item's
+/// own icon, looked up off the main actor (the folder may be on a network volume).
+private struct PathSegmentLabel: View {
+    let url: URL
+    /// A path inside an archive: the folder icon and the plain name are final.
+    let isVirtual: Bool
+    private let resolvedState = State<Resolved?>(initialValue: nil)
+    private var resolved: Resolved? {
+        get { resolvedState.wrappedValue }
+        nonmutating set { resolvedState.wrappedValue = newValue }
+    }
 
-    /// The archive file itself keeps its file icon; paths inside it get the folder icon.
-    private static func icon(for url: URL, archivePath: String?) -> NSImage {
-        if let archivePath, url.path.hasPrefix(archivePath + "/") {
-            return NSWorkspace.shared.icon(for: .folder)
+    private struct Resolved: Sendable {
+        let url: URL
+        let name: String
+        let icon: NSImage
+    }
+
+    var body: some View {
+        let current = resolved?.url == url ? resolved : nil
+        HStack(spacing: 4) {
+            Image(nsImage: current?.icon ?? Self.folderIcon)
+                .resizable()
+                .frame(width: 16, height: 16)
+            Text(current?.name ?? (url.path == "/" ? "/" : url.lastPathComponent))
         }
-        return NSWorkspace.shared.icon(forFile: url.path)
+        .task(id: url) {
+            guard !isVirtual else { return }
+            resolved = await Self.resolve(url)
+        }
+    }
+
+    private static let folderIcon = NSWorkspace.shared.icon(for: .folder)
+
+    @concurrent
+    private static func resolve(_ url: URL) async -> Resolved {
+        Resolved(url: url, name: await PathQueries.displayName(url), icon: NSWorkspace.shared.icon(forFile: url.path))
     }
 }

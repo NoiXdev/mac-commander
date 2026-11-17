@@ -157,11 +157,12 @@ enum FileListFormat {
     }
 }
 
-/// 16 pt file icons. A type icon (cached per extension) is shown at once; the file's own icon
-/// (`NSWorkspace.icon(forFile:)`, which touches the disk) is loaded later for visible rows only.
+/// 16 pt file icons. A type icon (cached per extension, from the UTType: no disk access) is shown at once;
+/// the file's own icon (`NSWorkspace.icon(forFile:)`, which touches the disk and can stall on a network
+/// volume) is loaded later, off the main actor, for visible rows only.
 @MainActor
 final class FileIconProvider {
-    private static let iconSize = NSSize(width: 16, height: 16)
+    nonisolated private static let iconSize = NSSize(width: 16, height: 16)
     private let fileIcons = NSCache<NSURL, NSImage>()
     private var typeIcons: [String: NSImage] = [:]
 
@@ -184,11 +185,22 @@ final class FileIconProvider {
         return icon
     }
 
-    func loadFileIcon(for url: URL) -> NSImage {
-        if let icon = cachedFileIcon(for: url) { return icon }
-        let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSImage()
-        icon.size = Self.iconSize
-        fileIcons.setObject(icon, forKey: url as NSURL)
-        return icon
+    /// Loads the files' own icons off the main actor and caches them.
+    func loadFileIcons(for urls: [URL]) async -> [URL: NSImage] {
+        let loaded = await Self.fileIcons(for: urls)
+        for (url, icon) in loaded { fileIcons.setObject(icon, forKey: url as NSURL) }
+        return loaded
+    }
+
+    @concurrent
+    private static func fileIcons(for urls: [URL]) async -> [URL: NSImage] {
+        var icons: [URL: NSImage] = [:]
+        for url in urls {
+            // Copy before resizing: NSWorkspace may hand out shared image instances.
+            let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSImage()
+            icon.size = iconSize
+            icons[url] = icon
+        }
+        return icons
     }
 }

@@ -6,10 +6,16 @@ struct GoToFolderSheet: View {
     @Environment(\.dismiss) private var dismiss
     private let textState = State(initialValue: "")
     private let failedState = State(initialValue: false)
+    /// The check of the typed path in flight; Go is disabled meanwhile.
+    private let checkState = State<Task<Void, Never>?>(initialValue: nil)
     private var text: Binding<String> { textState.projectedValue }
     private var failed: Bool {
         get { failedState.wrappedValue }
         nonmutating set { failedState.wrappedValue = newValue }
+    }
+    private var check: Task<Void, Never>? {
+        get { checkState.wrappedValue }
+        nonmutating set { checkState.wrappedValue = newValue }
     }
 
     var body: some View {
@@ -18,7 +24,11 @@ struct GoToFolderSheet: View {
             TextField("", text: text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 380)
-                .onChange(of: text.wrappedValue) { failed = false }
+                .onChange(of: text.wrappedValue) {
+                    failed = false
+                    check?.cancel()
+                    check = nil
+                }
             if failed {
                 Text("The folder can't be found.")
                     .font(.callout)
@@ -26,36 +36,52 @@ struct GoToFolderSheet: View {
             }
             HStack {
                 Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
+                Button("Cancel", role: .cancel) {
+                    check?.cancel()
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
                 Button("Go", action: go)
                     .keyboardShortcut(.defaultAction)
+                    .disabled(check != nil)
             }
         }
         .padding(20)
     }
 
+    /// Checks the path off the main actor (it may be on a network volume), then navigates or shows the error.
+    /// Typing again or Cancel drops a check still running.
     private func go() {
         let path = (text.wrappedValue.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath
-        var isDirectory: ObjCBool = false
         guard !path.isEmpty else {
             failed = true
             return
         }
-        let url: URL
-        if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
-            url = URL(fileURLWithPath: path, isDirectory: true)
-        } else if let location = ArchivePath.split(URL(fileURLWithPath: path)),
+        check = Task {
+            let url = await Self.destination(path)
+            guard !Task.isCancelled else { return }
+            check = nil
+            guard let url else {
+                failed = true
+                return
+            }
+            dismiss()
+            await model.navigate(to: url)
+        }
+    }
+
+    /// A folder, a pure archive, or a path inside any archive file (a missing inner folder shows its deepest
+    /// existing one); nil for anything else.
+    @concurrent
+    private static func destination(_ path: String) async -> URL? {
+        let folder = URL(fileURLWithPath: path, isDirectory: true)
+        if await PathQueries.info(folder).isDirectory { return folder }
+        let file = URL(fileURLWithPath: path, isDirectory: false)
+        if let location = await PathQueries.archiveLocation(file),
             !location.inner.isEmpty || ArchiveFormats.isArchive(location.archive)
         {
-            // A pure archive, or a path inside any archive file (a few `stat`s, cheap). A missing inner
-            // folder shows its deepest existing one.
-            url = URL(fileURLWithPath: path, isDirectory: false)
-        } else {
-            failed = true
-            return
+            return file
         }
-        dismiss()
-        Task { await model.navigate(to: url) }
+        return nil
     }
 }

@@ -66,6 +66,10 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut("a", modifiers: [.command, .shift])
         }
         CommandGroup(after: .toolbar) {
+            Button("Refresh") { run { await $0.reload() } }
+                .keyboardShortcut("r")
+                .disabled(model == nil)
+            Divider()
             Button(
                 settings.settings.showPreview
                     ? String(localized: "Hide Preview") : String(localized: "Show Preview")

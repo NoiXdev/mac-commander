@@ -4,7 +4,10 @@ import Observation
 
 /// Per-window view model: the current folder, its sorted items, selection and navigation.
 ///
-/// `init` does not touch the disk; the UI calls `reload()` once when the window appears.
+/// `init` does not touch the disk; the UI calls `reload()` once when the window appears. Nothing here
+/// touches the file system on the main actor: any folder may be on a network volume, where a `stat` can
+/// block until the server times out. Path checks go through `PathQueries` (off the main actor), and
+/// every load re-checks after each await that it is still the newest one before changing state.
 @MainActor @Observable
 public final class BrowserModel {
     public private(set) var history: NavigationHistory
@@ -30,6 +33,12 @@ public final class BrowserModel {
     @ObservationIgnored private let loader: DirectoryLoader
     @ObservationIgnored private let opener: @MainActor (URL) -> Void
     @ObservationIgnored private let catalog: ArchiveCatalog
+    @ObservationIgnored private let queries: any PathQueriesProvider
+    /// `currentURL` with its symlinks resolved, computed off the main actor by the load that listed it.
+    /// Lets the main actor match other spellings of the current folder (`/var` vs `/private/var`).
+    @ObservationIgnored private var canonicalCurrent: (url: URL, path: String)?
+    /// What the newest load found at `currentURL` (for an archive: at the archive file).
+    @ObservationIgnored private var currentInfo: (url: URL, info: PathInfo)?
     /// Unsorted items of the last load, and the folder they came from (nil after a failure).
     @ObservationIgnored private var loadedItems: [FileItem] = []
     @ObservationIgnored private var loadedURL: URL?
@@ -44,6 +53,9 @@ public final class BrowserModel {
     @ObservationIgnored private var needsReload = false
     /// Bumped per load: a stale load result never overwrites a newer one.
     @ObservationIgnored private var loadGeneration = 0
+    /// Bumped per navigation request (navigate, back, forward): a navigation whose off-main path checks
+    /// finish after a newer request was made is dropped, so the last click wins.
+    @ObservationIgnored private var navigationGeneration = 0
     /// Bumped per sort: a stale sort result never overwrites a newer one.
     @ObservationIgnored private var sortGeneration = 0
     @ObservationIgnored private var observedSettings: ViewSettings
@@ -57,7 +69,7 @@ public final class BrowserModel {
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
     @ObservationIgnored var afterListingHook: (@MainActor (URL) async -> Void)?
 
-    public init(
+    public convenience init(
         start: URL,
         settings: ViewSettingsStore,
         loader: DirectoryLoader = DirectoryLoader(),
@@ -65,12 +77,28 @@ public final class BrowserModel {
         operations: FileOperationCenter = FileOperationCenter(),
         catalog: ArchiveCatalog = .shared
     ) {
+        self.init(
+            start: start, settings: settings, loader: loader, opener: opener, operations: operations,
+            catalog: catalog, pathQueries: LivePathQueries())
+    }
+
+    /// `pathQueries` is a test hook; the public initializer passes the real `PathQueries`.
+    init(
+        start: URL,
+        settings: ViewSettingsStore,
+        loader: DirectoryLoader = DirectoryLoader(),
+        opener: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) },
+        operations: FileOperationCenter = FileOperationCenter(),
+        catalog: ArchiveCatalog = .shared,
+        pathQueries: any PathQueriesProvider
+    ) {
         history = NavigationHistory(start: start)
         self.settings = settings
         self.loader = loader
         self.opener = opener
         self.operations = operations
         self.catalog = catalog
+        self.queries = pathQueries
         observedSettings = settings.settings
         observeSettings()
         observeUnmounts()
@@ -80,6 +108,13 @@ public final class BrowserModel {
     deinit {
         // The unmount observer is removed by `NotificationObservation.deinit`.
         watcher?.cancel()
+    }
+
+    /// Whether the newest load found the current folder (or archive) on a network volume. Answered from
+    /// that load's cached `PathInfo`, without touching the disk; false while unknown.
+    public var isOnNetworkVolume: Bool {
+        guard let currentInfo, currentInfo.url == currentURL else { return false }
+        return !currentInfo.info.isLocalVolume
     }
 
     // MARK: - Navigation
@@ -96,29 +131,36 @@ public final class BrowserModel {
     /// `.docx`). Unreadable files show a load error. Items inside an archive are ignored, since
     /// nested archives aren't browsable.
     public func browseContents(_ item: FileItem) async {
-        guard !item.isDirectory, let location = ArchivePath.split(item.url), location.inner.isEmpty else { return }
+        guard !item.isDirectory, let location = await queries.archiveLocation(item.url), location.inner.isEmpty
+        else { return }
         await navigate(to: item.url, anyBrowsable: true, openFallback: false)
     }
 
     /// `anyBrowsable` skips the extension check for an archive file; `openFallback` makes an
     /// unreadable archive go to `opener` instead of showing an error.
     private func navigate(to requested: URL, anyBrowsable: Bool, openFallback: Bool) async {
+        // Checked off the main actor. A newer navigation request made meanwhile wins.
+        navigationGeneration += 1
+        let generation = navigationGeneration
+        let start = currentURL
         let url: URL
-        if Self.isDirectory(requested) {
-            let isSymlink = (try? requested.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
-            url = isSymlink ? requested.resolvingSymlinksInPath() : requested
-        } else if let location = ArchivePath.split(requested) {
+        if await queries.info(requested).isDirectory {
+            url = await queries.resolvingSymlink(requested)
+        } else if let location = await queries.archiveLocation(requested) {
             // The archive file itself needs an archive extension, unless it's browsed explicitly or
             // reached from inside the same archive (goUp, breadcrumbs).
-            let isAccepted = !location.inner.isEmpty || anyBrowsable
-                || ArchiveFormats.isArchive(requested)
-                || ArchivePath.split(currentURL)?.archive == location.archive
+            var isAccepted = !location.inner.isEmpty || anyBrowsable || ArchiveFormats.isArchive(requested)
+            if !isAccepted {
+                isAccepted = await queries.archiveLocation(start)?.archive == location.archive
+            }
             guard isAccepted else { return }
             url = requested
         } else {
             return
         }
-        guard url.standardizedFileURL != currentURL.standardizedFileURL else { return }
+        guard generation == navigationGeneration else { return }
+        // By path: a folder URL may or may not carry a trailing slash.
+        guard url.standardizedFileURL.path != currentURL.standardizedFileURL.path else { return }
         pendingOpenFallback = openFallback ? url : nil
         history.visit(url)
         clearSelection()
@@ -126,6 +168,7 @@ public final class BrowserModel {
     }
 
     public func goBack() async {
+        navigationGeneration += 1
         guard history.goBack() != nil else { return }
         pendingOpenFallback = nil
         clearSelection()
@@ -133,6 +176,7 @@ public final class BrowserModel {
     }
 
     public func goForward() async {
+        navigationGeneration += 1
         guard history.goForward() != nil else { return }
         pendingOpenFallback = nil
         clearSelection()
@@ -154,9 +198,11 @@ public final class BrowserModel {
     /// included, is opened. Inside an archive, folders navigate and files are left alone: opening
     /// an archive entry means extracting it first, which the UI does.
     public func open(_ item: FileItem) async {
-        if ArchivePath.split(currentURL) != nil {
+        if await queries.archiveLocation(currentURL) != nil {
             if item.isDirectory { await navigate(to: item.url) }
-        } else if item.isDirectory || (!item.isPackage && Self.isDirectory(item.url, excludingPackages: true)) {
+        } else if item.isDirectory {
+            await navigate(to: item.url)
+        } else if !item.isPackage, await isPlainFolder(item.url) {
             await navigate(to: item.url)
         } else if ArchiveFormats.isArchive(item.url) {
             await navigate(to: item.url, anyBrowsable: false, openFallback: true)
@@ -170,7 +216,7 @@ public final class BrowserModel {
     public func children(of url: URL) async throws(DirectoryLoadError) -> [FileItem] {
         let current = settings.settings
         let raw: [FileItem]
-        if let location = ArchivePath.split(url) {
+        if let location = await queries.archiveLocation(url) {
             do {
                 raw = try await catalog.items(in: location.inner, of: location.archive, includeHidden: current.showHiddenFiles)
             } catch {
@@ -184,7 +230,7 @@ public final class BrowserModel {
 
     /// Remembers `password` for the current archive (for this app session) and lists it again.
     public func providePassword(_ password: String) async {
-        guard let location = ArchivePath.split(currentURL) else { return }
+        guard let location = await queries.archiveLocation(currentURL) else { return }
         await catalog.setPassword(password, for: location.archive)
         await load()
     }
@@ -194,7 +240,7 @@ public final class BrowserModel {
     /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createFolder(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
-        try refuseWritesInArchive(parent)
+        try await refuseWritesInArchive(parent)
         let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createFolder(in: parent) }
         operations.recordCreated(created, isFolder: true)
@@ -204,7 +250,7 @@ public final class BrowserModel {
     /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createEmptyFile(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
-        try refuseWritesInArchive(parent)
+        try await refuseWritesInArchive(parent)
         let historyAtStart = history
         let created = try await Self.offMain { try ItemCreator.createEmptyFile(in: parent) }
         operations.recordCreated(created, isFolder: false)
@@ -216,15 +262,14 @@ public final class BrowserModel {
     /// `.underlying` with the `CocoaError(.fileWriteNoPermission)` text (the error type is fixed).
     public func rename(_ url: URL, to name: String) async throws(RenameError) -> URL {
         do {
-            try refuseWritesInArchive(url.deletingLastPathComponent())
+            try await refuseWritesInArchive(url.deletingLastPathComponent())
         } catch {
             throw .underlying(error.localizedDescription)
         }
         let historyAtStart = history
         let renamed = try await Self.rename(url, to: name)
         operations.recordRename(from: url, to: renamed)
-        let oldPath = Self.canonicalPath(url)
-        if let selected = selection.first(where: { Self.canonicalPath($0) == oldPath }) {
+        if let selected = selection.first(where: { isSameItem($0, url) }) {
             selection.remove(selected)
             selection.insert(renamed)
         }
@@ -246,27 +291,27 @@ public final class BrowserModel {
 
     /// Shows a real file or folder in the list: navigates to its parent folder (unless that is the current
     /// folder already) and selects it, spelled as in `items`. Targets inside an archive and missing targets
-    /// are ignored. Checks the target with a few `lstat`s on the main actor, like `navigate`. Returns false when ignored (the UI beeps), true otherwise.
+    /// are ignored. Checks the target off the main actor, like `navigate`. Returns false when ignored (the UI beeps), true otherwise.
     @discardableResult
     public func reveal(_ url: URL) async -> Bool {
         let target = url.standardizedFileURL
         let parent = target.deletingLastPathComponent()
         // lstat: a broken symlink is still an item in the list. `split` of a real file is the file itself
         // (an archive with an empty inner path), so the parent tells whether the target is inside an archive.
-        var info = stat()
-        guard lstat(target.path, &info) == 0, ArchivePath.split(parent) == nil else { return false }
-        if !isCurrentDirectory(parent) {
+        guard await queries.entryExists(target), await queries.archiveLocation(parent) == nil else { return false }
+        let canonicalParent = await queries.canonicalPath(parent)
+        if !isCurrentDirectory(parent, canonical: canonicalParent) {
             await navigate(to: parent)
-            guard isCurrentDirectory(parent) else { return true }
+            guard isCurrentDirectory(parent, canonical: canonicalParent) else { return true }
         }
         await selectAfterOperation([target])
         return true
     }
 
     /// Archives are read-only; the UI disables writes there, this is the model's own guard.
-    /// `ArchivePath.split` is a few `stat`s, cheap enough for the main actor.
-    private func refuseWritesInArchive(_ folder: URL) throws(CocoaError) {
-        if archiveLocation != nil || ArchivePath.split(folder) != nil {
+    private func refuseWritesInArchive(_ folder: URL) async throws(CocoaError) {
+        if archiveLocation != nil { throw CocoaError(.fileWriteNoPermission) }
+        if await queries.archiveLocation(folder) != nil {
             throw CocoaError(.fileWriteNoPermission)
         }
     }
@@ -281,22 +326,36 @@ public final class BrowserModel {
         let generation = loadGeneration
         // This listing starts after any change reported so far.
         needsReload = false
+        // The spinner shows from the first path check on: on an unresponsive server that check is
+        // what hangs (off the main actor), until a newer load supersedes this one.
+        isLoading = true
+        // In flight from the start, so a change reported during the path checks coalesces into it.
+        inFlightURL = currentURL
 
-        // Split first: a virtual path inside an archive doesn't exist on disk. A vanished archive
-        // splits to nil and falls back like a vanished folder. (A few `stat`s, cheap.)
-        var location = ArchivePath.split(currentURL)
-        if location == nil, !FileManager.default.fileExists(atPath: currentURL.path) {
-            history.replaceCurrent(with: PathUtilities.nearestExistingAncestor(of: currentURL))
+        // A folder needs no split. Otherwise split: a virtual path inside an archive doesn't exist on
+        // disk. A vanished archive splits to nil and falls back like a vanished folder.
+        var target = await resolveLoadTarget(currentURL)
+        guard generation == loadGeneration else { return false }
+        if target.location == nil, !target.info.exists {
+            let fallback = await queries.nearestExistingFolder(currentURL)
+            guard generation == loadGeneration else { return false }
+            history.replaceCurrent(with: fallback)
             clearSelection()
-            location = ArchivePath.split(currentURL)
+            target = await resolveLoadTarget(currentURL)
+            guard generation == loadGeneration else { return false }
         }
+        let location = target.location
         let url = currentURL
         let current = settings.settings
+        currentInfo = (url, target.info)
         // Watch before listing, so a change during the listing still triggers a reload.
         // In an archive the archive file itself is watched.
-        startWatching(location?.archive ?? url, isArchive: location != nil)
+        guard await startWatching(location?.archive ?? url, isArchive: location != nil, generation: generation)
+        else { return false }
         inFlightURL = url
-        isLoading = true
+        // Resolved alongside the listing, so other spellings of this folder can be matched later
+        // without touching the disk on the main actor.
+        async let canonical = location == nil ? queries.canonicalPath(url) : url.standardizedFileURL.path
 
         let result: Result<ListedItems, ListingError>
         if let location {
@@ -313,8 +372,21 @@ public final class BrowserModel {
                 result = .failure(.folder(error))
             }
         }
+        let canonicalPath = await canonical
         await afterListingHook?(url)
         guard generation == loadGeneration else { return false }
+        canonicalCurrent = (url, canonicalPath)
+
+        // A failure may mean the folder or archive vanished meanwhile: then fall back again.
+        var vanished = false
+        switch result {
+        case .failure(.folder(.notFound)): vanished = !(await queries.info(url).exists)
+        case .failure(.archive): if let location { vanished = !(await queries.info(location.archive).exists) }
+        default: break
+        }
+        guard generation == loadGeneration else { return false }
+        if vanished { return await load() }
+
         let openFallback = pendingOpenFallback.map { $0.standardizedFileURL == url.standardizedFileURL } ?? false
         pendingOpenFallback = nil
 
@@ -333,12 +405,6 @@ public final class BrowserModel {
             loadedURL = listedURL
             loadedLocation = listedLocation
             loadError = nil
-        case .failure(.folder(.notFound)) where !FileManager.default.fileExists(atPath: url.path):
-            // Vanished between the existence check and the listing: fall back again.
-            return await load()
-        case .failure(.archive) where location.map({ !FileManager.default.fileExists(atPath: $0.archive.path) }) == true:
-            // The archive vanished during the listing: fall back to an existing folder.
-            return await load()
         case .failure(.archive(.cancelled)):
             // The calling task was cancelled; leave the shown items alone.
             isLoading = false
@@ -412,9 +478,10 @@ public final class BrowserModel {
     }
 
     /// Drops selected entries that disappeared. Entries in the current folder are matched against
-    /// `items` by canonical path (the loader may spell the folder differently, e.g. `/private/var`)
-    /// and replaced by the item's URL; entries in its subfolders (inline-expanded) must still
-    /// exist; entries anywhere else are dropped, since they can't be visible.
+    /// `items` by name (under any spelling of the folder, e.g. `/var` or `/private/var`) and replaced by
+    /// the item's URL; entries in its subfolders (inline-expanded) are kept without a check, since a stat
+    /// per entry could hang on a network volume (acting on a vanished one fails with a readable error);
+    /// entries anywhere else are dropped, since they can't be visible.
     /// In an archive, virtual paths don't exist on disk: entries in the current folder are matched
     /// by name, and entries below it are kept.
     private func pruneSelection() {
@@ -423,24 +490,17 @@ public final class BrowserModel {
             pruneArchiveSelection()
             return
         }
-        let directory = currentURL.resolvingSymlinksInPath().path
-        let descendantPrefix = directory.hasSuffix("/") ? directory : directory + "/"
+        let directories = currentDirectorySpellings()
+        let descendantPrefixes = directories.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
         var byName: [String: URL] = [:]
         for item in items { byName[item.url.lastPathComponent] = item.url }
-        // Selected entries usually share a few parents: resolve each parent once, not per entry.
-        var resolvedParents: [String: String] = [:]
         let pruned = Set(selection.compactMap { url -> URL? in
-            let parent = url.deletingLastPathComponent()
-            let resolved = resolvedParents[parent.path] ?? {
-                let value = parent.resolvingSymlinksInPath().path
-                resolvedParents[parent.path] = value
-                return value
-            }()
-            if resolved == directory {
+            let parent = url.deletingLastPathComponent().standardizedFileURL.path
+            if directories.contains(parent) {
                 return byName[url.lastPathComponent]
             }
-            guard resolved.hasPrefix(descendantPrefix) else { return nil }
-            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+            let path = url.standardizedFileURL.path
+            return descendantPrefixes.contains(where: { path.hasPrefix($0) }) ? url : nil
         })
         if pruned != selection { selection = pruned }
     }
@@ -490,12 +550,41 @@ public final class BrowserModel {
         return items.first { $0.url.lastPathComponent == name }?.url ?? url
     }
 
-    private func isCurrentDirectory(_ url: URL) -> Bool {
-        url.resolvingSymlinksInPath().path == currentURL.resolvingSymlinksInPath().path
+    /// Whether `url` is the current folder, by standardized path against the current folder's spellings
+    /// (as navigated, and with symlinks resolved by its last load). No disk access: a caller that already
+    /// resolved `url` off the main actor (`PathQueries.canonicalPath`) passes that as `canonical`.
+    private func isCurrentDirectory(_ url: URL, canonical: String? = nil) -> Bool {
+        let spellings = currentDirectorySpellings()
+        if spellings.contains(url.standardizedFileURL.path) { return true }
+        return canonical.map(spellings.contains) ?? false
+    }
+
+    /// The standardized paths that name the current folder: as navigated, and resolved when the last
+    /// load resolved this same folder.
+    private func currentDirectorySpellings() -> Set<String> {
+        var spellings: Set<String> = [currentURL.standardizedFileURL.path]
+        if let canonicalCurrent, canonicalCurrent.url == currentURL {
+            let path = canonicalCurrent.path
+            spellings.insert(path)
+            // `/var`, `/tmp` and `/etc` are symlinks into `/private`; Foundation often spells them short
+            // (`resolvingSymlinksInPath` strips the prefix), so accept both.
+            if path.hasPrefix("/private/") { spellings.insert(String(path.dropFirst("/private".count))) }
+        }
+        return spellings
+    }
+
+    /// Two URLs for one item: the same standardized path, or the same name in the current folder
+    /// under two of its spellings.
+    private func isSameItem(_ lhs: URL, _ rhs: URL) -> Bool {
+        if lhs.standardizedFileURL.path == rhs.standardizedFileURL.path { return true }
+        guard lhs.lastPathComponent == rhs.lastPathComponent else { return false }
+        let spellings = currentDirectorySpellings()
+        return spellings.contains(lhs.deletingLastPathComponent().standardizedFileURL.path)
+            && spellings.contains(rhs.deletingLastPathComponent().standardizedFileURL.path)
     }
 
     /// Device and inode of a folder (or archive file), to tell a recreated one from the one being watched.
-    private struct FolderIdentity: Equatable {
+    private struct FolderIdentity: Equatable, Sendable {
         let device: dev_t
         let inode: ino_t
 
@@ -511,16 +600,42 @@ public final class BrowserModel {
     /// its maximum-latency window. A folder deleted and recreated at the same path is a new
     /// vnode, so the old watcher is dead and must be replaced. An archive file is watched the
     /// same way (`O_EVTONLY` works on files): writes, and deletion or replacement by rename.
-    private func startWatching(_ url: URL, isArchive: Bool) {
-        let identity = FolderIdentity(path: url.path)
-        if watcher != nil, watchedURL == url, let identity, identity == watchedIdentity { return }
-        watcher?.cancel()
-        watchedURL = url
-        watchedIdentity = identity
+    /// The `stat` and `open` run off the main actor. Returns false (and changes nothing) when a newer
+    /// load started meanwhile.
+    private func startWatching(_ url: URL, isArchive: Bool, generation: Int) async -> Bool {
+        let watching = watcher != nil && watchedURL == url ? watchedIdentity : nil
         let archive = isArchive ? url : nil
-        watcher = DirectoryWatcher(url: url) { [weak self] in
+        let setup = await Self.prepareWatcher(url, keepingIdentity: watching) { [weak self] in
             Task { @MainActor in await self?.watchedItemDidChange(archive: archive) }
         }
+        guard generation == loadGeneration else {
+            setup.watcher?.cancel()
+            return false
+        }
+        guard !setup.keepsCurrent else { return true }
+        watcher?.cancel()
+        watchedURL = url
+        watchedIdentity = setup.identity
+        watcher = setup.watcher
+        return true
+    }
+
+    private struct WatcherSetup: Sendable {
+        /// True when the existing watcher still watches the same vnode; `watcher` is then nil.
+        let keepsCurrent: Bool
+        let identity: FolderIdentity?
+        let watcher: DirectoryWatcher?
+    }
+
+    @concurrent
+    private static func prepareWatcher(
+        _ url: URL, keepingIdentity watched: FolderIdentity?, onChange: @escaping @Sendable () -> Void
+    ) async -> WatcherSetup {
+        let identity = FolderIdentity(path: url.path)
+        if let identity, identity == watched {
+            return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
+        }
+        return WatcherSetup(keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
     }
 
     // MARK: - Volumes
@@ -630,17 +745,19 @@ public final class BrowserModel {
         }
     }
 
-    private static func isDirectory(_ url: URL, excludingPackages: Bool = false) -> Bool {
-        let resolved = url.resolvingSymlinksInPath()
-        guard let values = try? resolved.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey]),
-            values.isDirectory == true
-        else { return false }
-        return !(excludingPackages && values.isPackage == true)
+    /// A folder (symlinks followed) that isn't a package, checked off the main actor.
+    private func isPlainFolder(_ url: URL) async -> Bool {
+        let info = await queries.info(url)
+        return info.isDirectory && !info.isPackage
     }
 
-    /// The path with its parent folder's symlinks resolved; the item itself may be a symlink.
-    private static func canonicalPath(_ url: URL) -> String {
-        url.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(url.lastPathComponent).path
+    /// What a load lists: for a folder its `PathInfo`; otherwise also the archive location, if any.
+    /// For an archive the info describes the archive file (whose volume decides refresh on focus).
+    private func resolveLoadTarget(_ url: URL) async -> (info: PathInfo, location: ArchiveLocation?) {
+        let info = await queries.info(url)
+        guard !info.isDirectory, let location = await queries.archiveLocation(url) else { return (info, nil) }
+        let archiveInfo = location.inner.isEmpty ? info : await queries.info(location.archive)
+        return (archiveInfo, location)
     }
 
     @concurrent

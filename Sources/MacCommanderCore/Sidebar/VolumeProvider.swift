@@ -16,8 +16,10 @@ public enum VolumeProvider {
         NSWorkspace.didRenameVolumeNotification,
     ]
 
-    /// Local, non-hidden mounted volumes with the boot volume first.
-    public static func localVolumes() -> [VolumeInfo] {
+    /// Local, non-hidden mounted volumes with the boot volume first. Off the main actor: asking a mounted
+    /// network volume for its resource values can block until its server answers.
+    @concurrent
+    public static func localVolumes() async -> [VolumeInfo] {
         let keys: [URLResourceKey] = [
             .volumeIsLocalKey, .volumeLocalizedNameKey, .volumeNameKey,
             .volumeIsEjectableKey, .volumeIsRemovableKey,

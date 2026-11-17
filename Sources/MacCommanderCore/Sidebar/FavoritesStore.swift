@@ -5,9 +5,13 @@ public struct SidebarLocation: Identifiable, Hashable, Sendable {
     public let url: URL
     public var id: URL { url }
     public let name: String
+    /// Whether the folder was there when last checked; true until the first check finishes.
     public let exists: Bool
 }
 
+/// The sidebar's favorite folders. Names and existence are resolved off the main actor (a favorite may be on
+/// a network volume) and published when they arrive; until then a favorite shows its last path component
+/// and counts as existing.
 @MainActor @Observable
 public final class FavoritesStore {
     static let key = "favorites.v1"
@@ -26,7 +30,8 @@ public final class FavoritesStore {
             var seen = Set<String>()
             favorites = paths.compactMap { path in
                 guard path.hasPrefix("/") else { return nil }
-                let url = URL(fileURLWithPath: path)
+                // Spelled as a folder: a plain `URL(fileURLWithPath:)` would stat the path.
+                let url = URL(fileURLWithPath: path, isDirectory: true)
                 guard seen.insert(Self.normalizedPath(url)).inserted else { return nil }
                 return location(for: url)
             }
@@ -41,15 +46,18 @@ public final class FavoritesStore {
                 URL(fileURLWithPath: "/Applications", isDirectory: true),
             ].map { location(for: $0) }
         }
+        Task { await self.refreshExistence() }
     }
 
     /// Adds `url`, or moves it to `index` (default: the end) if already present.
     public func add(_ url: URL, at index: Int? = nil) {
         let path = Self.normalizedPath(url)
+        let entry = location(for: url)
         favorites.removeAll { Self.normalizedPath($0.url) == path }
         let target = min(max(index ?? favorites.count, 0), favorites.count)
-        favorites.insert(location(for: url), at: target)
+        favorites.insert(entry, at: target)
         persist()
+        Task { await self.refresh([url]) }
     }
 
     public func remove(_ url: URL) {
@@ -68,17 +76,41 @@ public final class FavoritesStore {
         persist()
     }
 
-    /// Re-checks which favorites exist; missing ones stay listed. Does not persist.
-    public func refreshExistence() {
-        favorites = favorites.map { location(for: $0.url) }
+    /// Re-checks which favorites exist (and their names) off the main actor; missing ones stay listed.
+    /// Each favorite is published as soon as its check finishes, so one unresponsive server doesn't hold
+    /// up the others. Does not persist.
+    public func refreshExistence() async {
+        await refresh(favorites.map(\.url))
     }
 
+    private func refresh(_ urls: [URL]) async {
+        await withTaskGroup(of: SidebarLocation.self) { group in
+            for url in urls {
+                group.addTask { await Self.resolve(url) }
+            }
+            for await resolved in group {
+                // Replace by URL: the list may have changed while the check ran.
+                if let index = favorites.firstIndex(where: { $0.url == resolved.url }), favorites[index] != resolved {
+                    favorites[index] = resolved
+                }
+            }
+        }
+    }
+
+    @concurrent
+    private static func resolve(_ url: URL) async -> SidebarLocation {
+        let exists = await PathQueries.info(url).exists
+        let name = exists ? await PathQueries.displayName(url) : url.lastPathComponent
+        return SidebarLocation(url: url, name: name, exists: exists)
+    }
+
+    /// A favorite before its first check, without touching the disk; an already listed one keeps its state.
     private func location(for url: URL) -> SidebarLocation {
-        let values = try? url.resourceValues(forKeys: [.localizedNameKey])
-        return SidebarLocation(
-            url: url,
-            name: values?.localizedName ?? url.lastPathComponent,
-            exists: fileManager.fileExists(atPath: url.path))
+        let path = Self.normalizedPath(url)
+        if let known = favorites.first(where: { Self.normalizedPath($0.url) == path }) {
+            return SidebarLocation(url: url, name: known.name, exists: known.exists)
+        }
+        return SidebarLocation(url: url, name: url.lastPathComponent, exists: true)
     }
 
     private static func normalizedPath(_ url: URL) -> String {

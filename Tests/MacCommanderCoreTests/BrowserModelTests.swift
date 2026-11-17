@@ -52,6 +52,19 @@ private final class Counter {
     var count = 0
 }
 
+/// Path queries that take a second each time `info` is asked, like a stat on an unresponsive server.
+private struct BlockingPathQueries: PathQueriesProvider {
+    @concurrent func info(_ url: URL) async -> PathInfo {
+        usleep(1_000_000)  // Blocks the thread, as a hung stat would.
+        return PathQueries.infoNow(url)
+    }
+    @concurrent func archiveLocation(_ url: URL) async -> ArchiveLocation? { ArchivePath.split(url) }
+    @concurrent func nearestExistingFolder(_ url: URL) async -> URL { PathUtilities.nearestExistingAncestor(of: url) }
+    @concurrent func canonicalPath(_ url: URL) async -> String { await PathQueries.canonicalPath(url) }
+    @concurrent func resolvingSymlink(_ url: URL) async -> URL { await PathQueries.resolvingSymlink(url) }
+    @concurrent func entryExists(_ url: URL) async -> Bool { await PathQueries.entryExists(url) }
+}
+
 @MainActor
 @Suite struct BrowserModelTests {
     /// Makes the first listing of `folder` stale by navigating to `other` before it is checked.
@@ -660,5 +673,49 @@ private final class Counter {
 
         #expect(samePath(model.currentURL, dir.url))
         #expect(model.selection.isEmpty)
+    }
+
+    @Test func browserModelNeverStatsOnMainActor() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.file("a.txt")
+        let model = BrowserModel(
+            start: URL(fileURLWithPath: "/"), settings: makeStore(),
+            loader: DirectoryLoader(), pathQueries: BlockingPathQueries())
+
+        let finished = Flag()
+        let started = ContinuousClock.now
+        let navigation = Task {
+            await model.navigate(to: dir.url)
+            finished.isSet = true
+        }
+        // Ticks while the navigation waits on the blocked path checks (one second each). Other
+        // suites share the main actor, so count over the whole wait instead of exactly one second.
+        let ticks = Counter()
+        while !finished.isSet {
+            try await Task.sleep(for: .milliseconds(10))
+            ticks.count += 1
+        }
+        #expect(ContinuousClock.now - started >= .seconds(1))
+        #expect(ticks.count >= 50, "ticks: \(ticks.count)")
+
+        await navigation.value
+        #expect(samePath(model.currentURL, dir.url))
+        #expect(names(model) == ["a.txt"])
+    }
+
+    @Test func selectionPruningKeepsDescendantsWithoutStat() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.folder("sub")
+        let inner = try dir.file("sub/inner.txt")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+        model.selection = [inner]
+
+        // Gone from disk, but still under the current folder: kept without a stat. Acting on it later
+        // fails with a readable error instead.
+        try FileManager.default.removeItem(at: inner)
+        await model.reload()
+
+        #expect(model.selection == [inner])
     }
 }

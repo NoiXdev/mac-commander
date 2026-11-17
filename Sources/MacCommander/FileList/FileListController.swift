@@ -36,6 +36,8 @@ final class FileListController: NSViewController {
     var isApplyingLayout = false
     let icons = FileIconProvider()
     var iconPassScheduled = false
+    /// True while a batch of file icons loads off the main actor; one batch at a time.
+    var iconBatchInFlight = false
     /// Inline rename state (see `FileListController+Rename.swift`).
     var rename = InlineRenameState()
     /// Extracts archive entries for Quick Look, for `selection` (row URLs). Space with the same selection or a

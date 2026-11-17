@@ -15,13 +15,16 @@ public enum PathUtilities {
         return URL(fileURLWithPath: "/")
     }
 
-    /// Breadcrumb URLs from the root down to `url`, e.g. `[/, /Users, /Users/d]`.
+    /// Breadcrumb URLs from the root down to `url`, e.g. `[/, /Users, /Users/d]`. No file-system access (a
+    /// plain `URL(fileURLWithPath:)` stats the path): ancestors are spelled as folders, `url` as given.
     public static func segments(of url: URL) -> [URL] {
-        var result = [URL(fileURLWithPath: "/")]
+        let standardized = url.standardizedFileURL
+        var result = [URL(fileURLWithPath: "/", isDirectory: true)]
         var path = ""
-        for component in url.standardizedFileURL.pathComponents where component != "/" {
+        let components = standardized.pathComponents.filter { $0 != "/" }
+        for (index, component) in components.enumerated() {
             path += "/" + component
-            result.append(URL(fileURLWithPath: path))
+            result.append(index == components.count - 1 ? standardized : URL(fileURLWithPath: path, isDirectory: true))
         }
         return result
     }

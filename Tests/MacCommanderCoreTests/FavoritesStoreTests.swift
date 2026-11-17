@@ -60,15 +60,18 @@ import Testing
         }
     }
 
-    @Test func missingFavoriteKeptWithExistsFalse() throws {
+    @Test func missingFavoriteKeptWithExistsFalse() async throws {
         let temp = try TemporaryDirectory()
         let a = try temp.folder("gone")
-        try withDefaults { defaults in
+        let suite = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        do {
             let store = FavoritesStore(defaults: defaults)
             store.add(a)
             #expect(store.favorites.last?.exists == true)
             try FileManager.default.removeItem(at: a)
-            store.refreshExistence()
+            await store.refreshExistence()
             #expect(store.favorites.last?.url.path == a.path)
             #expect(store.favorites.last?.exists == false)
         }

@@ -88,7 +88,9 @@ struct InfoWindow: View {
     }
 
     private func load() async {
-        icon = NSWorkspace.shared.icon(forFile: url.path)
+        // The generic icon at once (no disk access), the item's own once loaded off the main actor.
+        icon = NSWorkspace.shared.icon(for: .item)
+        icon = await Self.fileIcon(url)
         let loaded = await ItemInfo.load(url)
         info = loaded
         guard loaded.isDirectory else {
@@ -106,6 +108,12 @@ struct InfoWindow: View {
         } catch {
             sizeText = "--"
         }
+    }
+
+    /// `NSWorkspace.icon(forFile:)` touches the disk (and can stall on network volumes): off the main thread.
+    @concurrent
+    private static func fileIcon(_ url: URL) async -> NSImage {
+        NSWorkspace.shared.icon(forFile: url.path)
     }
 
     private static func byteString(_ bytes: Int64) -> String {

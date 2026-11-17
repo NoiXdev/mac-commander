@@ -191,12 +191,17 @@ enum FileContextMenu {
         let urls = items.map(\.url)
         let entries = { PathUtilities.topLevel(urls).compactMap { ArchivePath.inner(of: $0, in: archive) } }
         let parent = archive.deletingLastPathComponent()
-        let parentName = FileManager.default.displayName(atPath: parent.path)
-        menu.addItem(ActionMenuItem(String(localized: "Extract to “\(parentName)”")) {
+        // The folder name at once; its Finder name follows from off the main actor (it may be on a network volume).
+        let extractHere = ActionMenuItem(String(localized: "Extract to “\(parent.lastPathComponent)”")) {
             Task { @MainActor in
                 await FileActions.extract(entries(), from: archive, into: parent, model: model, window: window)
             }
-        })
+        }
+        menu.addItem(extractHere)
+        Task { @MainActor in
+            let parentName = await PathQueries.displayName(parent)
+            extractHere.title = String(localized: "Extract to “\(parentName)”")
+        }
         menu.addItem(ActionMenuItem(String(localized: "Extract To…")) {
             Task { @MainActor in
                 guard let destination = await FileActions.chooseExtractionFolder(startingAt: parent, window: window)

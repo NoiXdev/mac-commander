@@ -24,9 +24,13 @@ struct BrowserWindow: View {
     @Environment(FileOperationCenter.self) private var operations
     @Environment(FileClipboard.self) private var clipboard
     @SceneStorage("currentFolderPath") private var storedPath = ""
+    /// True while the window is key (or the app's active window); see the refresh on focus below.
+    @Environment(\.appearsActive) private var appearsActive
     private let modelState = State<BrowserModel?>(initialValue: nil)
     private let previewState = State<PreviewController?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
+    /// The Finder name of a folder, resolved off the main actor; the title shows it once it matches.
+    private let titleState = State<(url: URL, name: String)?>(initialValue: nil)
     private var model: BrowserModel? {
         get { modelState.wrappedValue }
         nonmutating set { modelState.wrappedValue = newValue }
@@ -36,6 +40,10 @@ struct BrowserWindow: View {
         nonmutating set { previewState.wrappedValue = newValue }
     }
     private var showGoToFolder: Binding<Bool> { goToFolderState.projectedValue }
+    private var resolvedTitle: (url: URL, name: String)? {
+        get { titleState.wrappedValue }
+        nonmutating set { titleState.wrappedValue = newValue }
+    }
 
     var body: some View {
         Group {
@@ -79,7 +87,13 @@ struct BrowserWindow: View {
         // extraction and rendering for the preview; both calls are idempotent.
         .onAppear { preview.resume() }
         .onDisappear { preview.stop() }
-        .navigationTitle(Self.displayName(of: model.currentURL))
+        // The last path component at once (no disk access), the localized name once it's resolved.
+        .navigationTitle(title(for: model.currentURL))
+        .task(id: model.currentURL) {
+            let url = model.currentURL
+            let name = await PathQueries.displayName(url)
+            if url == model.currentURL { resolvedTitle = (url, name) }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
                 Button {
@@ -123,25 +137,25 @@ struct BrowserWindow: View {
         .sheet(isPresented: showGoToFolder) { GoToFolderSheet(model: model) }
         .task { await model.reload() }
         .onChange(of: model.currentURL, initial: true) { _, url in storedPath = url.path }
-    }
-
-    /// The restored folder (also a folder inside an archive), its nearest existing ancestor when it is gone,
-    /// or home when nothing is stored.
-    private static func startURL(storedPath: String) -> URL {
-        guard !storedPath.isEmpty else { return FileManager.default.homeDirectoryForCurrentUser }
-        var isDirectory: ObjCBool = false
-        if FileManager.default.fileExists(atPath: storedPath, isDirectory: &isDirectory), isDirectory.boolValue {
-            return URL(fileURLWithPath: storedPath, isDirectory: true)
+        // Refresh on focus: a network folder isn't watched reliably, so it is listed again whenever its window
+        // becomes active. Local folders rely on their watcher. The check uses the last load's cached info.
+        .onChange(of: appearsActive) { _, active in
+            guard active, model.isOnNetworkVolume else { return }
+            Task { await model.reload() }
         }
-        // A few `stat`s, cheap.
-        let url = URL(fileURLWithPath: storedPath, isDirectory: false)
-        if ArchivePath.split(url) != nil { return url }
-        return PathUtilities.nearestExistingAncestor(of: url)
     }
 
-    static func displayName(of url: URL) -> String {
-        (try? url.resourceValues(forKeys: [.localizedNameKey]))?.localizedName
-            ?? FileManager.default.displayName(atPath: url.path)
+    /// The restored folder (also a folder inside an archive), or home when nothing is stored. Not checked
+    /// here, since it may be on a network volume: the model's first load falls back to the nearest existing
+    /// ancestor, off the main actor, when it is gone.
+    private static func startURL(storedPath: String) -> URL {
+        guard storedPath.hasPrefix("/") else { return FileManager.default.homeDirectoryForCurrentUser }
+        return URL(fileURLWithPath: storedPath, isDirectory: true)
+    }
+
+    private func title(for url: URL) -> String {
+        if let resolvedTitle, resolvedTitle.url == url { return resolvedTitle.name }
+        return url.path == "/" ? "/" : url.lastPathComponent
     }
 }
 

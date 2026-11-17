@@ -4,8 +4,8 @@ import Testing
 @testable import MacCommanderCore
 
 @Suite struct VolumeProviderTests {
-    @Test func bootVolumeFirst() {
-        let volumes = VolumeProvider.localVolumes()
+    @Test func bootVolumeFirst() async {
+        let volumes = await VolumeProvider.localVolumes()
         #expect(volumes.first?.isBoot == true)
         #expect(volumes.first?.url.path == "/")
         #expect(volumes.filter(\.isBoot).count == 1)

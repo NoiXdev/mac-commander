@@ -12,27 +12,43 @@ extension FileListController {
         Task { @MainActor [weak self] in self?.loadVisibleIcons() }
     }
 
-    /// Replaces type placeholders by the files' own icons for the visible rows, in small batches.
+    /// Replaces type placeholders by the files' own icons for the visible rows, in batches of 32 loaded off
+    /// the main actor (one batch at a time; on an unresponsive server the placeholders simply stay).
     func loadVisibleIcons() {
         iconPassScheduled = false
         // Archive entries have virtual paths: their type icons are final (see `outlineView(_:viewFor:item:)`).
-        guard !isInArchive else { return }
+        guard !isInArchive, !iconBatchInFlight else { return }
+        let urls = visibleNameCells().filter { !$0.cell.hasFileIcon }.prefix(32).map(\.url)
+        guard !urls.isEmpty else { return }
+        iconBatchInFlight = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let loaded = await icons.loadFileIcons(for: urls)
+            iconBatchInFlight = false
+            // Rows may have scrolled or been reused meanwhile: apply by URL to what is visible now.
+            if !isInArchive {
+                for (cell, url) in visibleNameCells() where !cell.hasFileIcon {
+                    guard let icon = loaded[url] else { continue }
+                    cell.imageView?.image = icon
+                    cell.hasFileIcon = true
+                }
+            }
+            // The next pass picks up whatever is still without its icon, and stops when nothing is.
+            scheduleIconPass()
+        }
+    }
+
+    /// The name cells of the visible rows with their rows' URLs.
+    private func visibleNameCells() -> [(cell: FileNameCellView, url: URL)] {
         let columnIndex = outlineView.column(withIdentifier: NSUserInterfaceItemIdentifier(FileColumn.name))
-        guard columnIndex >= 0, let visible = Range(outlineView.rows(in: outlineView.visibleRect)) else { return }
-        var loaded = 0
-        for row in visible {
+        guard columnIndex >= 0, let visible = Range(outlineView.rows(in: outlineView.visibleRect)) else { return [] }
+        return visible.compactMap { row in
             guard
                 let cell = outlineView.view(atColumn: columnIndex, row: row, makeIfNecessary: false)
                     as? FileNameCellView,
-                !cell.hasFileIcon, let node = node(atRow: row)
-            else { continue }
-            cell.imageView?.image = icons.loadFileIcon(for: node.url)
-            cell.hasFileIcon = true
-            loaded += 1
-            if loaded >= 32 {
-                scheduleIconPass()
-                return
-            }
+                let node = node(atRow: row)
+            else { return nil }
+            return (cell, node.url)
         }
     }
 }
@@ -123,9 +139,9 @@ extension FileListController: NSOutlineViewDataSource {
             destination = model.currentURL
         }
         // Entries dragged out of an archive (checked first: their promises are no file URLs) are extracted.
+        // The destination is a real folder (drops inside an archive were refused above): no path check.
         if ArchiveDragPayload.isOn(info.draggingPasteboard) {
-            return info.draggingSourceOperationMask.contains(.copy) && Self.acceptsArchiveDrop(into: destination)
-                ? .copy : []
+            return info.draggingSourceOperationMask.contains(.copy) ? .copy : []
         }
         // Cached per drag, destination and modifier keys: this runs on every mouse move.
         guard let mode = FileActions.hoverDropMode(on: info.draggingPasteboard, into: destination) else { return [] }
@@ -138,9 +154,7 @@ extension FileListController: NSOutlineViewDataSource {
         guard showsCurrentFolder, !isInArchive else { return false }
         let destination = (item as? FileNode).flatMap { $0.item.isDirectory ? $0.url : nil } ?? model.currentURL
         if ArchiveDragPayload.isOn(info.draggingPasteboard) {
-            guard let payload = ArchiveDragPayload(pasteboard: info.draggingPasteboard),
-                Self.acceptsArchiveDrop(into: destination)
-            else { return false }
+            guard let payload = ArchiveDragPayload(pasteboard: info.draggingPasteboard) else { return false }
             let model = model
             let window = outlineView.window
             Task {
@@ -155,11 +169,6 @@ extension FileListController: NSOutlineViewDataSource {
         let window = outlineView.window
         Task { await FileActions.transfer(sources, into: destination, mode: mode, model: model, window: window) }
         return true
-    }
-
-    /// Archive entries can be extracted into a real folder only, never into an archive (cheap stats only).
-    static func acceptsArchiveDrop(into destination: URL) -> Bool {
-        ArchivePath.split(destination) == nil
     }
 
     /// `.copy` or `.move`, so the cursor shows the matching badge. While ⌘ is held AppKit narrows the

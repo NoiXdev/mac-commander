@@ -3,19 +3,61 @@ import AppKit
 /// The "Open With" submenu for a right-click on files.
 @MainActor
 enum OpenWithMenu {
+    /// The submenu shows "Loading…" until the applications are known: content types, Launch Services and
+    /// app icons are looked up off the main actor, since the files may be on a network volume.
     static func make(for urls: [URL]) -> NSMenuItem {
         let item = NSMenuItem(title: String(localized: "Open With"), action: nil, keyEquivalent: "")
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let workspace = NSWorkspace.shared
-
-        // Launch Services is queried once per content type, not per item: a huge selection of a few types
-        // stays cheap. With too many types the menu offers only "Other…".
-        guard let samples = samples(of: urls) else {
-            menu.addItem(ActionMenuItem(String(localized: "Other…")) { chooseApp(for: urls) })
-            item.submenu = menu
-            return item
+        let loading = NSMenuItem(title: String(localized: "Loading…"), action: nil, keyEquivalent: "")
+        loading.isEnabled = false
+        menu.addItem(loading)
+        item.submenu = menu
+        Task { @MainActor in
+            let choices = await applications(for: urls)
+            fill(menu, with: choices, urls: urls)
         }
+        return item
+    }
+
+    /// Above this many distinct content types, the menu offers only "Other…".
+    nonisolated static let maxContentTypes = 50
+
+    private struct App: Sendable {
+        let url: URL
+        let name: String
+        let icon: NSImage
+    }
+
+    private struct Choices: Sendable {
+        /// The first item's default app, when it opens all items.
+        var defaultApp: App?
+        /// Apps that open all items, sorted by name, without the default app.
+        var others: [App] = []
+    }
+
+    private static func fill(_ menu: NSMenu, with choices: Choices?, urls: [URL]) {
+        menu.removeAllItems()
+        if let choices {
+            if let app = choices.defaultApp {
+                menu.addItem(appItem(app, title: app.name + " " + String(localized: "(default)"), urls: urls))
+                if !choices.others.isEmpty { menu.addItem(.separator()) }
+            }
+            var seen = Set<String>()
+            for app in choices.others where seen.insert(app.name).inserted {
+                menu.addItem(appItem(app, title: app.name, urls: urls))
+            }
+            if menu.numberOfItems > 0 { menu.addItem(.separator()) }
+        }
+        menu.addItem(ActionMenuItem(String(localized: "Other…")) { chooseApp(for: urls) })
+    }
+
+    /// Launch Services is queried once per content type, not per item: a huge selection of a few types
+    /// stays cheap. nil with too many types: the menu then offers only "Other…".
+    @concurrent
+    private static func applications(for urls: [URL]) async -> Choices? {
+        guard let samples = samples(of: urls) else { return nil }
+        let workspace = NSWorkspace.shared
         var defaultApp = urls.first.flatMap { workspace.urlForApplication(toOpen: $0) }
         // With several items, only apps that open all of them.
         var common: Set<URL>?
@@ -25,31 +67,18 @@ enum OpenWithMenu {
         }
         // The first item's default app is offered only if it opens all of them.
         if urls.count > 1, let app = defaultApp, common?.contains(app) != true { defaultApp = nil }
-        let others = (common ?? [])
+        var choices = Choices()
+        choices.defaultApp = defaultApp.map { app($0) }
+        choices.others = (common ?? [])
             .filter { $0 != defaultApp }
-            .map { (url: $0, name: displayName($0)) }
+            .map { app($0) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-
-        if let defaultApp {
-            menu.addItem(appItem(defaultApp, title: displayName(defaultApp) + " " + String(localized: "(default)"), urls: urls))
-            if !others.isEmpty { menu.addItem(.separator()) }
-        }
-        var seen = Set<String>()
-        for app in others where seen.insert(app.name).inserted {
-            menu.addItem(appItem(app.url, title: app.name, urls: urls))
-        }
-        if menu.numberOfItems > 0 { menu.addItem(.separator()) }
-        menu.addItem(ActionMenuItem(String(localized: "Other…")) { chooseApp(for: urls) })
-        item.submenu = menu
-        return item
+        return choices
     }
-
-    /// Above this many distinct content types, the menu offers only "Other…".
-    static let maxContentTypes = 50
 
     /// One URL per distinct content type (`contentTypeKey`, else the lowercased path extension), in order;
     /// nil if there are more than `maxContentTypes`.
-    private static func samples(of urls: [URL]) -> [URL]? {
+    nonisolated private static func samples(of urls: [URL]) -> [URL]? {
         var seen = Set<String>()
         var samples: [URL] = []
         for url in urls {
@@ -62,16 +91,17 @@ enum OpenWithMenu {
         return samples
     }
 
-    private static func displayName(_ app: URL) -> String {
-        let name = FileManager.default.displayName(atPath: app.path)
-        return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+    nonisolated private static func app(_ url: URL) -> App {
+        var name = FileManager.default.displayName(atPath: url.path)
+        if name.hasSuffix(".app") { name = String(name.dropLast(4)) }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        icon.size = NSSize(width: 16, height: 16)
+        return App(url: url, name: name, icon: icon)
     }
 
-    private static func appItem(_ app: URL, title: String, urls: [URL]) -> NSMenuItem {
-        let item = ActionMenuItem(title) { open(urls, with: app) }
-        let icon = NSWorkspace.shared.icon(forFile: app.path)
-        icon.size = NSSize(width: 16, height: 16)
-        item.image = icon
+    private static func appItem(_ app: App, title: String, urls: [URL]) -> NSMenuItem {
+        let item = ActionMenuItem(title) { open(urls, with: app.url) }
+        item.image = app.icon
         return item
     }
 
