@@ -244,6 +244,25 @@ public final class BrowserModel {
         selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 
+    /// Shows a real file or folder in the list: navigates to its parent folder (unless that is the current
+    /// folder already) and selects it, spelled as in `items`. Targets inside an archive and missing targets
+    /// are ignored. Checks the target with a few `lstat`s on the main actor, like `navigate`. Returns false when ignored (the UI beeps), true otherwise.
+    @discardableResult
+    public func reveal(_ url: URL) async -> Bool {
+        let target = url.standardizedFileURL
+        let parent = target.deletingLastPathComponent()
+        // lstat: a broken symlink is still an item in the list. `split` of a real file is the file itself
+        // (an archive with an empty inner path), so the parent tells whether the target is inside an archive.
+        var info = stat()
+        guard lstat(target.path, &info) == 0, ArchivePath.split(parent) == nil else { return false }
+        if !isCurrentDirectory(parent) {
+            await navigate(to: parent)
+            guard isCurrentDirectory(parent) else { return true }
+        }
+        await selectAfterOperation([target])
+        return true
+    }
+
     /// Archives are read-only; the UI disables writes there, this is the model's own guard.
     /// `ArchivePath.split` is a few `stat`s, cheap enough for the main actor.
     private func refuseWritesInArchive(_ folder: URL) throws(CocoaError) {

@@ -52,6 +52,11 @@ struct PreviewHeader {
 /// The selected `FileItem` is taken from `model.items` (the listed folder's rows). A row of an inline
 /// expanded subfolder isn't in `items`: a real file is loaded with `FileItem.load` off the main thread, an
 /// archive entry is looked up in its parent's listing (`model.children(of:)`, a cached catalog lookup).
+///
+/// A rendered real file (not an archive entry's extracted copy) is watched (`DirectoryWatcher` on the file,
+/// which debounces): a change re-renders it under the same generation and selection guards. Editors often
+/// save by replacing the file (a new vnode), so after each change the watcher is re-created when the file's
+/// identity changed. The watcher goes away with the content (any new resolution, hiding, `stop()`).
 @MainActor @Observable
 final class PreviewController {
     private(set) var content: PreviewContent = .empty("")
@@ -67,6 +72,12 @@ final class PreviewController {
     @ObservationIgnored private var work: Task<Void, Never>?
     /// The "Show Source" load.
     @ObservationIgnored private var sourceTask: Task<Void, Never>?
+    /// The re-render after the watched file changed.
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
+    /// The watcher on the rendered file, its path and identity (to detect a file replaced by rename).
+    @ObservationIgnored private var fileWatcher: DirectoryWatcher?
+    @ObservationIgnored private var watchedFile: URL?
+    @ObservationIgnored private var watchedIdentity: FileIdentity?
     /// Set while the window's content is gone (`stop()`): nothing is resolved until `resume()`.
     @ObservationIgnored private var isStopped = false
     /// The inputs last seen, to ignore unrelated settings changes.
@@ -136,6 +147,9 @@ final class PreviewController {
         work = nil
         sourceTask?.cancel()
         sourceTask = nil
+        refreshTask?.cancel()
+        refreshTask = nil
+        stopWatchingFile()
     }
 
     /// The window's content went away (window closed): cancel running work, so no extraction or render keeps
@@ -206,7 +220,7 @@ final class PreviewController {
         // Shown at once with the type icon; the file's own icon follows.
         header = Self.header(for: item, icon: Self.typeIcon(for: item))
         await resolveFile(url, name: item.name, isFolder: item.isDirectory || item.isPackage,
-                          generation: generation, selection: selection)
+                          watches: true, generation: generation, selection: selection)
         let icon = await Self.fileIcon(for: url)
         if isCurrent(generation, selection) { header?.icon = icon }
     }
@@ -244,11 +258,15 @@ final class PreviewController {
             return
         }
         guard isCurrent(generation, selection) else { return }
-        await resolveFile(extracted, name: item.name, isFolder: false, generation: generation, selection: selection)
+        await resolveFile(
+            extracted, name: item.name, isFolder: false, watches: false, generation: generation, selection: selection)
     }
 
-    /// Folders and packages, and files no renderer takes, go to Quick Look; the rest is rendered.
-    private func resolveFile(_ url: URL, name: String, isFolder: Bool, generation: Int, selection: Set<URL>) async {
+    /// Folders and packages, and files no renderer takes, go to Quick Look; the rest is rendered. `watches`:
+    /// re-render a rendered file when it changes (real files only, not an archive entry's extracted copy).
+    private func resolveFile(
+        _ url: URL, name: String, isFolder: Bool, watches: Bool, generation: Int, selection: Set<URL>
+    ) async {
         guard !isFolder, let renderer = registry.renderer(for: url) else {
             content = .quickLook(url)
             return
@@ -256,6 +274,16 @@ final class PreviewController {
         // Rendering waits: never show the previous item's content under this header meanwhile. (Quick Look
         // above is set at once, so a Quick Look to Quick Look change reuses the view without a flash.)
         content = .empty("")
+        await render(url, name: name, with: renderer, generation: generation, selection: selection)
+        if watches, isCurrent(generation, selection), case .rendered = content {
+            watchFile(url, name: name, generation: generation, selection: selection)
+        }
+    }
+
+    /// Renders `url` and shows the result (or the too-large / unpreviewable message) while still current.
+    private func render(
+        _ url: URL, name: String, with renderer: any PreviewRenderer, generation: Int, selection: Set<URL>
+    ) async {
         do {
             let rendered = try await renderer.render(url)
             guard isCurrent(generation, selection) else { return }
@@ -271,6 +299,84 @@ final class PreviewController {
             case .unreadable:
                 showUnpreviewable(name)
             }
+        }
+    }
+
+    // MARK: - Live update
+
+    /// Device and inode of the watched file, to tell a file replaced by rename from the watched vnode.
+    private struct FileIdentity: Equatable {
+        let device: dev_t
+        let inode: ino_t
+
+        /// `stat` (follows a symlink, like the watcher's `open`).
+        init?(path: String) {
+            var info = stat()
+            guard stat(path, &info) == 0 else { return nil }
+            device = info.st_dev
+            inode = info.st_ino
+        }
+    }
+
+    /// Watches `url` unless the same file (same identity) is watched already. A file that can't be opened
+    /// (gone meanwhile) leaves nothing watched.
+    private func watchFile(_ url: URL, name: String, generation: Int, selection: Set<URL>) {
+        let identity = FileIdentity(path: url.path)
+        if fileWatcher != nil, watchedFile == url, let identity, identity == watchedIdentity { return }
+        stopWatchingFile()
+        watchedFile = url
+        watchedIdentity = identity
+        fileWatcher = DirectoryWatcher(url: url) { [weak self] in
+            Task { @MainActor in
+                self?.watchedFileDidChange(url, name: name, generation: generation, selection: selection)
+            }
+        }
+    }
+
+    private func stopWatchingFile() {
+        fileWatcher?.cancel()
+        fileWatcher = nil
+        watchedFile = nil
+        watchedIdentity = nil
+    }
+
+    /// Re-renders the shown file (the watcher already debounced), keeping the current content until the
+    /// result is there, refreshes the header's size and date, and re-arms the watcher.
+    private func watchedFileDidChange(_ url: URL, name: String, generation: Int, selection: Set<URL>) {
+        guard !isStopped, generation == self.generation, model.selection == selection, watchedFile == url,
+            let renderer = registry.renderer(for: url)
+        else { return }
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            await render(url, name: name, with: renderer, generation: generation, selection: selection)
+            guard isCurrent(generation, selection) else { return }
+            if let item = await Self.loadItem(url), isCurrent(generation, selection), let icon = header?.icon {
+                header = Self.header(for: item, icon: icon)
+            }
+            guard isCurrent(generation, selection) else { return }
+            if case .rendered = content {
+                watchFile(url, name: name, generation: generation, selection: selection)
+            } else {
+                // Too large or unreadable now: the message stays until the selection changes.
+                stopWatchingFile()
+            }
+        }
+    }
+
+    // MARK: - Rendered / Source
+
+    /// The global Rendered/Source choice for rendered previews.
+    var markdownShowsSource: Bool {
+        get { settings.settings.markdownShowsSource }
+        set { settings.settings.markdownShowsSource = newValue }
+    }
+
+    /// A local link in a rendered preview: shows its target in the window's list, beeps when it's missing
+    /// or inside an archive.
+    func reveal(_ url: URL) {
+        Task { [model] in
+            if await !model.reveal(url) { NSSound.beep() }
         }
     }
 

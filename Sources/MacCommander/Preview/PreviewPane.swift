@@ -9,12 +9,34 @@ struct PreviewPane: View {
         VStack(spacing: 0) {
             if let header = controller.header {
                 PreviewHeaderView(header: header)
+                if case .rendered = controller.content {
+                    renderedSourcePicker
+                }
                 Divider()
             }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    /// Rendered | Source, for rendered previews; a global setting.
+    private var renderedSourcePicker: some View {
+        Picker(
+            String(localized: "Show"),
+            selection: Binding(
+                get: { controller.markdownShowsSource },
+                set: { controller.markdownShowsSource = $0 })
+        ) {
+            Text(String(localized: "Rendered")).tag(false)
+            Text(String(localized: "Source")).tag(true)
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 8)
     }
 
     @ViewBuilder
@@ -28,9 +50,12 @@ struct PreviewPane: View {
                 .padding()
         case .quickLook(let url):
             QuickLookPreview(url: url)
-        case .rendered(let rendered, _):
-            // Interim until the web view (Task 5): the renderer's source text.
-            SourceTextView(text: rendered.source ?? "")
+        case .rendered(let rendered, let file):
+            if controller.markdownShowsSource {
+                SourceTextView(text: rendered.source ?? "")
+            } else {
+                MarkdownWebView(rendered: rendered, file: file) { controller.reveal($0) }
+            }
         case .source(let text, _):
             SourceTextView(text: text)
         case .message(let text, let actions):

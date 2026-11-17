@@ -635,4 +635,30 @@ private final class Counter {
         let copy = try #require(model.items.first { $0.url.lastPathComponent == "a copy.txt" })
         #expect(model.selection == [copy.url])
     }
+
+    @Test func revealNavigatesAndSelects() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.folder("sub")
+        let file = try dir.file("sub/x.md")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+
+        #expect(await model.reveal(file))
+
+        #expect(samePath(model.currentURL, dir.url.appendingPathComponent("sub")))
+        let item = try #require(model.items.first { $0.url.lastPathComponent == "x.md" })
+        #expect(model.selection == [item.url])
+    }
+
+    @Test func revealIgnoresMissingTargets() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.folder("sub")
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+
+        #expect(await model.reveal(dir.url.appendingPathComponent("sub/missing.md")) == false)
+
+        #expect(samePath(model.currentURL, dir.url))
+        #expect(model.selection.isEmpty)
+    }
 }
