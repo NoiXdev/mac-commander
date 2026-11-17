@@ -1,6 +1,5 @@
 import Darwin
 import Foundation
-import Synchronization
 
 /// Finder-style "Compress": zip archives made with `/usr/bin/ditto`.
 public enum Compressor {
@@ -107,78 +106,17 @@ public enum Compressor {
 
     // MARK: - ditto
 
-    /// The running process, shared with the cancellation handler. `terminate()` is only valid after launch.
-    private final class DittoRun: @unchecked Sendable {
-        let process = Process()
-        /// launched, cancelled; guarded so a cancel never races the launch.
-        let state = Mutex<(launched: Bool, cancelled: Bool)>((false, false))
-        let errorData = Mutex(Data())
-    }
-
-    /// Runs `/usr/bin/ditto` without blocking the calling thread. A non-zero exit throws
-    /// `CocoaError(.fileWriteUnknown)` with ditto's stderr as the description; cancelling terminates ditto
-    /// and throws `CancellationError`.
+    /// Runs `/usr/bin/ditto`. A non-zero exit throws `CocoaError(.fileWriteUnknown)` with ditto's stderr
+    /// as the description; cancelling terminates ditto and throws `CancellationError`.
     private static func runDitto(_ arguments: [String]) async throws {
-        let run = DittoRun()
-        let process = run.process
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        process.arguments = arguments
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-
-        let status: Int32 = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Int32, any Error>) in
-                // Resume once both the process has exited and its stderr is drained (a full pipe would
-                // otherwise stall ditto).
-                let group = DispatchGroup()
-                group.enter()
-                group.enter()
-                process.terminationHandler = { _ in group.leave() }
-                let launchError: (any Error)? = run.state.withLock { state in
-                    if state.cancelled { return CancellationError() }
-                    do {
-                        try process.run()
-                        state.launched = true
-                        return nil
-                    } catch {
-                        return error
-                    }
-                }
-                if let launchError {
-                    process.terminationHandler = nil
-                    try? errorPipe.fileHandleForWriting.close()
-                    continuation.resume(throwing: launchError)
-                    return
-                }
-                // The parent's copy of the write end must close, or the read below never sees EOF.
-                try? errorPipe.fileHandleForWriting.close()
-                DispatchQueue.global(qos: .utility).async {
-                    let data = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    run.errorData.withLock { $0 = data }
-                    group.leave()
-                }
-                group.notify(queue: .global(qos: .utility)) {
-                    continuation.resume(returning: process.terminationStatus)
-                }
-            }
-        } onCancel: {
-            run.state.withLock { state in
-                state.cancelled = true
-                if state.launched { run.process.terminate() }
-            }
-        }
-
-        if run.state.withLock({ $0.cancelled }) { throw CancellationError() }
-        if status != 0 {
-            let message = String(decoding: run.errorData.withLock { $0 }, as: UTF8.self)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await ProcessRunner.run(URL(fileURLWithPath: "/usr/bin/ditto"), arguments)
+        if result.status != 0 {
+            let message = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw CocoaError(
                 .fileWriteUnknown,
                 userInfo: [
                     NSLocalizedDescriptionKey: message.isEmpty
-                        ? String(localized: "The archive couldn’t be created (ditto exited with status \(status)).")
+                        ? String(localized: "The archive couldn’t be created (ditto exited with status \(result.status)).")
                         : message
                 ])
         }
