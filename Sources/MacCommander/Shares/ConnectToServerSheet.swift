@@ -9,7 +9,8 @@ import SwiftUI
 struct ConnectToServerSheet: View {
     static let recentLimit = 10
 
-    let model: BrowserModel
+    /// nil in the Settings window: a connected share isn't navigated to.
+    let model: BrowserModel?
     let sheets: ShareSheets
     @Environment(ShareStore.self) private var store
     @Environment(ShareManager.self) private var manager

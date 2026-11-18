@@ -27,8 +27,9 @@ final class ShareSheets {
 /// saved share and turns the outcome into navigation, the sign-in sheet or an alert on the window.
 @MainActor
 enum ShareActions {
-    /// A click on a share that isn't connected (or a Retry): probes and mounts with the saved methods.
-    static func connect(_ share: SavedShare, manager: ShareManager, model: BrowserModel, sheets: ShareSheets) async {
+    /// A click on a share that isn't connected (or a Retry): probes and mounts with the saved methods. With no
+    /// `model` (the Settings window) it only connects; nothing navigates.
+    static func connect(_ share: SavedShare, manager: ShareManager, model: BrowserModel?, sheets: ShareSheets) async {
         let outcome = await manager.connect(share.id)
         await handle(outcome, for: share, manager: manager, model: model, sheets: sheets)
     }
@@ -48,12 +49,14 @@ enum ShareActions {
     /// click) the window goes to the share's folder: the mount point, plus the saved address's folder inside
     /// an smb/afp share (`ShareURL.folder(atMountPoint:)`). Needs sign-in: the sign-in sheet, once no other
     /// sheet is up. Unreachable: the "can’t be reached" alert, whose Retry connects again. Failed: an alert with the message.
+    /// With no `model` (the Settings window) a connected share stays where it is: nothing navigates.
     static func handle(
-        _ outcome: ConnectOutcome, for share: SavedShare, manager: ShareManager, model: BrowserModel,
+        _ outcome: ConnectOutcome, for share: SavedShare, manager: ShareManager, model: BrowserModel?,
         sheets: ShareSheets
     ) async {
         switch outcome {
         case .connected(let mountPoint):
+            guard let model else { return }
             guard await !model.shareDidConnect(id: share.id, mountPoint: mountPoint) else { return }
             await model.navigate(to: share.url.folder(atMountPoint: mountPoint))
         case .needsSignIn:
@@ -69,7 +72,7 @@ enum ShareActions {
 
     /// The alert for a share whose server doesn't answer: Retry connects again, Cancel does nothing.
     static func showUnreachable(
-        _ share: SavedShare, manager: ShareManager, model: BrowserModel, sheets: ShareSheets
+        _ share: SavedShare, manager: ShareManager, model: BrowserModel?, sheets: ShareSheets
     ) async {
         let alert = NSAlert()
         alert.alertStyle = .warning

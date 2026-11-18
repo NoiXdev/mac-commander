@@ -10,7 +10,8 @@ import SwiftUI
 /// The password lives only in this sheet's state and is cleared after every attempt.
 struct SignInSheet: View {
     let share: SavedShare
-    let model: BrowserModel
+    /// nil in the Settings window: a connected share isn't navigated to.
+    let model: BrowserModel?
     let sheets: ShareSheets
     @Environment(ShareManager.self) private var manager
     @Environment(\.dismiss) private var dismiss
@@ -23,7 +24,7 @@ struct SignInSheet: View {
     /// Set by Cancel: an attempt still running is then ignored when it ends.
     private let cancelledState = State(initialValue: false)
 
-    init(share: SavedShare, model: BrowserModel, sheets: ShareSheets) {
+    init(share: SavedShare, model: BrowserModel?, sheets: ShareSheets) {
         self.share = share
         self.model = model
         self.sheets = sheets

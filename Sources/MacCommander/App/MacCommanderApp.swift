@@ -34,6 +34,14 @@ struct MacCommanderApp: App {
             }
         }
         .windowResizability(.contentSize)
+
+        Settings {
+            SettingsView()
+                .environment(settings)
+                .environment(preferences)
+                .environment(appDelegate.shares.store)
+                .environment(appDelegate.shares.manager)
+        }
     }
 }
 

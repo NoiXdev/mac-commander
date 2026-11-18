@@ -51,7 +51,7 @@ struct NetworkSection: View {
             Button(String(localized: "Disconnect")) {
                 Task { await ShareActions.disconnect(share, manager: manager, sheets: sheets) }
             }
-            .disabled(!(Self.isConnected(status) || (status == .unreachable && manager.hasMountPoint(share.id))))
+            .disabled(!Self.canDisconnect(share, status: status, manager: manager))
             Button(String(localized: "Sign In…")) {
                 Task { await ShareActions.showSignIn(share, sheets: sheets) }
             }
@@ -77,13 +77,20 @@ struct NetworkSection: View {
         }
     }
 
-    private static func isConnected(_ status: ShareStatus?) -> Bool {
+    /// Also used by the Settings window's Network tab (Connect and Sign In are enabled when this is false).
+    static func isConnected(_ status: ShareStatus?) -> Bool {
         if case .connected? = status { return true }
         return false
     }
 
+    /// Disconnect is offered for a connected share and for an unreachable one that is still mounted.
+    static func canDisconnect(_ share: SavedShare, status: ShareStatus?, manager: ShareManager) -> Bool {
+        isConnected(status) || (status == .unreachable && manager.hasMountPoint(share.id))
+    }
+
+    /// The status dot, shared with the Settings window's Network tab.
     @ViewBuilder
-    private static func symbol(for status: ShareStatus?) -> some View {
+    static func symbol(for status: ShareStatus?) -> some View {
         switch status {
         case .connected?:
             Image(systemName: "circle.fill").foregroundStyle(.green)
@@ -96,7 +103,7 @@ struct NetworkSection: View {
         }
     }
 
-    private static func tooltip(for status: ShareStatus?) -> String {
+    static func tooltip(for status: ShareStatus?) -> String {
         switch status {
         case .connected?: String(localized: "Connected")
         case .available(needsSignIn: true)?: String(localized: "Sign-in needed")
