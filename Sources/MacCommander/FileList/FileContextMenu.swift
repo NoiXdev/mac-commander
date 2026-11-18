@@ -220,9 +220,7 @@ enum FileContextMenu {
     /// so a tag change is announced like a file operation's: the model re-lists the current folder (local
     /// or network) and the list re-lists the affected inline-expanded subfolders.
     private static func tagsDidChange(in urls: [URL], model: BrowserModel) {
-        let folders = urls.map { $0.deletingLastPathComponent().standardizedFileURL }
-        NotificationCenter.default.post(
-            name: FileOperationCenter.foldersDidChange, object: model.operations, userInfo: ["folders": folders])
+        model.operations.announceChanged(folders: urls.map { $0.deletingLastPathComponent() })
     }
 
     /// Paste into `destination`; disabled while the clipboard is empty.

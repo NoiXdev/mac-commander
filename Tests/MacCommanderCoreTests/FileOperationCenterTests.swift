@@ -212,6 +212,17 @@ struct FileOperationCenterTests {
         #expect(Set(notices.paths) == [[path(f.src)], [path(f.dst)]])
     }
 
+    /// A change outside file operations (tags) posts one notice with each folder once.
+    @Test func announceChangedPostsEachFolderOnce() throws {
+        let f = try Fixture()
+        let notices = FolderNotices(f.center)
+        let files = ["a.txt", "b.txt", "c.txt"].map { f.src.appendingPathComponent($0) }
+
+        f.center.announceChanged(folders: files.map { $0.deletingLastPathComponent() })
+
+        #expect(notices.paths == [[path(f.src)]])
+    }
+
     /// A failing undo still posts the folders of the record it popped.
     @Test func failedUndoPostsItsRecordsFolders() async throws {
         let f = try Fixture()

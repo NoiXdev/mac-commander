@@ -40,6 +40,8 @@ struct ItemInfo: Sendable {
 /// when the window closes.
 struct InfoWindow: View {
     let url: URL
+    /// Tag edits are announced here, so file lists showing the item's folder re-list it.
+    let operations: FileOperationCenter
     private let infoState = State<ItemInfo?>(initialValue: nil)
     private let iconState = State<NSImage?>(initialValue: nil)
     private let sizeState = State(initialValue: "")
@@ -156,7 +158,10 @@ struct InfoWindow: View {
         await reloadInfo()
     }
 
+    /// After a tag edit: lists showing the folder re-list it (the folder watcher can't see tag changes),
+    /// and the info is read again.
     private func reloadInfo() async {
+        operations.announceChanged(folders: [url.deletingLastPathComponent()])
         info = await ItemInfo.load(url)
     }
 

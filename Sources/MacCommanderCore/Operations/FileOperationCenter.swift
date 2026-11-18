@@ -351,6 +351,12 @@ public final class FileOperationCenter {
 
     // MARK: - Folders
 
+    /// Announces a change that isn't a file operation (e.g. tags written to files) for `folders`, so every
+    /// window showing one of them re-lists it. Posts one `foldersDidChange`, each folder once.
+    public func announceChanged(folders: [URL]) {
+        postFoldersDidChange(folders)
+    }
+
     private func postFoldersDidChange(_ folders: [URL]) {
         var seen = Set<String>()
         var unique: [URL] = []
