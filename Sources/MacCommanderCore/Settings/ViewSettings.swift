@@ -24,6 +24,7 @@ public struct ColumnLayout: Codable, Equatable, Sendable {
         ColumnState(column: .tags, width: 90, isVisible: true),
         ColumnState(column: .dateCreated, width: 170, isVisible: false),
         ColumnState(column: .dateAdded, width: 170, isVisible: false),
+        ColumnState(column: .location, width: 200, isVisible: true),
     ])
 
     public init(columns: [ColumnState]) {

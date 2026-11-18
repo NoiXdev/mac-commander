@@ -2,6 +2,8 @@ import Foundation
 
 public enum FileColumn: String, CaseIterable, Codable, Sendable {
     case name, dateModified, dateCreated, dateAdded, size, kind, tags
+    /// The folder holding a search result; only shown while searching.
+    case location
 
     public var title: String {
         switch self {
@@ -12,6 +14,7 @@ public enum FileColumn: String, CaseIterable, Codable, Sendable {
         case .size: String(localized: "Size")
         case .kind: String(localized: "Kind")
         case .tags: String(localized: "Tags")
+        case .location: String(localized: "Location")
         }
     }
 }

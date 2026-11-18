@@ -2,11 +2,40 @@ import AppKit
 import MacCommanderCore
 import SwiftUI
 
-/// Clickable breadcrumb of the current folder.
+/// Clickable breadcrumb of the current folder; while a search is shown, what it searches.
 struct PathBar: View {
     let model: BrowserModel
 
     var body: some View {
+        if let search = model.search {
+            HStack(spacing: 4) {
+                Image(systemName: search.scope.isTag ? "tag" : "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                Text(Self.description(of: search))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.bar)
+        } else {
+            breadcrumbs
+        }
+    }
+
+    /// `Searching “text” in Folder` or `Tag: Name`; the folder by its last path component (no disk access).
+    private static func description(of search: SearchQuery) -> String {
+        switch search.scope {
+        case .tag(let name):
+            return String(localized: "Tag: \(name)")
+        case .folder(let url):
+            let folder = url.path == "/" ? "/" : url.lastPathComponent
+            return String(localized: "Searching “\(search.text)” in \(folder)")
+        }
+    }
+
+    @ViewBuilder private var breadcrumbs: some View {
         let segments = PathUtilities.segments(of: model.currentURL)
         // Segments inside the shown archive are virtual: folder icons, no file lookups. Taken from the model
         // (no disk access); it lags behind while a new folder loads, which only affects icons meanwhile.
@@ -36,6 +65,13 @@ struct PathBar: View {
         .onChange(of: model.currentURL) { proxy.scrollTo(segments.count - 1, anchor: .trailing) }
         }
         .background(.bar)
+    }
+}
+
+private extension SearchScope {
+    var isTag: Bool {
+        if case .tag = self { return true }
+        return false
     }
 }
 

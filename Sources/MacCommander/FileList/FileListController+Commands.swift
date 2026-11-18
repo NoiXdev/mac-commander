@@ -27,7 +27,8 @@ extension FileListController: FileCommandHandler {
         case .copy, .cut, .duplicate, .moveToTrash, .copyPath:
             return !outlineView.selectedRowIndexes.isEmpty
         case .paste, .pasteAsMove:
-            return !clipboard.fileURLs.isEmpty
+            // Into the current folder, whose items a shown search hides.
+            return !clipboard.fileURLs.isEmpty && !model.isSearching
         case .undo:
             // Also off while an undo runs, so a quick double ⌘Z doesn't queue a second one.
             let undo = model.operations.undo

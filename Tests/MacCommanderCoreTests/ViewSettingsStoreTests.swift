@@ -39,10 +39,12 @@ import Testing
     @Test func layoutRepairsMissingColumns() throws {
         let json = Data(#"{"columns":[{"column":"name","width":200,"isVisible":true}]}"#.utf8)
         let layout = try JSONDecoder().decode(ColumnLayout.self, from: json)
-        #expect(layout.columns.count == 7)
+        #expect(layout.columns.count == 8)
         #expect(layout.columns.first?.column == .name)
         #expect(layout.columns.first?.width == 200)
         #expect(Set(layout.columns.map(\.column)) == Set(FileColumn.allCases))
+        // A layout stored before the Location column existed gets it appended.
+        #expect(layout.columns.last == ColumnState(column: .location, width: 200, isVisible: true))
     }
 
     @Test func layoutDropsUnknownColumns() throws {
@@ -50,7 +52,7 @@ import Testing
             #"{"columns":[{"column":"bogus","width":1,"isVisible":true},{"column":"size","width":50,"isVisible":false}]}"#
                 .utf8)
         let layout = try JSONDecoder().decode(ColumnLayout.self, from: json)
-        #expect(layout.columns.count == 7)
+        #expect(layout.columns.count == 8)
         #expect(layout.columns.first?.column == .size)
         #expect(layout.columns.first?.isVisible == false)
     }

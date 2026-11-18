@@ -27,6 +27,12 @@ import Testing
         #expect(names(order, items) == ["y", "x", "z"])
     }
 
+    @Test func sortsByLocationThenName() {
+        let items = [item("a", path: "dir10/a"), item("b", path: "dir2/b"), item("a", path: "dir2/a")]
+        let order = FileSortOrder(column: .location, ascending: true, foldersOnTop: false)
+        #expect(order.sorted(items).map(\.url.path) == ["/virtual/dir2/a", "/virtual/dir2/b", "/virtual/dir10/a"])
+    }
+
     @Test func sortsNaturally() {
         let result = names(.default, ["file10", "file2", "File1"].map { item($0) })
         #expect(result == ["File1", "file2", "file10"])

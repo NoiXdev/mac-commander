@@ -73,6 +73,15 @@ public final class BrowserModel {
     /// Set after a create; the list starts inline editing for it, then sets it back to nil.
     public var pendingRename: URL?
 
+    /// The search or tag view shown over the current folder, nil when the folder itself is shown (Ruling P6-1:
+    /// an overlay, not a history entry). While set, `items` are its sorted results and `listedURL` stays the folder.
+    public private(set) var search: SearchQuery?
+    /// The shown search hasn't finished yet.
+    public private(set) var searchIsRunning = false
+    /// The shown search hit the result cap.
+    public private(set) var searchTruncated = false
+    public var isSearching: Bool { search != nil }
+
     /// The app-wide operation center: undo history and operation notifications.
     @ObservationIgnored public let operations: FileOperationCenter
     @ObservationIgnored private let settings: ViewSettingsStore
@@ -116,6 +125,15 @@ public final class BrowserModel {
     @ObservationIgnored private var shareObservation: NotificationObservation?
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
     @ObservationIgnored var afterListingHook: (@MainActor (URL) async -> Void)?
+    @ObservationIgnored private let searchEngine: any FileSearchEngine
+    /// Consumes the shown search's updates; cancelled when the search is replaced or ended.
+    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    /// The newest snapshot of the shown search, unsorted.
+    @ObservationIgnored private var searchResults: [FileItem] = []
+    /// Bumped per search request (start, re-run, end): updates of an older search are dropped.
+    @ObservationIgnored private var searchGeneration = 0
+    /// The folder's sorted items when the search started, shown again at once when it ends (a reload follows).
+    @ObservationIgnored private var itemsBeforeSearch: [FileItem] = []
 
     public convenience init(
         start: URL,
@@ -123,11 +141,12 @@ public final class BrowserModel {
         loader: DirectoryLoader = DirectoryLoader(),
         opener: @escaping @MainActor (URL) -> Void = { PathQueries.openWithDefaultApp($0) },
         operations: FileOperationCenter = FileOperationCenter(),
-        catalog: ArchiveCatalog = .shared
+        catalog: ArchiveCatalog = .shared,
+        searchEngine: any FileSearchEngine = CompositeSearch()
     ) {
         self.init(
             start: start, settings: settings, loader: loader, opener: opener, operations: operations,
-            catalog: catalog, pathQueries: LivePathQueries())
+            catalog: catalog, searchEngine: searchEngine, pathQueries: LivePathQueries())
     }
 
     /// `pathQueries` is a test hook; the public initializer passes the real `PathQueries`.
@@ -138,10 +157,12 @@ public final class BrowserModel {
         opener: @escaping @MainActor (URL) -> Void = { PathQueries.openWithDefaultApp($0) },
         operations: FileOperationCenter = FileOperationCenter(),
         catalog: ArchiveCatalog = .shared,
+        searchEngine: any FileSearchEngine = CompositeSearch(),
         pathQueries: any PathQueriesProvider
     ) {
         history = NavigationHistory(start: start)
         self.settings = settings
+        self.searchEngine = searchEngine
         self.loader = loader
         self.opener = opener
         self.operations = operations
@@ -187,7 +208,8 @@ public final class BrowserModel {
     /// after a newer request was made is dropped (`.superseded`), so the last click wins.
     @discardableResult
     public func navigate(to requested: URL) async -> NavigationResult {
-        await navigate(to: requested, anyBrowsable: false, openFallback: false, generation: beginNavigation())
+        endSearch()
+        return await navigate(to: requested, anyBrowsable: false, openFallback: false, generation: beginNavigation())
     }
 
     /// Starts a navigation request; any request started earlier is superseded from now on.
@@ -204,6 +226,7 @@ public final class BrowserModel {
         guard !item.isDirectory, let location = await queries.archiveLocation(item.url), location.inner.isEmpty,
             generation == navigationGeneration
         else { return }
+        endSearch()
         await navigate(to: item.url, anyBrowsable: true, openFallback: false, generation: generation)
     }
 
@@ -262,8 +285,13 @@ public final class BrowserModel {
         return .done
     }
 
+    /// While a search is shown, only ends it (Ruling P6-1): the search is no history entry.
     public func goBack() async {
         _ = beginNavigation()
+        if isSearching {
+            endSearch()
+            return
+        }
         guard history.goBack() != nil else { return }
         pendingOpenFallback = nil
         clearSelection()
@@ -272,6 +300,7 @@ public final class BrowserModel {
 
     public func goForward() async {
         _ = beginNavigation()
+        endSearch()
         guard history.goForward() != nil else { return }
         pendingOpenFallback = nil
         clearSelection()
@@ -293,18 +322,23 @@ public final class BrowserModel {
     /// included, is opened. Inside an archive, folders navigate and files are left alone: opening
     /// an archive entry means extracting it first, which the UI does.
     /// The shown items decide (`archiveLocation` is published with them), so this needs no split.
+    /// Navigating ends a shown search; opening a file leaves it.
     public func open(_ item: FileItem) async {
         let generation = beginNavigation()
-        if archiveLocation != nil {
+        if archiveLocation != nil, !isSearching {
             if item.isDirectory {
+                endSearch()
                 await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
             }
         } else if item.isDirectory {
+            endSearch()
             await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
         } else if !item.isPackage, await isPlainFolder(item.url) {
             guard generation == navigationGeneration else { return }
+            endSearch()
             await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
         } else if ArchiveFormats.isArchive(item.url) {
+            endSearch()
             await navigate(to: item.url, anyBrowsable: false, openFallback: true, generation: generation)
         } else {
             opener(item.url)
@@ -333,6 +367,127 @@ public final class BrowserModel {
         guard let location = await queries.archiveLocation(currentURL) else { return }
         await catalog.setPassword(password, for: location.archive)
         await load()
+    }
+
+    // MARK: - Search
+
+    /// Searches the current folder and its subfolders for names containing `text`; empty or whitespace text
+    /// ends the search instead. Does nothing inside an archive (Ruling P6-2). Returns when this search finished,
+    /// was replaced by a newer one, or ended.
+    public func startSearch(_ text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            endSearch()
+            return
+        }
+        guard archiveLocation == nil else { return }
+        let navigation = navigationGeneration
+        searchGeneration += 1
+        let request = searchGeneration
+        let folder = currentURL
+        // The archive file may be the current folder before its listing is published.
+        let inArchive = await queries.archiveLocation(folder) != nil
+        guard !inArchive, navigation == navigationGeneration, request == searchGeneration else { return }
+        await runSearch(SearchQuery(text: trimmed, scope: .folder(folder)), keepingResults: false).value
+    }
+
+    /// Shows every file on this computer tagged `name`, over the current folder. Inside an archive it first goes
+    /// to the folder holding the archive, so the results aren't shown in read-only archive mode.
+    public func showTag(_ name: String) async {
+        if let archive = archiveLocation?.archive {
+            await navigate(to: archive.deletingLastPathComponent())
+            guard archiveLocation == nil else { return }
+        }
+        await runSearch(SearchQuery(text: "", scope: .tag(name)), keepingResults: false).value
+    }
+
+    /// Ends the shown search and shows the folder again: at once its items from before the search, then a fresh
+    /// listing (`load()`, started in a Task so this stays synchronous for the UI and the navigation paths, whose
+    /// own load supersedes it). Does nothing when no search is shown.
+    public func endSearch() {
+        guard search != nil else { return }
+        searchGeneration += 1
+        searchTask?.cancel()
+        searchTask = nil
+        search = nil
+        searchIsRunning = false
+        searchTruncated = false
+        searchResults = []
+        sortGeneration += 1
+        items = itemsBeforeSearch
+        itemsBeforeSearch = []
+        pruneSelection()
+        Task { await self.load() }
+    }
+
+    /// Starts `query`, replacing any search shown. `keepingResults`: a re-run of the shown search (after a
+    /// change), which keeps its results and selection until new ones arrive.
+    private func runSearch(_ query: SearchQuery, keepingResults: Bool) -> Task<Void, Never> {
+        searchGeneration += 1
+        let generation = searchGeneration
+        searchTask?.cancel()
+        if search == nil { itemsBeforeSearch = items }
+        search = query
+        searchIsRunning = true
+        searchTruncated = false
+        if !keepingResults {
+            searchResults = []
+            sortGeneration += 1
+            items = []
+            clearSelection()
+        }
+        let stream = searchEngine.search(query, includeHidden: settings.settings.showHiddenFiles)
+        let task = Task { [weak self] in
+            for await update in stream {
+                guard let self, generation == self.searchGeneration else { return }
+                switch update {
+                case .results(let found, let truncated):
+                    self.searchResults = found
+                    self.searchTruncated = truncated
+                    await self.presentSearch(generation: generation)
+                case .finished:
+                    self.searchIsRunning = false
+                }
+            }
+        }
+        searchTask = task
+        return task
+    }
+
+    /// Runs the shown search again (same query), keeping its results until the new ones arrive.
+    private func rerunSearch() {
+        guard let search else { return }
+        _ = runSearch(search, keepingResults: true)
+    }
+
+    /// Sorts `searchResults` off the main actor and publishes them, unless something newer started.
+    private func presentSearch(generation expected: Int) async {
+        sortGeneration += 1
+        let generation = sortGeneration
+        let sorted = await Self.sort(searchResults, by: settings.settings.sortOrder)
+        guard generation == sortGeneration, expected == searchGeneration, search != nil else { return }
+        items = sorted
+        pruneSelection()
+    }
+
+    /// Whether a change of `folders` may change the shown search's results: the searched folder, a folder
+    /// inside it (a new match may be there) or containing it, or the folder of a shown result. A tag view re-runs on any change: a newly
+    /// tagged file can be anywhere.
+    private func searchIsAffected(by folders: [URL], query: SearchQuery) -> Bool {
+        guard case .folder(let root) = query.scope else { return true }
+        var roots = [root.standardizedFileURL.path]
+        if root == currentURL { roots = Array(currentDirectorySpellings()) }
+        let prefixes = roots.map { $0.hasSuffix("/") ? $0 : $0 + "/" }
+        let parents = Set(searchResults.map { $0.url.deletingLastPathComponent().standardizedFileURL.path })
+        return folders.contains { folder in
+            let path = folder.standardizedFileURL.path
+            if parents.contains(path) || roots.contains(path) || prefixes.contains(where: { path.hasPrefix($0) }) {
+                return true
+            }
+            // A folder containing the searched one (it may have been moved or renamed).
+            let prefix = path.hasSuffix("/") ? path : path + "/"
+            return roots.contains { $0.hasPrefix(prefix) }
+        }
     }
 
     // MARK: - File operations
@@ -377,6 +532,11 @@ public final class BrowserModel {
             selection.remove(selected)
             selection.insert(renamed)
         }
+        if isSearching {
+            // A rename posts no folder change: show the renamed result (or drop it, if it no longer matches).
+            rerunSearch()
+            return renamed
+        }
         guard await reloadIfStillShowing(url.deletingLastPathComponent(), since: historyAtStart) else {
             return renamed
         }
@@ -407,6 +567,7 @@ public final class BrowserModel {
         let canonicalParent = await queries.canonicalPath(parent)
         // A newer navigation request wins; this one isn't "ignored", so no beep.
         guard generation == navigationGeneration else { return true }
+        endSearch()
         if !isCurrentDirectory(parent, canonical: canonicalParent) {
             await navigate(to: parent, anyBrowsable: false, openFallback: false, generation: generation)
             guard isCurrentDirectory(parent, canonical: canonicalParent) else { return true }
@@ -615,6 +776,7 @@ public final class BrowserModel {
     /// the same connect sees its result.
     private func beginReconnect(oldMountPoint: URL, newMountPoint: URL) {
         _ = beginNavigation()
+        endSearch()
         disconnectedShare = nil
         history.rewritePrefix(from: oldMountPoint, to: newMountPoint)
     }
@@ -653,7 +815,9 @@ public final class BrowserModel {
     /// A change in the watched folder. Newer navigation supersedes an in-flight load, but a
     /// change of the folder being listed must not: in a busy folder each change would discard
     /// the running listing and nothing would ever be shown. It schedules one more load instead.
+    /// Ignored while a search is shown (its results stay; `endSearch()` lists the folder again).
     func directoryDidChange() async {
+        guard !isSearching else { return }
         if let inFlightURL, inFlightURL == currentURL {
             needsReload = true
             return
@@ -666,7 +830,8 @@ public final class BrowserModel {
         sortGeneration += 1
         let generation = sortGeneration
         let sorted = await Self.sort(loadedItems, by: settings.settings.sortOrder)
-        guard generation == sortGeneration, expectedLoad == loadGeneration else { return }
+        // A shown search keeps its results; `endSearch()` lists the folder again.
+        guard generation == sortGeneration, expectedLoad == loadGeneration, !isSearching else { return }
         items = sorted
         listedURL = loadedURL
         archiveLocation = loadedLocation
@@ -689,6 +854,10 @@ public final class BrowserModel {
     /// by name, and entries below it are kept.
     private func pruneSelection() {
         guard !selection.isEmpty else { return }
+        if isSearching {
+            pruneSearchSelection()
+            return
+        }
         if archiveLocation != nil {
             pruneArchiveSelection()
             return
@@ -705,6 +874,20 @@ public final class BrowserModel {
             let path = url.standardizedFileURL.path
             return descendantPrefixes.contains(where: { path.hasPrefix($0) }) ? url : nil
         })
+        if pruned != selection { selection = pruned }
+    }
+
+    /// While searching: keeps shown results and entries below a shown folder (inline-expanded).
+    private func pruneSearchSelection() {
+        let shown = Set(items.map { $0.url.standardizedFileURL.path })
+        let pruned = selection.filter { url in
+            var path = url.standardizedFileURL.path
+            while path.count > 1 {
+                if shown.contains(path) { return true }
+                path = (path as NSString).deletingLastPathComponent
+            }
+            return false
+        }
         if pruned != selection { selection = pruned }
     }
 
@@ -740,8 +923,9 @@ public final class BrowserModel {
 
     /// Reloads when `directory` is the current folder and no navigation happened since
     /// `historyAtStart`. Returns true only if `items` now show that folder's fresh listing.
+    /// Never while a search is shown: `items` are its results, not the folder's listing.
     private func reloadIfStillShowing(_ directory: URL, since historyAtStart: NavigationHistory) async -> Bool {
-        guard history == historyAtStart, isCurrentDirectory(directory) else { return false }
+        guard !isSearching, history == historyAtStart, isCurrentDirectory(directory) else { return false }
         guard await load() else { return false }
         return history == historyAtStart && isCurrentDirectory(directory)
     }
@@ -864,6 +1048,11 @@ public final class BrowserModel {
         if let volume {
             guard Self.isPath(currentURL, within: volume) else { return }
         }
+        guard !isSearching else {
+            // Its results are gone with the volume; ending the search lists (or falls back from) the folder.
+            endSearch()
+            return
+        }
         await load()
     }
 
@@ -898,7 +1087,12 @@ public final class BrowserModel {
         foldersObservation = NotificationObservation(center: center, token: token)
     }
 
+    /// While a search is shown, a change that may touch its results re-runs it instead (tag edits, operations).
     private func foldersDidChange(_ folders: [URL]) async {
+        if let search {
+            if searchIsAffected(by: folders, query: search) { rerunSearch() }
+            return
+        }
         guard folders.contains(where: { isCurrentDirectory($0) }) else { return }
         await directoryDidChange()
     }
@@ -919,7 +1113,14 @@ public final class BrowserModel {
         let old = observedSettings
         let new = settings.settings
         observedSettings = new
-        if new.showHiddenFiles != old.showHiddenFiles {
+        if isSearching {
+            // The folder is listed again when the search ends.
+            if new.showHiddenFiles != old.showHiddenFiles {
+                rerunSearch()
+            } else if new.sortOrder != old.sortOrder {
+                await presentSearch(generation: searchGeneration)
+            }
+        } else if new.showHiddenFiles != old.showHiddenFiles {
             // The loader filters hidden files, so they need a fresh listing.
             await load()
         } else if new.sortOrder != old.sortOrder {

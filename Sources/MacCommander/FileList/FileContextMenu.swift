@@ -44,18 +44,23 @@ enum FileContextMenu {
                 }
             })
         } else {
-            addNewItemActions(to: menu, model: model, in: nil)
-            menu.addItem(pasteItem(into: model.currentURL, model: model, clipboard: clipboard, window: window))
+            // While a search is shown, new items and pasted ones would land in the hidden current folder.
+            addNewItemActions(to: menu, model: model, in: nil, isEnabled: !model.isSearching)
+            let paste = pasteItem(into: model.currentURL, model: model, clipboard: clipboard, window: window)
+            if model.isSearching { paste.isEnabled = false }
+            menu.addItem(paste)
         }
         menu.addItem(.separator())
 
         let sortItem = NSMenuItem(title: String(localized: "Sort By"), action: nil, keyEquivalent: "")
         let sortMenu = NSMenu()
-        let current = settings.settings.sortOrder
-        for column in FileColumn.allCases {
-            sortMenu.addItem(ActionMenuItem(column.title, state: column == current.column ? .on : .off) {
+        // Location only while searching; a stored Location sort shows as Name outside a search.
+        let stored = settings.settings.sortOrder.column
+        let current = stored == .location && !model.isSearching ? FileColumn.name : stored
+        for column in FileColumn.allCases where column != .location || model.isSearching {
+            sortMenu.addItem(ActionMenuItem(column.title, state: column == current ? .on : .off) {
                 var order = settings.settings.sortOrder
-                guard order.column != column else { return }
+                guard current != column else { return }
                 order.column = column
                 order.ascending = true
                 settings.settings.sortOrder = order
@@ -132,7 +137,9 @@ enum FileContextMenu {
         let folder = all.count == 1 && all[0].isDirectory ? all[0].url : nil
         menu.addItem(ActionMenuItem(String(localized: "Copy")) { FileActions.copy(items, clipboard: clipboard) })
         menu.addItem(ActionMenuItem(String(localized: "Cut")) { FileActions.cut(items, clipboard: clipboard) })
-        menu.addItem(pasteItem(into: folder ?? model.currentURL, model: model, clipboard: clipboard, window: window))
+        let paste = pasteItem(into: folder ?? model.currentURL, model: model, clipboard: clipboard, window: window)
+        if folder == nil, model.isSearching { paste.isEnabled = false }
+        menu.addItem(paste)
         menu.addItem(ActionMenuItem(String(localized: "Move to Trash")) {
             Task { @MainActor in await FileActions.moveToTrash(items, model: model, window: window) }
         })
@@ -160,7 +167,7 @@ enum FileContextMenu {
         menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
         menu.addItem(.separator())
 
-        addNewItemActions(to: menu, model: model, in: folder)
+        addNewItemActions(to: menu, model: model, in: folder, isEnabled: folder != nil || !model.isSearching)
         return menu
     }
 
@@ -239,12 +246,16 @@ enum FileContextMenu {
 
     /// New Folder and New Empty File, in `folder` (nil = the current folder). The list expands
     /// the folder when the new item's rename starts.
-    private static func addNewItemActions(to menu: NSMenu, model: BrowserModel, in folder: URL?) {
-        menu.addItem(ActionMenuItem(String(localized: "New Folder")) {
+    private static func addNewItemActions(to menu: NSMenu, model: BrowserModel, in folder: URL?, isEnabled: Bool) {
+        let newFolder = ActionMenuItem(String(localized: "New Folder")) {
             Task { @MainActor in await BrowserActions.newFolder(model, in: folder) }
-        })
-        menu.addItem(ActionMenuItem(String(localized: "New Empty File")) {
+        }
+        let newFile = ActionMenuItem(String(localized: "New Empty File")) {
             Task { @MainActor in await BrowserActions.newFile(model, in: folder) }
-        })
+        }
+        for item in [newFolder, newFile] {
+            item.isEnabled = isEnabled
+            menu.addItem(item)
+        }
     }
 }

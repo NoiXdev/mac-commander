@@ -7,6 +7,7 @@ import SwiftUI
 private struct BrowserModelKey: FocusedValueKey { typealias Value = BrowserModel }
 private struct GoToFolderPresentedKey: FocusedValueKey { typealias Value = Binding<Bool> }
 private struct ShareSheetsKey: FocusedValueKey { typealias Value = ShareSheets }
+private struct SearchFocusedKey: FocusedValueKey { typealias Value = Binding<Bool> }
 
 extension FocusedValues {
     var browserModel: BrowserModel? {
@@ -21,6 +22,11 @@ extension FocusedValues {
     var shareSheets: ShareSheets? {
         get { self[ShareSheetsKey.self] }
         set { self[ShareSheetsKey.self] = newValue }
+    }
+    /// Focuses the focused window's search field (Edit ▸ Find…).
+    var searchFocused: Binding<Bool>? {
+        get { self[SearchFocusedKey.self] }
+        set { self[SearchFocusedKey.self] = newValue }
     }
 }
 
@@ -41,6 +47,10 @@ struct BrowserWindow: View {
     private let shareSheetsState = State(initialValue: ShareSheets())
     /// The Finder name of a folder, resolved off the main actor; the title shows it once it matches.
     private let titleState = State<(url: URL, name: String)?>(initialValue: nil)
+    /// The toolbar search field's text; a search starts 250 ms after the last change.
+    private let searchTextState = State(initialValue: "")
+    /// `FocusState` is a property wrapper (no macro plugin needed).
+    @FocusState private var searchFieldFocused: Bool
     private var model: BrowserModel? {
         get { modelState.wrappedValue }
         nonmutating set { modelState.wrappedValue = newValue }
@@ -51,6 +61,7 @@ struct BrowserWindow: View {
     }
     private var showGoToFolder: Binding<Bool> { goToFolderState.projectedValue }
     private var shareSheets: ShareSheets { shareSheetsState.wrappedValue }
+    private var searchText: Binding<String> { searchTextState.projectedValue }
     private var resolvedTitle: (url: URL, name: String)? {
         get { titleState.wrappedValue }
         nonmutating set { titleState.wrappedValue = newValue }
@@ -126,9 +137,35 @@ struct BrowserWindow: View {
                             .frame(minWidth: 240, idealWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
+                if model.isSearching, model.searchTruncated {
+                    Divider()
+                    Text(String(localized: "More than 10,000 results; refine your search."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
+                }
                 Divider()
                 PathBar(model: model)
                 OperationsStrip()
+            }
+            .searchable(text: searchText, placement: .toolbar, prompt: String(localized: "Search"))
+            .searchFocused($searchFieldFocused)
+            // Debounced: each keystroke restarts the wait. Clearing the field ends the search at once.
+            .task(id: searchText.wrappedValue) {
+                let text = searchText.wrappedValue
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    // Only a text search: the field is also cleared when a tag view starts.
+                    if case .folder? = model.search?.scope { model.endSearch() }
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(250))
+                guard !Task.isCancelled else { return }
+                await model.startSearch(text)
+            }
+            // A navigation (or Back) ends the search, and a tag view isn't a text search: clear the field.
+            .onChange(of: model.search) { _, search in
+                if search == nil || search?.scope != .folder(model.currentURL) { searchText.wrappedValue = "" }
             }
         }
         // On the split view, which exists exactly while model and preview do (not on the Group's branches,
@@ -136,8 +173,9 @@ struct BrowserWindow: View {
         // extraction and rendering for the preview; both calls are idempotent.
         .onAppear { preview.resume() }
         .onDisappear { preview.stop() }
-        // The last path component at once (no disk access), the localized name once it's resolved.
-        .navigationTitle(title(for: model.currentURL))
+        // The last path component at once (no disk access), the localized name once it's resolved. A tag view
+        // shows the tag's name.
+        .navigationTitle(title(for: model))
         .task(id: model.currentURL) {
             let url = model.currentURL
             let name = await PathQueries.displayName(url)
@@ -164,8 +202,8 @@ struct BrowserWindow: View {
                 } label: {
                     Label(String(localized: "New Folder"), systemImage: "folder.badge.plus")
                 }
-                // Archives are read-only.
-                .disabled(model.archiveLocation != nil)
+                // Archives are read-only; a shown search hides the folder the new one would land in.
+                .disabled(model.archiveLocation != nil || model.isSearching)
                 Button {
                     settings.settings.showPreview.toggle()
                 } label: {
@@ -183,6 +221,8 @@ struct BrowserWindow: View {
         }
         .focusedSceneValue(\.browserModel, model)
         .focusedSceneValue(\.goToFolderPresented, showGoToFolder)
+        .focusedSceneValue(\.searchFocused, Binding(
+            get: { searchFieldFocused }, set: { searchFieldFocused = $0 }))
         .sheet(isPresented: showGoToFolder) { GoToFolderSheet(model: model) }
         // Mirrored for ⌘K and the queued sign-in sheet, which wait for every sheet of the window.
         .onChange(of: showGoToFolder.wrappedValue) { _, shown in shareSheets.showGoToFolder = shown }
@@ -216,7 +256,9 @@ struct BrowserWindow: View {
         return URL(fileURLWithPath: storedPath, isDirectory: true)
     }
 
-    private func title(for url: URL) -> String {
+    private func title(for model: BrowserModel) -> String {
+        if case .tag(let name)? = model.search?.scope { return name }
+        let url = model.currentURL
         if let resolvedTitle, resolvedTitle.url == url { return resolvedTitle.name }
         return url.path == "/" ? "/" : url.lastPathComponent
     }
@@ -226,13 +268,14 @@ enum BrowserActions {
     @MainActor
     static func newFolder(_ model: BrowserModel, in directory: URL? = nil) async {
         // Archives are read-only (the menus are disabled there; this covers a shortcut that slips through).
-        guard model.archiveLocation == nil else { return NSSound.beep() }
+        // During a search the current folder is hidden: only an explicit folder (a result's) takes new items.
+        guard model.archiveLocation == nil, directory != nil || !model.isSearching else { return NSSound.beep() }
         do { _ = try await model.createFolder(in: directory) } catch { show(error) }
     }
 
     @MainActor
     static func newFile(_ model: BrowserModel, in directory: URL? = nil) async {
-        guard model.archiveLocation == nil else { return NSSound.beep() }
+        guard model.archiveLocation == nil, directory != nil || !model.isSearching else { return NSSound.beep() }
         do { _ = try await model.createEmptyFile(in: directory) } catch { show(error) }
     }
 

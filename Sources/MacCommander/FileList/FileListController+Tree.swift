@@ -38,13 +38,16 @@ extension FileListController {
     /// from; items of a folder that is no longer current are not shown. A new folder resets the
     /// tree; the same folder is diffed by URL, keeping scroll position, selection and expansion.
     /// Loaded subfolders are re-listed if expanded and dropped from the cache otherwise.
+    /// While a search is shown the rows are its results, over the current folder (whether or not its own
+    /// listing arrived); a new search resets the tree like a new folder.
     func applyItems() {
         updateEmptyLabel()
-        let isCurrent = model.listedURL != nil && model.listedURL == model.currentURL
+        let isCurrent = model.isSearching || (model.listedURL != nil && model.listedURL == model.currentURL)
         let items = isCurrent ? model.items : []
-        let folder = isCurrent ? model.listedURL : nil
-        if folder != displayedFolder {
+        let folder = isCurrent ? model.currentURL : nil
+        if folder != displayedFolder || model.search != displayedSearch {
             displayedFolder = folder
+            displayedSearch = model.search
             roots.forEach { $0.detach() }
             expandedURLs = []
             roots = items.map { FileNode(item: $0, parent: nil) }

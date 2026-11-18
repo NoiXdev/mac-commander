@@ -8,6 +8,7 @@ extension NSUserInterfaceItemIdentifier {
     static let nameCell = NSUserInterfaceItemIdentifier("nameCell")
     static let textCell = NSUserInterfaceItemIdentifier("textCell")
     static let rightAlignedTextCell = NSUserInterfaceItemIdentifier("rightAlignedTextCell")
+    static let locationCell = NSUserInterfaceItemIdentifier("locationCell")
 
     /// The column identifier of a `FileColumn` is its raw value.
     init(_ column: FileColumn) {
@@ -101,14 +102,17 @@ final class FileNameCellView: NSTableCellView {
     }
 }
 
-/// Date, size, kind and tags columns: a single secondary-colored label.
+/// Date, size, kind, tags and location columns: a single secondary-colored label.
 final class FileTextCellView: NSTableCellView {
-    init(identifier: NSUserInterfaceItemIdentifier, alignment: NSTextAlignment) {
+    init(
+        identifier: NSUserInterfaceItemIdentifier, alignment: NSTextAlignment,
+        lineBreakMode: NSLineBreakMode = .byTruncatingTail
+    ) {
         super.init(frame: .zero)
         self.identifier = identifier
         let label = NSTextField(labelWithString: "")
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.lineBreakMode = .byTruncatingTail
+        label.lineBreakMode = lineBreakMode
         label.alignment = alignment
         label.textColor = .secondaryLabelColor
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -169,7 +173,17 @@ enum FileListFormat {
         case .size: item.isDirectory ? "--" : item.size.map { sizeFormatter.string(fromByteCount: $0) } ?? "--"
         case .kind: item.kind
         case .tags: item.tags.map(\.name).joined(separator: ", ")
+        case .location: location(of: item.url)
         }
+    }
+
+    /// The folder holding `url`, with the home folder abbreviated to `~`.
+    static func location(of url: URL) -> String {
+        let parent = url.deletingLastPathComponent().standardizedFileURL.path
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        if parent == home { return "~" }
+        if parent.hasPrefix(home + "/") { return "~" + parent.dropFirst(home.count) }
+        return parent
     }
 
     private static func date(_ date: Date?) -> String {

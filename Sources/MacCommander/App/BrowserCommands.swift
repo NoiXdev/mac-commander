@@ -7,6 +7,7 @@ struct BrowserCommands: Commands {
     @FocusedValue(\.browserModel) private var model
     @FocusedValue(\.goToFolderPresented) private var goToFolder
     @FocusedValue(\.shareSheets) private var shareSheets
+    @FocusedValue(\.searchFocused) private var searchFocused
 
     var body: some Commands {
         // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
@@ -15,12 +16,13 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut("o")
                 .disabled(model?.selection.isEmpty != false)
             Divider()
+            // Not during a search: the new item would land in the folder the results hide.
             Button("New Folder") { run { await BrowserActions.newFolder($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
-                .disabled(model == nil || isInArchive)
+                .disabled(model == nil || isInArchive || model?.isSearching == true)
             Button("New Empty File") { run { await BrowserActions.newFile($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .option])
-                .disabled(model == nil || isInArchive)
+                .disabled(model == nil || isInArchive || model?.isSearching == true)
             Divider()
             Button("Duplicate") { send(#selector(FileOutlineView.duplicate(_:))) }
                 .keyboardShortcut("d")
@@ -42,6 +44,11 @@ struct BrowserCommands: Commands {
             Button("Copy Path") { send(#selector(FileOutlineView.copyPath(_:))) }
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(model?.selection.isEmpty != false || isInArchive)
+            Divider()
+            // Placed before the standard text-editing group, so it takes ⌘F ahead of a text field's Find.
+            Button("Find…") { searchFocused?.wrappedValue = true }
+                .keyboardShortcut("f")
+                .disabled(searchFocused == nil)
         }
         CommandMenu("Go") {
             Button("Back") { run { await $0.goBack() } }

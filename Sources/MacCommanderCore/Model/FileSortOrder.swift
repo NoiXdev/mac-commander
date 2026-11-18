@@ -59,6 +59,8 @@ public struct FileSortOrder: Codable, Equatable, Sendable {
         case .size: Self.compare(lhs.size ?? 0, rhs.size ?? 0)
         case .kind: lhs.kind.localizedStandardCompare(rhs.kind)
         case .tags: Self.compareTags(lhs.tags, rhs.tags)
+        case .location:
+            lhs.url.deletingLastPathComponent().path.localizedStandardCompare(rhs.url.deletingLastPathComponent().path)
         }
     }
 

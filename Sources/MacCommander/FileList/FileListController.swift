@@ -35,6 +35,9 @@ final class FileListController: NSViewController {
     /// Folders the user expanded, restored by URL after reloads.
     var expandedURLs: Set<URL> = []
     var displayedFolder: URL?
+    /// The search whose results the rows show (nil: the folder's listing). A new search resets the tree; a
+    /// re-run of the same one is diffed like a reload.
+    var displayedSearch: SearchQuery?
     /// The selection last exchanged with the model; avoids redundant row scans.
     var syncedSelection: Set<URL> = []
     /// > 0 while the controller changes rows or selection itself, so callbacks don't write back.
@@ -106,6 +109,7 @@ final class FileListController: NSViewController {
         observeSettings()
         observePendingRename()
         observeOperationFolders()
+        observeSearch()
     }
 
     override func viewDidAppear() {
@@ -197,7 +201,7 @@ final class FileListController: NSViewController {
             column.minWidth = state.column == .name ? 100 : 40
             column.width = CGFloat(state.width)
             column.resizingMask = .userResizingMask
-            column.isHidden = state.column != .name && !state.isVisible
+            column.isHidden = isColumnHidden(state)
             if state.column == .size { column.headerCell.alignment = .right }
             outlineView.addTableColumn(column)
             if state.column == .name { outlineView.outlineTableColumn = column }
@@ -286,6 +290,23 @@ final class FileListController: NSViewController {
         }
     }
 
+    /// A search starting or ending changes the Location column, the status text and the error view.
+    func observeSearch() {
+        withObservationTracking {
+            _ = model.search
+            _ = model.searchIsRunning
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.observeSearch()
+                self.applyColumnLayout()
+                self.applySortIndicator()
+                self.applyLoadError()
+                self.applyLoadingState()
+            }
+        }
+    }
+
     func observeSettings() {
         withObservationTracking {
             _ = settings.settings
@@ -299,9 +320,10 @@ final class FileListController: NSViewController {
 
     // MARK: - Load error
 
+    /// Not while a search is shown: its results don't depend on the folder's own listing.
     func applyLoadError() {
         updateEmptyLabel()
-        guard let error = model.loadError else {
+        guard let error = model.loadError, !model.isSearching else {
             errorHost?.isHidden = true
             scrollView.isHidden = false
             return
@@ -351,15 +373,16 @@ final class FileListController: NSViewController {
 
     // MARK: - Loading and empty state
 
-    /// The spinner appears only when loading takes noticeably long, so quick loads don't flicker.
+    /// The spinner appears only when loading takes noticeably long, so quick loads don't flicker. A shown
+    /// search has its own status text instead (see `updateEmptyLabel`).
     func applyLoadingState() {
         spinnerTask?.cancel()
         spinnerTask = nil
-        if model.isLoading {
+        if model.isLoading, !model.isSearching {
             if spinner.isHidden {
                 spinnerTask = Task { [weak self] in
                     try? await Task.sleep(for: Self.spinnerDelay)
-                    guard !Task.isCancelled, let self, self.model.isLoading else { return }
+                    guard !Task.isCancelled, let self, self.model.isLoading, !self.model.isSearching else { return }
                     self.spinner.isHidden = false
                     self.spinner.startAnimation(nil)
                 }
@@ -371,12 +394,22 @@ final class FileListController: NSViewController {
         updateEmptyLabel()
     }
 
-    /// "No items" only for a successfully listed, empty current folder (not while loading).
+    /// "No items" only for a successfully listed, empty current folder (not while loading). While a search
+    /// without results is shown: "Searching…" until it finishes, then "No Results".
     func updateEmptyLabel() {
-        let isEmptyFolder =
-            !model.isLoading && model.loadError == nil && model.items.isEmpty
-            && model.listedURL != nil && model.listedURL == model.currentURL
-        if emptyLabel.isHidden == isEmptyFolder { emptyLabel.isHidden = !isEmptyFolder }
+        let text: String?
+        if model.isSearching {
+            text = !model.items.isEmpty
+                ? nil
+                : model.searchIsRunning ? String(localized: "Searching…") : String(localized: "No Results")
+        } else {
+            let isEmptyFolder =
+                !model.isLoading && model.loadError == nil && model.items.isEmpty
+                && model.listedURL != nil && model.listedURL == model.currentURL
+            text = isEmptyFolder ? String(localized: "No items") : nil
+        }
+        if let text, emptyLabel.stringValue != text { emptyLabel.stringValue = text }
+        if emptyLabel.isHidden != (text == nil) { emptyLabel.isHidden = text == nil }
     }
 }
 

@@ -227,10 +227,17 @@ extension FileListController: NSOutlineViewDelegate {
             return cell
         }
 
-        let identifier: NSUserInterfaceItemIdentifier = column == .size ? .rightAlignedTextCell : .textCell
+        let identifier: NSUserInterfaceItemIdentifier =
+            switch column {
+            case .size: .rightAlignedTextCell
+            case .location: .locationCell
+            default: .textCell
+            }
         let cell =
             outlineView.makeView(withIdentifier: identifier, owner: self) as? FileTextCellView
-            ?? FileTextCellView(identifier: identifier, alignment: column == .size ? .right : .left)
+            ?? FileTextCellView(
+                identifier: identifier, alignment: column == .size ? .right : .left,
+                lineBreakMode: column == .location ? .byTruncatingMiddle : .byTruncatingTail)
         cell.textField?.stringValue = FileListFormat.text(for: column, of: node.item)
         cell.alphaValue = alpha
         return cell
@@ -282,7 +289,8 @@ extension FileListController: NSOutlineViewDelegate {
         }
         guard let column = FileColumn(rawValue: tableColumn.identifier.rawValue) else { return }
         var order = settings.settings.sortOrder
-        if order.column == column {
+        if effectiveSortColumn == column {
+            order.column = column
             order.ascending.toggle()
         } else {
             order.column = column
