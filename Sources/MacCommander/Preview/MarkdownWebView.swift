@@ -15,8 +15,10 @@ import WebKit
 ///   `mailto` open in the default app, local links (relative, `mcpreview:`, `file:`) call `reveal`, anything
 ///   else (including `javascript:`) is ignored.
 ///
-/// The web view is created once per view and reloaded only when the HTML or its base changes. Without
-/// JavaScript a reload starts at the top again (accepted).
+/// The web view is created once per view and reloaded only when the HTML or its base changes. A reload of
+/// the same file (live update) keeps the scroll position: the app reads `window.scrollY` before the reload
+/// and restores it after the load (app-injected evaluation works with content JavaScript off). A different
+/// file starts at the top.
 struct MarkdownWebView: NSViewRepresentable {
     let rendered: RenderedPreview
     /// The rendered file, to tell a `file.md#anchor` link to the shown file from a link to another file.
@@ -55,8 +57,28 @@ struct MarkdownWebView: NSViewRepresentable {
         guard coordinator.loadedHTML != rendered.html || coordinator.baseURL != rendered.baseURL else { return }
         coordinator.loadedHTML = rendered.html
         coordinator.baseURL = rendered.baseURL
-        coordinator.isLoadingHTML = true
-        webView.loadHTMLString(rendered.html, baseURL: rendered.baseURL)
+        coordinator.generation += 1
+        let generation = coordinator.generation
+        let sameFile = coordinator.renderedFile == file
+        coordinator.renderedFile = file
+        coordinator.pendingScrollY = nil
+        let html = rendered.html
+        let base = rendered.baseURL
+        let load = { @MainActor (scrollY: Double?) in
+            // A newer update superseded this one while the scroll position was being read.
+            guard coordinator.generation == generation else { return }
+            coordinator.pendingScrollY = scrollY
+            coordinator.isLoadingHTML = true
+            webView.loadHTMLString(html, baseURL: base)
+        }
+        if sameFile {
+            webView.evaluateJavaScript("window.scrollY") { result, _ in
+                let y = (result as? NSNumber)?.doubleValue
+                MainActor.assumeIsolated { load(y.flatMap { $0 > 0 ? $0 : nil }) }
+            }
+        } else {
+            load(nil)
+        }
     }
 
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
@@ -71,6 +93,12 @@ struct MarkdownWebView: NSViewRepresentable {
         var loadedHTML: String?
         var baseURL: URL?
         var file: URL?
+        /// The file of the last render request, to tell a live update from a different file.
+        var renderedFile: URL?
+        /// Bumped per render request: a pending scroll read for an older request is dropped.
+        var generation = 0
+        /// Scroll position to restore when the current load finishes.
+        var pendingScrollY: Double?
         var reveal: (@MainActor (URL) -> Void)?
         /// Set before `loadHTMLString`, cleared when that load finishes or fails: only then is a
         /// navigation of type `.other` to the base URL (or `about:blank`) the document's own load.
@@ -102,6 +130,10 @@ struct MarkdownWebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoadingHTML = false
+            if let y = pendingScrollY {
+                pendingScrollY = nil
+                webView.evaluateJavaScript("window.scrollTo(0, \(y))", completionHandler: nil)
+            }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {

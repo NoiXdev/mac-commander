@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Share passwords as Keychain internet passwords in the format Finder/NetAuth use, so items are shared with
@@ -40,7 +41,9 @@ public struct KeychainCredentialStore: CredentialStore {
             guard var query = baseQuery(for: url, username: username, server: server) else { return nil }
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             query[kSecReturnData as String] = true
-            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
             var item: CFTypeRef?
             let status = SecItemCopyMatching(query as CFDictionary, &item)
             if status == errSecInteractionNotAllowed { return nil }
