@@ -3,6 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key><string>dev.noix.MacCommander</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleName</key><string>MacCommander</string>
     <key>CFBundleDisplayName</key><string>MacCommander</string>
     <key>CFBundleExecutable</key><string>MacCommander</string>

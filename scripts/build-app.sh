@@ -25,6 +25,7 @@ if [[ ! -f THIRD-PARTY-NOTICES.md ]]; then
     exit 1
 fi
 cp THIRD-PARTY-NOTICES.md "$APP/Contents/Resources/"
+iconutil -c icns Resources/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 
 if [[ -n "${MC_SIGN_IDENTITY:-}" ]]; then
     codesign --force --options runtime --timestamp --sign "$MC_SIGN_IDENTITY" "$APP"
