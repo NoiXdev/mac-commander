@@ -24,8 +24,23 @@ public enum TagStore {
         }
     }
 
+    /// Names never carry a newline or other control character into the xattr (the newline separates
+    /// name and color): each one becomes a space, then the name is trimmed. `encode` skips names that end up empty.
+    public static func sanitizedName(_ name: String) -> String {
+        // Only Cc and line breaks: format characters such as the emoji zero-width joiner stay.
+        var scalars = String.UnicodeScalarView()
+        for scalar in name.unicodeScalars {
+            let breaking = scalar.properties.generalCategory == .control || CharacterSet.newlines.contains(scalar)
+            scalars.append(breaking ? " " : scalar)
+        }
+        return String(scalars).trimmingCharacters(in: .whitespaces)
+    }
+
     public static func encode(_ tags: [FileTag]) -> Data {
-        let strings = tags.map { "\($0.name)\n\($0.rawColor)" }
+        let strings = tags.compactMap { tag -> String? in
+            let name = sanitizedName(tag.name)
+            return name.isEmpty ? nil : "\(name)\n\(tag.rawColor)"
+        }
         return (try? PropertyListSerialization.data(fromPropertyList: strings, format: .binary, options: 0))
             ?? Data()
     }
@@ -42,6 +57,43 @@ public enum TagStore {
             }
             return read > 0 ? decode(data.prefix(read)) : []
         }
+    }
+
+    struct UndecodableTags: Error {}
+
+    /// Blocking strict read for read-modify-write: only a missing attribute gives `[]`. Any other
+    /// getxattr error, or data that isn't a plist array, throws so a write never drops existing tags.
+    /// A size race (ERANGE, the attribute grew between the two calls) is retried once.
+    static func readForWrite(_ url: URL) throws -> [FileTag] {
+        for attempt in 0..<2 {
+            let outcome: Result<Data?, POSIXError> = url.withUnsafeFileSystemRepresentation { path in
+                guard let path else { return .failure(POSIXError(.ENOENT)) }
+                let size = getxattr(path, attributeName, nil, 0, 0, XATTR_NOFOLLOW)
+                if size < 0 {
+                    return errno == ENOATTR ? .success(nil) : .failure(POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
+                }
+                var data = Data(count: size)
+                let read = data.withUnsafeMutableBytes {
+                    getxattr(path, attributeName, $0.baseAddress, size, 0, XATTR_NOFOLLOW)
+                }
+                if read < 0 {
+                    return errno == ENOATTR ? .success(nil) : .failure(POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO))
+                }
+                return .success(data.prefix(read))
+            }
+            switch outcome {
+            case .success(nil):
+                return []
+            case .success(let data?):
+                guard (try? PropertyListSerialization.propertyList(from: data, format: nil)) is [Any]
+                else { throw UndecodableTags() }
+                return decode(data)
+            case .failure(let error):
+                if error.code == .ERANGE, attempt == 0 { continue }
+                throw error
+            }
+        }
+        throw POSIXError(.ERANGE)
     }
 
     /// Blocking write. An empty list removes the attribute.
@@ -67,7 +119,7 @@ public enum TagStore {
     public static func setTags(_ change: TagChange, on urls: [URL]) async throws {
         try await PathQueries.run { () throws -> Void in
             for url in urls {
-                let current = readNow(url)
+                let current = try readForWrite(url)
                 let updated: [FileTag]
                 switch change {
                 case .add(let tag):

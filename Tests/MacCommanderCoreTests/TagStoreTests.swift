@@ -63,6 +63,34 @@ import Testing
         #expect(try rawStrings(url) == ["Keep\n9", "Red\n6"])
     }
 
+    @Test func addOverUndecodableAttributeThrowsAndKeepsBytes() async throws {
+        let dir = try TemporaryDirectory()
+        let url = try dir.file("a.txt")
+        let garbage = Data([0x00, 0xFF, 0x13, 0x37, 0x42])
+        let result = garbage.withUnsafeBytes {
+            setxattr(url.path, TagStore.attributeName, $0.baseAddress, garbage.count, 0, XATTR_NOFOLLOW)
+        }
+        #expect(result == 0)
+        await #expect(throws: (any Error).self) {
+            try await TagStore.setTags(.add(FileTag(name: "Red", color: .red)), on: [url])
+        }
+        #expect(rawXattr(url) == garbage)
+        // A missing attribute is still an empty list.
+        let fresh = try dir.file("b.txt")
+        try await TagStore.setTags(.add(FileTag(name: "Red", color: .red)), on: [fresh])
+        #expect(try rawStrings(fresh) == ["Red\n6"])
+    }
+
+    @Test func namesNeverCarryNewlines() async throws {
+        #expect(TagStore.sanitizedName("Pro\nject\r\t") == "Pro ject")
+        #expect(TagStore.sanitizedName("👩‍💻 Dev") == "👩‍💻 Dev")
+        let dir = try TemporaryDirectory()
+        let url = try dir.file("a.txt")
+        try await TagStore.setTags(.add(FileTag(name: "Bad\nName", color: .red)), on: [url])
+        try await TagStore.setTags(.add(FileTag(name: "\n", color: .blue)), on: [url])
+        #expect(try rawStrings(url) == ["Bad Name\n6"])
+    }
+
     @Test func addIsIdempotentCaseInsensitive() async throws {
         let dir = try TemporaryDirectory()
         let url = try dir.file("a.txt")

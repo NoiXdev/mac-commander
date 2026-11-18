@@ -133,7 +133,8 @@ enum TagMenu {
         } else {
             response = alert.runModal()
         }
-        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A pasted newline would split the xattr entry: control characters become spaces.
+        let name = TagStore.sanitizedName(field.stringValue).trimmingCharacters(in: .whitespacesAndNewlines)
         guard response == .alertFirstButtonReturn, !name.isEmpty else { return nil }
         return name
     }
