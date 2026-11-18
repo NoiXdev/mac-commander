@@ -94,4 +94,14 @@ import Testing
         #expect(item.tags.isEmpty)
         #expect(item.cloudStatus == nil)
     }
+
+    @Test func cloudCallOnlyForCloudLocations() throws {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        #expect(FileItem.mayBeInCloud(home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/a.txt")))
+        #expect(FileItem.mayBeInCloud(home.appendingPathComponent("Library/CloudStorage/Dropbox/a.txt")))
+        let dir = try TemporaryDirectory()
+        let url = try dir.file("a.txt")
+        #expect(!FileItem.mayBeInCloud(url))
+        #expect(try FileItem.load(url).cloudStatus == nil)
+    }
 }

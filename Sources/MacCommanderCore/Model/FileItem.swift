@@ -21,8 +21,9 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     /// iCloud state; nil for items that are not in iCloud Drive.
     public internal(set) var cloudStatus: CloudStatus? = nil
 
-    /// The iCloud keys are deliberately not in `resourceKeys`: on macOS, requesting them in the same call
-    /// makes `tagNames` come back nil. `load` reads them in a second call.
+    /// The iCloud keys are not in `resourceKeys`: prefetching `.isUbiquitousItemKey` together with
+    /// `.tagNamesKey` makes `tagNames` come back nil during enumeration. `load` reads them in a second
+    /// call, and only for `mayBeInCloud` locations so other folders (network shares) pay nothing.
     /// Every resource key `load` reads, used for prefetching during directory enumeration.
     public static let resourceKeys: [URLResourceKey] = [
         .localizedNameKey, .isDirectoryKey, .isPackageKey, .isHiddenKey, .fileSizeKey,
@@ -33,6 +34,17 @@ public struct FileItem: Identifiable, Hashable, Sendable {
     private static let cloudKeys: Set<URLResourceKey> = [
         .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey, .ubiquitousItemIsDownloadingKey,
     ]
+
+    private static let cloudPrefixes: [String] = {
+        let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
+        return ["\(home)/Library/Mobile Documents/", "\(home)/Library/CloudStorage/"]
+    }()
+
+    /// Whether `url` lies in an iCloud Drive or File Provider location (cheap path-prefix check).
+    static func mayBeInCloud(_ url: URL) -> Bool {
+        let path = url.standardizedFileURL.path
+        return cloudPrefixes.contains { path.hasPrefix($0) }
+    }
 
     public static func load(_ url: URL) throws -> FileItem {
         let values = try url.resourceValues(forKeys: Set(resourceKeys))
@@ -54,7 +66,9 @@ public struct FileItem: Identifiable, Hashable, Sendable {
             let read = TagStore.readNow(url)
             item.tags = read.isEmpty ? names.map { FileTag(name: $0, color: .none) } : read
         }
-        if let cloud = try? url.resourceValues(forKeys: cloudKeys), cloud.isUbiquitousItem == true {
+        if mayBeInCloud(url), let cloud = try? url.resourceValues(forKeys: cloudKeys),
+            cloud.isUbiquitousItem == true
+        {
             if cloud.ubiquitousItemIsDownloading == true {
                 item.cloudStatus = .downloading
             } else if cloud.ubiquitousItemDownloadingStatus == .current {
