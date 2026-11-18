@@ -9,12 +9,13 @@ public enum SearchPattern {
         return name.range(of: text, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
 
-    /// `text` with the `LIKE` wildcards `*` and `?` and the escape character `\` escaped by a backslash, so
-    /// they match literally.
+    /// `text` with the `LIKE` wildcards `*` and `?`, the escape character `\` and the single quote `'`
+    /// escaped by a backslash, so they match literally. `NSMetadataQuery` puts the value into a single-quoted
+    /// MDQuery string without escaping `'` itself; `\'` still matches a literal `'` under `NSPredicate`.
     public static func likeEscaped(_ text: String) -> String {
         var escaped = ""
         for character in text {
-            if character == "\\" || character == "*" || character == "?" { escaped.append("\\") }
+            if "\\*?'".contains(character) { escaped.append("\\") }
             escaped.append(character)
         }
         return escaped

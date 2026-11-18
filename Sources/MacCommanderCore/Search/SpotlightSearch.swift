@@ -13,15 +13,16 @@ public struct SpotlightSearch: FileSearchEngine {
         self.limit = limit
     }
 
-    /// A folder query matches `kMDItemFSName` as a case- and diacritic-insensitive substring, with
-    /// wildcards in the text escaped; a tag query matches `kMDItemUserTags` case-insensitively.
+    /// A folder query matches `kMDItemFSName` as a case- and diacritic-insensitive substring; a tag query
+    /// matches a whole `kMDItemUserTags` value case-insensitively. Both values go through `likeEscaped`, so
+    /// `*`, `?`, `\` and `'` match literally (MDQuery's `==` takes wildcards too, hence `LIKE` for tags).
     public static func predicate(for query: SearchQuery) -> NSPredicate {
         switch query.scope {
         case .folder:
             let text = query.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return NSPredicate(format: "kMDItemFSName LIKE[cd] %@", "*\(SearchPattern.likeEscaped(text))*")
         case .tag(let name):
-            return NSPredicate(format: "kMDItemUserTags ==[c] %@", name)
+            return NSPredicate(format: "kMDItemUserTags LIKE[c] %@", SearchPattern.likeEscaped(name))
         }
     }
 

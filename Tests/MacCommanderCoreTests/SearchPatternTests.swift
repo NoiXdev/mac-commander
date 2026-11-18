@@ -3,6 +3,11 @@ import Testing
 
 @testable import MacCommanderCore
 
+/// The string a comparison predicate compares against.
+private func comparedValue(_ predicate: NSPredicate) -> String? {
+    (predicate as? NSComparisonPredicate)?.rightExpression.constantValue as? String
+}
+
 struct SearchPatternTests {
     @Test func matchesCaseAndDiacriticInsensitive() {
         #expect(SearchPattern.matches("Résumé.pdf", text: "resume"))
@@ -13,6 +18,8 @@ struct SearchPatternTests {
 
     @Test func escapesWildcards() {
         #expect(SearchPattern.likeEscaped("a*b?c\\d") == "a\\*b\\?c\\\\d")
+        #expect(SearchPattern.likeEscaped("it's") == "it\\'s")
+        #expect(SearchPattern.likeEscaped("a\"b") == "a\"b")
     }
 
     @Test func predicateForFolderQuery() throws {
@@ -23,6 +30,20 @@ struct SearchPatternTests {
         #expect(predicate.evaluate(with: ["kMDItemFSName": "xa*\"by"]))
         #expect(!predicate.evaluate(with: ["kMDItemFSName": "xaZZby"]))
         #expect(predicate.evaluate(with: ["kMDItemFSName": "XA*\"BY"]))
+        #expect(comparedValue(predicate) == "*a\\*\"b*")
+
+        // NSMetadataQuery doesn't escape `'` in its MDQuery string, so the predicate must carry `\'`.
+        let quote = SpotlightSearch.predicate(for: SearchQuery(text: " ECTS'99 ", scope: .folder(tmp.url)))
+        #expect(comparedValue(quote) == "*ECTS\\'99*")
+        #expect(quote.evaluate(with: ["kMDItemFSName": "Kurs ECTS'99"]))
+        #expect(!quote.evaluate(with: ["kMDItemFSName": "OBJECTS"]))
+    }
+
+    @Test func predicateForTagWithQuoteAndWildcard() {
+        let predicate = SpotlightSearch.predicate(for: SearchQuery(text: "", scope: .tag("Bob's *")))
+        #expect(comparedValue(predicate) == "Bob\\'s \\*")
+        #expect(predicate.evaluate(with: ["kMDItemUserTags": "bob's *"]))
+        #expect(!predicate.evaluate(with: ["kMDItemUserTags": "Bob's anything"]))
     }
 
     @Test func predicateForTagQuery() {
