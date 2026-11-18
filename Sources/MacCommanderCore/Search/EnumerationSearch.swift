@@ -19,7 +19,7 @@ public struct EnumerationSearch: FileSearchEngine {
     }
 
     public func search(_ query: SearchQuery, includeHidden: Bool) -> AsyncStream<SearchUpdate> {
-        AsyncStream { continuation in
+        AsyncStream(bufferingPolicy: SearchUpdate.bufferingPolicy) { continuation in
             guard case .folder(let root) = query.scope else {
                 continuation.yield(.finished)
                 continuation.finish()

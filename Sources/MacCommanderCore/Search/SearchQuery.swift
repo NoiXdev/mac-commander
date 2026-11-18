@@ -25,6 +25,13 @@ public enum SearchUpdate: Sendable, Equatable {
     case finished
 }
 
+extension SearchUpdate {
+    /// Engines' streams keep only the two newest updates: snapshots are full lists (up to 10,000 items), so
+    /// a slow consumer skips stale ones instead of buffering them all. Every engine ends with its final
+    /// `.results` directly followed by `.finished`, so those two are never dropped.
+    static let bufferingPolicy = AsyncStream<SearchUpdate>.Continuation.BufferingPolicy.bufferingNewest(2)
+}
+
 /// A name search. The stream emits `.results` at most every 200 ms plus once at the end, then `.finished`.
 /// Ending the iteration (or cancelling the task that iterates) stops the work.
 public protocol FileSearchEngine: Sendable {

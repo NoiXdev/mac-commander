@@ -63,4 +63,17 @@ struct SearchPatternTests {
         let all = SpotlightSearch.keep([root, shown, hidden], root: tmp.url, includeHidden: true)
         #expect(all == [shown, hidden])
     }
+
+    @Test func tagViewKeepsOnlyItemsStillTagged() throws {
+        let tmp = try TemporaryDirectory()
+        let tagged = try tmp.file("tagged.txt")
+        let removed = try tmp.file("removed.txt")
+        try TagStore.writeNow([FileTag(name: "Work", color: .none), FileTag(name: "Red", color: .red)], to: tagged)
+        try TagStore.writeNow([FileTag(name: "Work", color: .none)], to: removed)
+        let items = [try FileItem.load(tagged), try FileItem.load(removed)]
+        // Case-insensitive, like Finder: the index still lists `removed.txt`, whose Red tag is gone.
+        #expect(SpotlightSearch.keep(items, root: nil, tag: "red", includeHidden: false).map(\.name) == ["tagged.txt"])
+        #expect(SpotlightSearch.keep(items, root: nil, tag: "WORK", includeHidden: false).count == 2)
+        #expect(SpotlightSearch.keep(items, root: nil, includeHidden: false).count == 2)
+    }
 }

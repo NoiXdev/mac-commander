@@ -51,6 +51,27 @@ struct SearchEngineTests {
         #expect(updates.last == .finished)
     }
 
+    @Test func slowConsumerGetsFinalResultsAndFinished() async throws {
+        let tmp = try TemporaryDirectory()
+        for index in 0..<60 { try tmp.file("match-\(index).txt") }
+        let query = SearchQuery(text: "match", scope: .folder(tmp.url))
+        let engines: [any FileSearchEngine] = [
+            EnumerationSearch(limit: 10_000, interval: .zero),
+            CompositeSearch(enumeration: EnumerationSearch(limit: 10_000, interval: .zero), isLocal: { _ in false }),
+        ]
+        for engine in engines {
+            var iterator = engine.search(query, includeHidden: false).makeAsyncIterator()
+            var updates: [SearchUpdate] = []
+            if let first = await iterator.next() { updates.append(first) }
+            // The walk sends a snapshot per match meanwhile; only the newest two are kept.
+            try await Task.sleep(for: .milliseconds(500))
+            while let update = await iterator.next() { updates.append(update) }
+            #expect(updates.count <= 3)
+            #expect(updates.last == .finished)
+            #expect(lastNames(updates).count == 60)
+        }
+    }
+
     @Test func enumerationHonorsHidden() async throws {
         let tmp = try TemporaryDirectory()
         try tmp.file(".report")

@@ -20,7 +20,7 @@ public struct CompositeSearch: FileSearchEngine {
 
     public func search(_ query: SearchQuery, includeHidden: Bool) -> AsyncStream<SearchUpdate> {
         let engines = self
-        return AsyncStream { continuation in
+        return AsyncStream(bufferingPolicy: SearchUpdate.bufferingPolicy) { continuation in
             // Cancelling this task ends the inner stream's iteration, which cancels the inner engine's work.
             let task = Task {
                 await engines.run(query, includeHidden: includeHidden) { continuation.yield($0) }

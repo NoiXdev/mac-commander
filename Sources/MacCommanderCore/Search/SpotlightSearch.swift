@@ -34,18 +34,21 @@ public struct SpotlightSearch: FileSearchEngine {
         }
     }
 
-    /// Drops the searched folder itself (Spotlight can return it; enumeration never does) and, unless
-    /// `includeHidden`, hidden items.
-    static func keep(_ items: [FileItem], root: URL?, includeHidden: Bool) -> [FileItem] {
+    /// Drops the searched folder itself (Spotlight can return it; enumeration never does), unless
+    /// `includeHidden` hidden items, and for a tag view the items whose freshly loaded tags no longer have
+    /// `tag` (the index lags behind a tag just removed; compared case-insensitively, like `FileTag`).
+    static func keep(_ items: [FileItem], root: URL?, tag: String? = nil, includeHidden: Bool) -> [FileItem] {
         let rootPath = root?.standardizedFileURL.path
+        let wanted = tag.map { FileTag(name: $0, color: .none) }
         return items.filter { item in
             (includeHidden || !item.isHidden) && item.url.standardizedFileURL.path != rootPath
+                && (wanted.map { item.tags.contains($0) } ?? true)
         }
     }
 
     public func search(_ query: SearchQuery, includeHidden: Bool) -> AsyncStream<SearchUpdate> {
         let limit = limit
-        return AsyncStream { continuation in
+        return AsyncStream(bufferingPolicy: SearchUpdate.bufferingPolicy) { continuation in
             let task = Task { @MainActor in
                 await Self.run(query, includeHidden: includeHidden, limit: limit) { continuation.yield($0) }
                 if !Task.isCancelled { continuation.yield(.finished) }
@@ -67,6 +70,7 @@ public struct SpotlightSearch: FileSearchEngine {
         metadataQuery.searchScopes = searchScopes(for: query)
         metadataQuery.notificationBatchingInterval = 0.2
         let root: URL? = if case .folder(let url) = query.scope { url } else { nil }
+        let tag: String? = if case .tag(let name) = query.scope { name } else { nil }
 
         let (events, eventSink) = AsyncStream.makeStream(of: Event.self)
         let center = NotificationCenter.default
@@ -101,7 +105,7 @@ public struct SpotlightSearch: FileSearchEngine {
             let paths = newPaths(of: metadataQuery, seen: &seen, max: limit + 1 - items.count)
             let loaded = await load(paths)
             if Task.isCancelled { return }
-            items += keep(loaded, root: root, includeHidden: includeHidden)
+            items += keep(loaded, root: root, tag: tag, includeHidden: includeHidden)
             if items.count > limit {
                 emit(.results(Array(items.prefix(limit)), truncated: true))
                 return
