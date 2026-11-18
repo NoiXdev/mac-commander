@@ -37,15 +37,21 @@ private final class Gate {
 }
 
 /// Yields the updates `script` returns for each search (with the search's index, counting from 0) and records
-/// every query.
+/// every query. `init(streaming:)` yields them one by one instead, so a search can pause between updates.
 private final class FakeSearchEngine: FileSearchEngine, @unchecked Sendable {
-    // @unchecked: `recorded` is only touched under `lock`; `script` is immutable.
+    // @unchecked: `recorded` is only touched under `lock`; `stream` is immutable.
     private let lock = NSLock()
     private var recorded: [SearchQuery] = []
-    private let script: @Sendable (SearchQuery, Int) async -> [SearchUpdate]
+    private let stream: @Sendable (SearchQuery, Int, AsyncStream<SearchUpdate>.Continuation) async -> Void
 
-    init(script: @escaping @Sendable (SearchQuery, Int) async -> [SearchUpdate]) {
-        self.script = script
+    init(streaming: @escaping @Sendable (SearchQuery, Int, AsyncStream<SearchUpdate>.Continuation) async -> Void) {
+        stream = streaming
+    }
+
+    convenience init(script: @escaping @Sendable (SearchQuery, Int) async -> [SearchUpdate]) {
+        self.init { query, index, continuation in
+            for update in await script(query, index) { continuation.yield(update) }
+        }
     }
 
     var queries: [SearchQuery] { lock.withLock { recorded } }
@@ -55,15 +61,49 @@ private final class FakeSearchEngine: FileSearchEngine, @unchecked Sendable {
             recorded.append(query)
             return recorded.count - 1
         }
-        let script = script
+        let stream = stream
         return AsyncStream { continuation in
             let task = Task {
-                for update in await script(query, index) { continuation.yield(update) }
+                await stream(query, index, continuation)
                 continuation.finish()
             }
             continuation.onTermination = { _ in task.cancel() }
         }
     }
+}
+
+/// Which path checks wait for `gate`: `info` of `infoPath`, `archiveLocation` of `archivePath`.
+@MainActor
+private final class QueryGates {
+    var infoPath: String?
+    var archivePath: String?
+    /// How many checks reached the gate.
+    var reached = 0
+    let gate = Gate()
+
+    func pass(_ url: URL, gated path: String?) async {
+        guard let path, url.standardizedFileURL.path == path else { return }
+        reached += 1
+        await gate.wait()
+    }
+}
+
+/// The real path queries, except that the checks chosen in `gates` wait (like a stat on a slow server).
+private struct GatedQueries: PathQueriesProvider {
+    let gates: QueryGates
+
+    func info(_ url: URL) async -> PathInfo {
+        await gates.pass(url, gated: await gates.infoPath)
+        return await PathQueries.info(url)
+    }
+    func archiveLocation(_ url: URL) async -> ArchiveLocation? {
+        await gates.pass(url, gated: await gates.archivePath)
+        return await PathQueries.archiveLocation(url)
+    }
+    func nearestExistingFolder(_ url: URL) async -> URL { await PathQueries.nearestExistingFolder(url) }
+    func canonicalPath(_ url: URL) async -> String { await PathQueries.canonicalPath(url) }
+    func resolvingSymlink(_ url: URL) async -> URL { await PathQueries.resolvingSymlink(url) }
+    func entryExists(_ url: URL) async -> Bool { await PathQueries.entryExists(url) }
 }
 
 @MainActor
@@ -253,6 +293,119 @@ private final class FakeSearchEngine: FileSearchEngine, @unchecked Sendable {
         #expect(model.isSearching == false)
         #expect(engine.queries.isEmpty)
         #expect(names(model) == ["a.txt"])
+    }
+
+    @Test func searchSupersedesPendingNavigation() async throws {
+        let (dir, found) = try makeTree(results: ["a.txt"])
+        let b = try dir.folder("B")
+        let gates = QueryGates()
+        let engine = FakeSearchEngine { _, _ in [.results(found, truncated: false), .finished] }
+        let model = BrowserModel(
+            start: dir.url, settings: makeStore(), searchEngine: engine, pathQueries: GatedQueries(gates: gates))
+        await model.reload()
+
+        // Click B (its check hangs), then type: the search covers the folder shown, and B never lands under it.
+        gates.infoPath = b.standardizedFileURL.path
+        let navigation = Task { await model.navigate(to: b) }
+        #expect(await waitUntil { gates.reached == 1 })
+        await model.startSearch("a")
+        gates.gate.open()
+
+        #expect(await navigation.value == .superseded)
+        #expect(samePath(model.currentURL, dir.url))
+        #expect(model.isSearching)
+        #expect(engine.queries == [SearchQuery(text: "a", scope: .folder(model.currentURL))])
+        #expect(names(model) == ["a.txt"])
+    }
+
+    @Test func clearingDropsSearchStillCheckingFolder() async throws {
+        let (dir, found) = try makeTree(results: ["a.txt"])
+        let gates = QueryGates()
+        let engine = FakeSearchEngine { _, _ in [.results(found, truncated: false), .finished] }
+        let model = BrowserModel(
+            start: dir.url, settings: makeStore(), searchEngine: engine, pathQueries: GatedQueries(gates: gates))
+        await model.reload()
+        gates.archivePath = dir.url.standardizedFileURL.path
+
+        // Cleared (the field calls `endSearch()`) while the archive check hangs.
+        let search = Task { await model.startSearch("a") }
+        #expect(await waitUntil { gates.reached == 1 })
+        model.endSearch()
+        // Cancelled (the field's debounce task is replaced) while the check hangs.
+        let cancelled = Task { await model.startSearch("a") }
+        #expect(await waitUntil { gates.reached == 2 })
+        cancelled.cancel()
+        gates.gate.open()
+        await search.value
+        await cancelled.value
+
+        #expect(model.isSearching == false)
+        #expect(engine.queries.isEmpty)
+        #expect(names(model) == ["sub", "top.txt"])
+    }
+
+    @Test func rerunKeepsResultsUntilCaughtUp() async throws {
+        let (dir, found) = try makeTree(results: ["a.txt", "b.txt", "c.txt"])
+        let gate = Gate()
+        let engine = FakeSearchEngine { _, index, continuation in
+            switch index {
+            case 1:
+                // A re-run's first, partial snapshot; the rest after the gate.
+                continuation.yield(.results([found[0]], truncated: false))
+                await gate.wait()
+                continuation.yield(.results(found, truncated: false))
+            case 2:
+                // A re-run that ends with fewer results: they are shown when it finishes.
+                continuation.yield(.results([found[0]], truncated: false))
+            default:
+                continuation.yield(.results(found, truncated: true))
+            }
+            continuation.yield(.finished)
+        }
+        let model = makeModel(start: dir.url, engine: engine)
+        await model.reload()
+        await model.startSearch("txt")
+        #expect(await waitUntil { names(model) == ["a.txt", "b.txt", "c.txt"] && !model.searchIsRunning })
+        #expect(model.searchTruncated)
+        model.selection = [found[2].url]
+        let parent = found[0].url.deletingLastPathComponent()
+
+        model.operations.announceChanged(folders: [parent])
+        #expect(await waitUntil { engine.queries.count == 2 })
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(names(model) == ["a.txt", "b.txt", "c.txt"])
+        #expect(model.selection == [found[2].url])
+        #expect(model.searchTruncated)
+        #expect(model.searchIsRunning)
+
+        gate.open()
+        #expect(await waitUntil { !model.searchIsRunning })
+        #expect(names(model) == ["a.txt", "b.txt", "c.txt"])
+        #expect(model.selection == [found[2].url])
+        #expect(model.searchTruncated == false)
+
+        model.operations.announceChanged(folders: [parent])
+        #expect(await waitUntil { names(model) == ["a.txt"] && !model.searchIsRunning })
+        #expect(model.selection.isEmpty)
+    }
+
+    @Test func createInResultFolderRerunsSearch() async throws {
+        let dir = try TemporaryDirectory()
+        let sub = try dir.folder("sub")
+        let found = [try FileItem.load(sub)]
+        let engine = FakeSearchEngine { _, _ in [.results(found, truncated: false), .finished] }
+        let model = makeModel(start: dir.url, engine: engine)
+        await model.reload()
+        await model.startSearch("sub")
+        #expect(await waitUntil { names(model) == ["sub"] })
+
+        let created = try await model.createFolder(in: found[0].url)
+
+        #expect(await waitUntil { engine.queries.count == 2 })
+        #expect(model.pendingRename == created)
+        #expect(model.selection == [created])
+        #expect(names(model) == ["sub"])
     }
 
     @Test func sortChangeResortsResults() async throws {

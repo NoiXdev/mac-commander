@@ -155,8 +155,9 @@ struct BrowserWindow: View {
             .task(id: searchText.wrappedValue) {
                 let text = searchText.wrappedValue
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    // Only a text search: the field is also cleared when a tag view starts.
-                    if case .folder? = model.search?.scope { model.endSearch() }
+                    // Not a tag view: the field is also cleared when one starts. With no search shown this still
+                    // drops a search request that is checking its folder.
+                    if case .tag? = model.search?.scope {} else { model.endSearch() }
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(250))
@@ -188,7 +189,8 @@ struct BrowserWindow: View {
                 } label: {
                     Label(String(localized: "Back"), systemImage: "chevron.left")
                 }
-                .disabled(!model.history.canGoBack)
+                // Back also closes a shown search (Ruling P6-1), even without history.
+                .disabled(!model.history.canGoBack && !model.isSearching)
                 Button {
                     Task { await model.goForward() }
                 } label: {

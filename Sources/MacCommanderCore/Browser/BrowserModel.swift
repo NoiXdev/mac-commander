@@ -374,6 +374,9 @@ public final class BrowserModel {
     /// Searches the current folder and its subfolders for names containing `text`; empty or whitespace text
     /// ends the search instead. Does nothing inside an archive (Ruling P6-2). Returns when this search finished,
     /// was replaced by a newer one, or ended.
+    /// Takes its place in line like a navigation: a navigation still checking its target is superseded, so it
+    /// can't land under the search (the search covers the folder shown when it was typed). Dropped when a
+    /// navigation, a newer search request (also `endSearch()`) or cancelling the calling task comes first.
     public func startSearch(_ text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -381,32 +384,35 @@ public final class BrowserModel {
             return
         }
         guard archiveLocation == nil else { return }
-        let navigation = navigationGeneration
+        let navigation = beginNavigation()
         searchGeneration += 1
         let request = searchGeneration
         let folder = currentURL
         // The archive file may be the current folder before its listing is published.
         let inArchive = await queries.archiveLocation(folder) != nil
-        guard !inArchive, navigation == navigationGeneration, request == searchGeneration else { return }
+        guard !inArchive, !Task.isCancelled, navigation == navigationGeneration, request == searchGeneration
+        else { return }
         await runSearch(SearchQuery(text: trimmed, scope: .folder(folder)), keepingResults: false).value
     }
 
     /// Shows every file on this computer tagged `name`, over the current folder. Inside an archive it first goes
     /// to the folder holding the archive, so the results aren't shown in read-only archive mode.
+    /// Like `startSearch`, it supersedes a navigation still checking its target.
     public func showTag(_ name: String) async {
         if let archive = archiveLocation?.archive {
             await navigate(to: archive.deletingLastPathComponent())
             guard archiveLocation == nil else { return }
         }
+        _ = beginNavigation()
         await runSearch(SearchQuery(text: "", scope: .tag(name)), keepingResults: false).value
     }
 
     /// Ends the shown search and shows the folder again: at once its items from before the search, then a fresh
     /// listing (`load()`, started in a Task so this stays synchronous for the UI and the navigation paths, whose
-    /// own load supersedes it). Does nothing when no search is shown.
+    /// own load supersedes it). When no search is shown it only drops a `startSearch` still checking its folder.
     public func endSearch() {
-        guard search != nil else { return }
         searchGeneration += 1
+        guard search != nil else { return }
         searchTask?.cancel()
         searchTask = nil
         search = nil
@@ -421,7 +427,8 @@ public final class BrowserModel {
     }
 
     /// Starts `query`, replacing any search shown. `keepingResults`: a re-run of the shown search (after a
-    /// change), which keeps its results and selection until new ones arrive.
+    /// change), which keeps its results, truncation flag and selection until the new search has as many results
+    /// or finishes: engines send growing snapshots, and a partial first one must not replace the full list.
     private func runSearch(_ query: SearchQuery, keepingResults: Bool) -> Task<Void, Never> {
         searchGeneration += 1
         let generation = searchGeneration
@@ -429,23 +436,40 @@ public final class BrowserModel {
         if search == nil { itemsBeforeSearch = items }
         search = query
         searchIsRunning = true
-        searchTruncated = false
         if !keepingResults {
+            searchTruncated = false
             searchResults = []
             sortGeneration += 1
             items = []
             clearSelection()
         }
         let stream = searchEngine.search(query, includeHidden: settings.settings.showHiddenFiles)
+        let shownCount = keepingResults ? searchResults.count : 0
         let task = Task { [weak self] in
+            // A re-run's snapshot held back until it catches up with the shown results (or the search finishes).
+            var heldBack: (found: [FileItem], truncated: Bool)?
+            var caughtUp = !keepingResults
             for await update in stream {
                 guard let self, generation == self.searchGeneration else { return }
                 switch update {
                 case .results(let found, let truncated):
+                    if !caughtUp, found.count < shownCount, !truncated {
+                        heldBack = (found, truncated)
+                        continue
+                    }
+                    caughtUp = true
+                    heldBack = nil
                     self.searchResults = found
                     self.searchTruncated = truncated
                     await self.presentSearch(generation: generation)
                 case .finished:
+                    if let held = heldBack {
+                        heldBack = nil
+                        self.searchResults = held.found
+                        self.searchTruncated = held.truncated
+                        await self.presentSearch(generation: generation)
+                        guard generation == self.searchGeneration else { return }
+                    }
                     self.searchIsRunning = false
                 }
             }
@@ -911,6 +935,14 @@ public final class BrowserModel {
     /// created URL and leaves selection and `pendingRename` alone.
     private func didCreate(_ created: URL, in parent: URL, historyAtStart: NavigationHistory) async -> URL {
         guard history == historyAtStart else { return created }
+        if isSearching {
+            // Into a result folder (creating in the hidden current folder is disabled): re-run the search, which
+            // keeps that folder shown; the list expands it for the rename.
+            rerunSearch()
+            selection = [created]
+            pendingRename = created
+            return created
+        }
         var url = created
         if isCurrentDirectory(parent) {
             guard await reloadIfStillShowing(parent, since: historyAtStart) else { return created }

@@ -53,7 +53,8 @@ struct BrowserCommands: Commands {
         CommandMenu("Go") {
             Button("Back") { run { await $0.goBack() } }
                 .keyboardShortcut("[")
-                .disabled(model?.history.canGoBack != true)
+                // Back also closes a shown search (Ruling P6-1), even without history.
+                .disabled(model?.history.canGoBack != true && model?.isSearching != true)
             Button("Forward") { run { await $0.goForward() } }
                 .keyboardShortcut("]")
                 .disabled(model?.history.canGoForward != true)
