@@ -1,5 +1,4 @@
 import Foundation
-import LocalAuthentication
 import Security
 
 /// Share passwords as Keychain internet passwords in the format Finder/NetAuth use, so items are shared with
@@ -41,9 +40,10 @@ public struct KeychainCredentialStore: CredentialStore {
             guard var query = baseQuery(for: url, username: username, server: server) else { return nil }
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             query[kSecReturnData as String] = true
-            let context = LAContext()
-            context.interactionNotAllowed = true
-            query[kSecUseAuthenticationContext as String] = context
+            // Deprecated, but kept on purpose: these are file-based login-keychain items, whose "allow access"
+            // ACL prompt only this flag suppresses. `LAContext.interactionNotAllowed` governs
+            // data-protection / biometric UI and is not shown to cover that prompt.
+            query[kSecUseAuthenticationUI as String] = kSecUseAuthenticationUIFail
             var item: CFTypeRef?
             let status = SecItemCopyMatching(query as CFDictionary, &item)
             if status == errSecInteractionNotAllowed { return nil }
