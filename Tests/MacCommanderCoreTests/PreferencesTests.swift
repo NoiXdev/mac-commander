@@ -30,6 +30,23 @@ struct PreferencesTests {
         #expect(store.preferences.hiddenSidebarSections == [.tags])
     }
 
+    @Test func hiddenTagsRoundTripAndDecodeLeniently() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = PreferencesStore(defaults: defaults)
+        #expect(store.preferences.hiddenTags.isEmpty)
+        store.preferences.hiddenTags = ["Work"]
+        #expect(PreferencesStore(defaults: defaults).preferences.hiddenTags == ["Work"])
+        // A wrong type falls back to empty; the other fields are kept.
+        defaults.set(Data(#"{"newFileName": "a.txt", "hiddenTags": 3}"#.utf8), forKey: PreferencesStore.key)
+        let again = PreferencesStore(defaults: defaults)
+        #expect(again.preferences.hiddenTags.isEmpty)
+        #expect(again.preferences.newFileName == "a.txt")
+        // Non-string entries are dropped, the rest kept.
+        defaults.set(Data(#"{"hiddenTags": ["Home", 4]}"#.utf8), forKey: PreferencesStore.key)
+        #expect(PreferencesStore(defaults: defaults).preferences.hiddenTags == ["Home"])
+    }
+
     @Test func invalidNewFileNameFallsBack() {
         for bad in ["", "  ", "a/b", "a:b", ".", ".."] {
             #expect(Preferences(newFileName: bad).effectiveNewFileName == "untitled.txt")

@@ -12,20 +12,24 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// nil means the home folder.
     public var newWindowFolderPath: String?
     public var hiddenSidebarSections: Set<SidebarSection> = []
+    /// Tag names removed from the sidebar's Tags section (still offered in menus). Compare case-insensitively.
+    public var hiddenTags: Set<String> = []
     public var didShowFullDiskAccessHint = false
 
     public init(
         newFileName: String = Preferences.defaultNewFileName, newWindowFolderPath: String? = nil,
-        hiddenSidebarSections: Set<SidebarSection> = [], didShowFullDiskAccessHint: Bool = false
+        hiddenSidebarSections: Set<SidebarSection> = [], hiddenTags: Set<String> = [],
+        didShowFullDiskAccessHint: Bool = false
     ) {
         self.newFileName = newFileName
         self.newWindowFolderPath = newWindowFolderPath
         self.hiddenSidebarSections = hiddenSidebarSections
+        self.hiddenTags = hiddenTags
         self.didShowFullDiskAccessHint = didShowFullDiskAccessHint
     }
 
     private enum CodingKeys: String, CodingKey {
-        case newFileName, newWindowFolderPath, hiddenSidebarSections, didShowFullDiskAccessHint
+        case newFileName, newWindowFolderPath, hiddenSidebarSections, hiddenTags, didShowFullDiskAccessHint
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -48,6 +52,18 @@ public struct Preferences: Codable, Equatable, Sendable {
             }
         }
         hiddenSidebarSections = sections
+        // Non-string entries are dropped, the rest kept.
+        var tags: Set<String> = []
+        if var raw = try? c.nestedUnkeyedContainer(forKey: .hiddenTags) {
+            while !raw.isAtEnd {
+                if let tag = try? raw.decode(String.self) {
+                    tags.insert(tag)
+                } else {
+                    _ = try? raw.decode(AnyDecodable.self)
+                }
+            }
+        }
+        hiddenTags = tags
     }
 
     private struct AnyDecodable: Decodable {

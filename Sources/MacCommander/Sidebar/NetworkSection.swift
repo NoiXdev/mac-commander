@@ -2,7 +2,8 @@ import MacCommanderCore
 import SwiftUI
 
 /// The sidebar's Network section: one row per saved share with its live status. A click goes to a connected
-/// share, connects an available one (signing in if needed) and offers Retry for an unreachable one.
+/// share, connects an available one (signing in if needed) and offers Retry for an unreachable one. With no
+/// saved shares it holds a "Connect to Server…" row instead, so the section is never empty.
 struct NetworkSection: View {
     let model: BrowserModel
     let sheets: ShareSheets
@@ -10,8 +11,13 @@ struct NetworkSection: View {
     @Environment(ShareManager.self) private var manager
 
     var body: some View {
-        if !store.shares.isEmpty {
-            Section(String(localized: "Network")) {
+        Section(String(localized: "Network")) {
+            if store.shares.isEmpty {
+                Label(String(localized: "Connect to Server…"), systemImage: "plus.circle")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { sheets.showConnectToServer = true }
+            } else {
                 ForEach(store.shares) { share in
                     row(share, status: manager.status[share.id])
                 }

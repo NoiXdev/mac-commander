@@ -7,8 +7,11 @@ struct SidebarView: View {
     let model: BrowserModel
     let shareSheets: ShareSheets
     @Environment(FavoritesStore.self) private var favorites
+    @Environment(PreferencesStore.self) private var preferences
     private let volumesState = State<[VolumeInfo]>(initialValue: [])
     private let missingState = State<SidebarLocation?>(initialValue: nil)
+    /// Whether the iCloud Drive folder exists (it doesn't when not signed in); checked off the main thread.
+    private let iCloudExistsState = State(initialValue: false)
     /// The sidebar's window, for the conflict dialog and alerts of drops onto rows.
     private let windowState = State(initialValue: WindowBox())
     private var volumes: [VolumeInfo] {
@@ -19,55 +22,37 @@ struct SidebarView: View {
         get { missingState.wrappedValue }
         nonmutating set { missingState.wrappedValue = newValue }
     }
+    private var iCloudExists: Bool {
+        get { iCloudExistsState.wrappedValue }
+        nonmutating set { iCloudExistsState.wrappedValue = newValue }
+    }
+
+    /// The local iCloud Drive folder.
+    private static let iCloudDrive = FileManager.default.homeDirectoryForCurrentUser
+        .appending(path: "Library/Mobile Documents/com~apple~CloudDocs", directoryHint: .isDirectory)
+
+    private func isShown(_ section: SidebarSection) -> Bool {
+        !preferences.preferences.hiddenSidebarSections.contains(section)
+    }
 
     var body: some View {
         List {
-            Section {
-                ForEach(favorites.favorites) { location in
-                    row(name: location.name, url: location.url, exists: location.exists)
-                        .onTapGesture { select(location) }
-                        .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: location.exists))
-                        .contextMenu {
-                            Button(String(localized: "Remove from Sidebar")) { favorites.remove(location.url) }
-                        }
-                }
-                .onMove { favorites.move(fromOffsets: $0, toOffset: $1) }
-                // Between rows: add the dropped folders as favorites (onto a row: see `FolderDropDelegate`).
-                .onInsert(of: [.fileURL]) { index, providers in drop(providers, at: index) }
-            } header: {
-                // Also adds favorites (at the end), in case drops between rows land on a row instead.
-                Text(String(localized: "Favorites"))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-                        drop(providers, at: favorites.favorites.count)
-                        return true
-                    }
-            }
-            Section(String(localized: "Locations")) {
-                ForEach(volumes) { volume in
-                    HStack {
-                        row(name: volume.name, url: volume.url, exists: true, symbol: volume.isBoot ? "internaldrive" : "externaldrive")
-                        if volume.isEjectable {
-                            Button {
-                                eject(volume)
-                            } label: {
-                                Image(systemName: "eject")
-                            }
-                            .buttonStyle(.borderless)
-                            .help(String(localized: "Eject"))
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture { Task { await model.navigate(to: volume.url) } }
-                    .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: volume.url, enabled: true))
+            if isShown(.favorites) { favoritesSection }
+            if isShown(.iCloud), iCloudExists {
+                Section(String(localized: "iCloud")) {
+                    row(name: String(localized: "iCloud Drive"), url: Self.iCloudDrive, exists: true, symbol: "icloud")
+                        .onTapGesture { Task { await model.navigate(to: Self.iCloudDrive) } }
+                        .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: Self.iCloudDrive, enabled: true))
                 }
             }
-            NetworkSection(model: model, sheets: shareSheets)
+            if isShown(.locations) { locationsSection }
+            if isShown(.network) { NetworkSection(model: model, sheets: shareSheets) }
+            if isShown(.tags) { TagsSection(model: model) }
         }
         .listStyle(.sidebar)
         .background(WindowReader(box: windowState.wrappedValue))
         .onAppear { Task { await favorites.refreshExistence() } }
+        .task { iCloudExists = await PathQueries.info(Self.iCloudDrive).isDirectory }
         .task {
             volumes = await VolumeProvider.localVolumes()
             await observeVolumes()
@@ -80,6 +65,53 @@ struct SidebarView: View {
                 if let missing { favorites.remove(missing.url) }
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
+        }
+    }
+
+    private var favoritesSection: some View {
+        Section {
+            ForEach(favorites.favorites) { location in
+                row(name: location.name, url: location.url, exists: location.exists)
+                    .onTapGesture { select(location) }
+                    .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: location.exists))
+                    .contextMenu {
+                        Button(String(localized: "Remove from Sidebar")) { favorites.remove(location.url) }
+                    }
+            }
+            .onMove { favorites.move(fromOffsets: $0, toOffset: $1) }
+            // Between rows: add the dropped folders as favorites (onto a row: see `FolderDropDelegate`).
+            .onInsert(of: [.fileURL]) { index, providers in drop(providers, at: index) }
+        } header: {
+            // Also adds favorites (at the end), in case drops between rows land on a row instead.
+            Text(String(localized: "Favorites"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+                    drop(providers, at: favorites.favorites.count)
+                    return true
+                }
+        }
+    }
+
+    private var locationsSection: some View {
+        Section(String(localized: "Locations")) {
+            ForEach(volumes) { volume in
+                HStack {
+                    row(name: volume.name, url: volume.url, exists: true, symbol: volume.isBoot ? "internaldrive" : "externaldrive")
+                    if volume.isEjectable {
+                        Button {
+                            eject(volume)
+                        } label: {
+                            Image(systemName: "eject")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(String(localized: "Eject"))
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { Task { await model.navigate(to: volume.url) } }
+                .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: volume.url, enabled: true))
+            }
         }
     }
 
@@ -167,8 +199,8 @@ struct SidebarView: View {
     }
 }
 
-/// Moves or copies files dropped onto a sidebar row (a favorite folder or a volume) into that folder,
-/// with the list's rules (`DropPolicy`: move on the same volume, copy across volumes, ⌥ copy, ⌘ move).
+/// Moves or copies files dropped onto a sidebar row (a favorite folder, iCloud Drive or a volume) into that
+/// folder, with the list's rules (`DropPolicy`: move on the same volume, copy across volumes, ⌥ copy, ⌘ move).
 /// While hovering, the sources are read from the drag pasteboard, since item providers only load
 /// asynchronously; the drop itself loads them from the item providers.
 ///
@@ -176,8 +208,8 @@ struct SidebarView: View {
 /// is the only operation. Their payload is read synchronously from the drag pasteboard
 /// (`NSPasteboard(name: .drag)`) rather than through `NSItemProvider`: the type isn't declared in Info.plist,
 /// and the pasteboard is what the hover check reads anyway. That works for drags from any MacCommander window.
-/// Rows are real folders (favorites are only ever added as existing folders, volumes are mount points), so
-/// archive entries are accepted without a path check.
+/// Rows are real folders (favorites are only ever added as existing folders, volumes are mount points, iCloud
+/// Drive is shown only when it exists), so archive entries are accepted without a path check.
 @MainActor
 private struct FolderDropDelegate: DropDelegate {
     /// The types the rows register for: archive entries first, then files.

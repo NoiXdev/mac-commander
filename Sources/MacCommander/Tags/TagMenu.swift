@@ -79,12 +79,18 @@ enum TagMenu {
         return image
     }
 
-    /// The custom (non-standard) tags offered in the menu: for now those on the items themselves, in
-    /// order of first appearance. The single place to add further sources (e.g. a tag catalog).
+    /// The custom (non-standard) tags offered in the menu: the catalog's (sorted by name), then any others
+    /// on the items themselves, in order of first appearance. A tag on the items keeps its own color when
+    /// the catalog has none for it.
     private static func customTags(current: [[FileTag]], excluding standard: [FileTag]) -> [FileTag] {
+        let onItems = Array(current.joined())
         var seen = Set(standard)
         var result: [FileTag] = []
-        for tag in current.joined() where seen.insert(tag).inserted {
+        for tag in TagCatalog.shared.tags where seen.insert(tag).inserted {
+            let own = onItems.first { $0 == tag }
+            result.append(tag.color == .none && own != nil ? own! : tag)
+        }
+        for tag in onItems where seen.insert(tag).inserted {
             result.append(tag)
         }
         return result
@@ -96,6 +102,8 @@ enum TagMenu {
         Task { @MainActor in
             do {
                 try await TagStore.setTags(change, on: urls)
+                // The catalog shows a newly used tag (and its color) at once.
+                if case .add(let tag) = change { TagCatalog.shared.noteUsed(tag) }
             } catch {
                 let alert = NSAlert(error: error)
                 if let window, window.isVisible, window.attachedSheet == nil {
