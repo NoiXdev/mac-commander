@@ -27,6 +27,7 @@ extension FocusedValues {
 /// One browser window: sidebar, file list, path bar and toolbar.
 struct BrowserWindow: View {
     @Environment(ViewSettingsStore.self) private var settings
+    @Environment(PreferencesStore.self) private var preferences
     @Environment(FileOperationCenter.self) private var operations
     @Environment(FileClipboard.self) private var clipboard
     @Environment(ShareManager.self) private var shareManager
@@ -66,6 +67,19 @@ struct BrowserWindow: View {
         .onAppear {
             guard model == nil else { return }
             let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
+            model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
+            if !storedPath.hasPrefix("/") {
+                // New window: starts at home at once; the preferred folder's existence is checked off main.
+                let prefs = preferences.preferences
+                let home = model.currentURL
+                Task {
+                    let folder = await PathQueries.run {
+                        prefs.newWindowFolder(exists: { FileManager.default.fileExists(atPath: $0.path) })
+                    }
+                    // Only if the user hasn't navigated meanwhile.
+                    if folder != home, model.currentURL == home { _ = await model.navigate(to: folder) }
+                }
+            }
             // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
             model.shareResolver = { [weak shareManager] url in
                 guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }

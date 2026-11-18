@@ -347,12 +347,16 @@ public final class BrowserModel {
         return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }
 
+    /// The name for new files (the app wires it to the preferences).
+    @ObservationIgnored public var newFileName: @MainActor () -> String = { "untitled.txt" }
+
     /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createEmptyFile(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL
         try await refuseWritesInArchive(parent)
         let historyAtStart = history
-        let created = try await Self.offMain { try ItemCreator.createEmptyFile(in: parent) }
+        let fileName = newFileName()
+        let created = try await Self.offMain { try ItemCreator.createEmptyFile(in: parent, named: fileName) }
         operations.recordCreated(created, isFolder: false)
         return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }

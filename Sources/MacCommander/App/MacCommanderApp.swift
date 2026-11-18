@@ -7,6 +7,7 @@ struct MacCommanderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     // The App value is created once, so plain properties are enough (no `@State`).
     private let settings = ViewSettingsStore()
+    private let preferences = PreferencesStore()
     private let favorites = FavoritesStore()
     private let operations = FileOperationCenter()
     private let clipboard = FileClipboard()
@@ -15,6 +16,7 @@ struct MacCommanderApp: App {
         WindowGroup {
             BrowserWindow()
                 .environment(settings)
+                .environment(preferences)
                 .environment(favorites)
                 .environment(operations)
                 .environment(clipboard)

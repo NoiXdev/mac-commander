@@ -17,8 +17,19 @@ public enum ItemCreator {
     }
 
     public static func createEmptyFile(in directory: URL) throws -> URL {
+        try createEmptyFile(in: directory, named: "untitled.txt")
+    }
+
+    /// `named` is split at the last dot unless that is the first character (`.env`, `Makefile` have no extension).
+    public static func createEmptyFile(in directory: URL, named: String) throws -> URL {
+        var base = named
+        var pathExtension: String?
+        if let dot = named.lastIndex(of: "."), dot != named.startIndex, named.index(after: dot) != named.endIndex {
+            base = String(named[..<dot])
+            pathExtension = String(named[named.index(after: dot)...])
+        }
         for _ in 0..<100 {
-            let name = NameGenerator.uniqueName(base: "untitled", pathExtension: "txt", in: directory)
+            let name = NameGenerator.uniqueName(base: base, pathExtension: pathExtension, in: directory)
             let url = directory.appendingPathComponent(name)
             // O_EXCL: never overwrite a file that appeared after the name was chosen.
             let fd = open(url.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
