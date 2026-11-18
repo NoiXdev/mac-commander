@@ -99,6 +99,10 @@ import Testing
         let home = FileManager.default.homeDirectoryForCurrentUser
         #expect(FileItem.mayBeInCloud(home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/a.txt")))
         #expect(FileItem.mayBeInCloud(home.appendingPathComponent("Library/CloudStorage/Dropbox/a.txt")))
+        #expect(FileItem.mayBeInCloud(home.appendingPathComponent("Desktop/x")))
+        #expect(FileItem.mayBeInCloud(home.appendingPathComponent("Documents/x")))
+        #expect(!FileItem.mayBeInCloud(home.appendingPathComponent("Library/Mobile DocumentsX/a")))
+        #expect(!FileItem.mayBeInCloud(home.appendingPathComponent("Library/Mobile Documents")))
         let dir = try TemporaryDirectory()
         let url = try dir.file("a.txt")
         #expect(!FileItem.mayBeInCloud(url))

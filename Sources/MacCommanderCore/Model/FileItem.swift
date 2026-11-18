@@ -37,10 +37,16 @@ public struct FileItem: Identifiable, Hashable, Sendable {
 
     private static let cloudPrefixes: [String] = {
         let home = FileManager.default.homeDirectoryForCurrentUser.standardizedFileURL.path
-        return ["\(home)/Library/Mobile Documents/", "\(home)/Library/CloudStorage/"]
+        // Desktop and Documents can hold iCloud items when "Desktop & Documents Folders" is enabled.
+        // Trailing slashes keep look-alike names and the bare folders themselves out.
+        return [
+            "\(home)/Library/Mobile Documents/", "\(home)/Library/CloudStorage/",
+            "\(home)/Desktop/", "\(home)/Documents/",
+        ]
     }()
 
-    /// Whether `url` lies in an iCloud Drive or File Provider location (cheap path-prefix check).
+    /// Whether `url` lies in an iCloud Drive, File Provider, or iCloud-synced Desktop/Documents location
+    /// (cheap path-prefix check).
     static func mayBeInCloud(_ url: URL) -> Bool {
         let path = url.standardizedFileURL.path
         return cloudPrefixes.contains { path.hasPrefix($0) }
