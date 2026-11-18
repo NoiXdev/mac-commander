@@ -111,7 +111,9 @@ enum OpenWithMenu {
     }
 
     private static func open(_ urls: [URL], with app: URL) {
-        NSWorkspace.shared.open(urls, withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+        Task { @MainActor in
+            if let error = await PathQueries.open(urls, withApplicationAt: app) { NSAlert(error: error).runModal() }
+        }
     }
 
     private static func chooseApp(for urls: [URL]) {

@@ -16,7 +16,7 @@ extension NSUserInterfaceItemIdentifier {
     }
 }
 
-/// Name column: icon + name + tag dots. `hasFileIcon` is false while a type placeholder is shown.
+/// Name column: icon + name + tag dots + iCloud status. `hasFileIcon` is false while a type placeholder is shown.
 final class FileNameCellView: NSTableCellView {
     var hasFileIcon = false
     private(set) var isEditing = false
@@ -25,6 +25,10 @@ final class FileNameCellView: NSTableCellView {
     private let tagDots = TagDotsView()
     /// The gap between the name and the dots; inactive while editing (the dots are hidden then).
     private var dotsGap: NSLayoutConstraint?
+    private let cloudView = NSImageView()
+    /// The cloud symbol's width and the gap before it: zero while there is no status to show.
+    private var cloudWidth: NSLayoutConstraint?
+    private var cloudGap: NSLayoutConstraint?
 
     init() {
         super.init(frame: .zero)
@@ -43,12 +47,20 @@ final class FileNameCellView: NSTableCellView {
         addSubview(icon)
         addSubview(label)
         addSubview(tagDots)
+        cloudView.translatesAutoresizingMaskIntoConstraints = false
+        cloudView.contentTintColor = .secondaryLabelColor
+        cloudView.imageScaling = .scaleProportionallyDown
+        cloudView.setContentHuggingPriority(.required, for: .horizontal)
+        cloudView.setContentCompressionResistancePriority(.required, for: .horizontal)
+        addSubview(cloudView)
         imageView = icon
         textField = label
         let gap = tagDots.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 0)
         // Weaker than the label's hugging: the dots follow the text instead of stretching the label.
-        let dotsAtEnd = tagDots.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
+        let dotsAtEnd = cloudView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
         dotsAtEnd.priority = NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1)
+        let cloudGap = cloudView.leadingAnchor.constraint(equalTo: tagDots.trailingAnchor, constant: 0)
+        let cloudWidth = cloudView.widthAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -59,10 +71,16 @@ final class FileNameCellView: NSTableCellView {
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
             gap,
             dotsAtEnd,
-            tagDots.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
+            cloudView.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
+            cloudView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            cloudView.heightAnchor.constraint(equalToConstant: 14),
+            cloudGap,
+            cloudWidth,
             tagDots.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         dotsGap = gap
+        self.cloudGap = cloudGap
+        self.cloudWidth = cloudWidth
         editingTrailing = label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
     }
 
@@ -70,6 +88,22 @@ final class FileNameCellView: NSTableCellView {
     func showTags(_ tags: [FileTag]) {
         tagDots.show(tags)
         dotsGap?.constant = tagDots.colors.isEmpty ? 0 : 4
+    }
+
+    /// Shows the iCloud symbol after the tags: a cloud with an arrow when the file isn't downloaded, a
+    /// circled arrow while it downloads; nothing for downloaded files and items outside iCloud.
+    func showCloudStatus(_ status: CloudStatus?) {
+        let symbol: String?
+        let tip: String?
+        switch status {
+        case .notDownloaded: (symbol, tip) = ("icloud.and.arrow.down", String(localized: "Not downloaded"))
+        case .downloading: (symbol, tip) = ("arrow.down.circle", String(localized: "Downloading"))
+        case .current, nil: (symbol, tip) = (nil, nil)
+        }
+        cloudView.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: tip) }
+        cloudView.toolTip = tip
+        cloudWidth?.constant = symbol == nil ? 0 : 14
+        cloudGap?.constant = symbol == nil ? 0 : 4
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -86,6 +120,7 @@ final class FileNameCellView: NSTableCellView {
         label.lineBreakMode = editing ? .byClipping : .byTruncatingMiddle
         label.cell?.isScrollable = editing
         tagDots.isHidden = editing
+        cloudView.isHidden = editing
         // Deactivate before activating so the two never conflict.
         if editing {
             dotsGap?.isActive = false

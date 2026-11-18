@@ -226,7 +226,9 @@ enum FileActions {
     /// Opens `archive` with Archive Utility, which unpacks it next to itself (or shows its own error).
     static func openWithArchiveUtility(_ archive: URL) {
         let app = URL(fileURLWithPath: "/System/Library/CoreServices/Applications/Archive Utility.app")
-        NSWorkspace.shared.open([archive], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+        Task { @MainActor in
+            if let error = await PathQueries.open([archive], withApplicationAt: app) { NSAlert(error: error).runModal() }
+        }
     }
 
     // MARK: - Drag and drop

@@ -211,6 +211,7 @@ extension FileListController: NSOutlineViewDelegate {
                 ?? FileNameCellView()
             cell.textField?.stringValue = node.item.name
             cell.showTags(node.item.tags)
+            cell.showCloudStatus(node.item.cloudStatus)
             if isInArchive {
                 // Entries inside an archive don't exist on disk: the type icon is all there is.
                 cell.imageView?.image = icons.placeholder(for: node.item)

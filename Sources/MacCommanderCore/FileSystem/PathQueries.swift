@@ -73,11 +73,43 @@ public enum PathQueries {
     /// the call is made on the blocking-I/O queue. Returns at once. Failures aren't reported to the caller, as
     /// before; LaunchServices still asks the user when no app can open the item.
     public nonisolated static func openWithDefaultApp(_ url: URL) {
-        Task.detached {
-            await run {
-                NSWorkspace.shared.open(url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+        Task.detached { _ = await open([url], withApplicationAt: nil) }
+    }
+
+    /// Opens `urls` with the app at `app`, or each with its default app when `app` is nil, off the main
+    /// actor (see `openWithDefaultApp`). Returns the error for the caller to show.
+    @discardableResult
+    public nonisolated static func open(_ urls: [URL], withApplicationAt app: URL?) async -> (any Error)? {
+        let result: Result<Void, any Error> = await withCheckedContinuation { continuation in
+            queue().async {
+                let configuration = NSWorkspace.OpenConfiguration()
+                let completion: @Sendable ((any Error)?) -> Void = { error in
+                    continuation.resume(returning: error.map { .failure($0) } ?? .success(()))
+                }
+                if let app {
+                    NSWorkspace.shared.open(urls, withApplicationAt: app, configuration: configuration, completionHandler: { _, error in completion(error) })
+                } else {
+                    let group = DispatchGroup()
+                    let firstError = FirstError()
+                    for url in urls {
+                        group.enter()
+                        NSWorkspace.shared.open(url, configuration: configuration) { _, error in
+                            if let error { firstError.set(error) }
+                            group.leave()
+                        }
+                    }
+                    group.notify(queue: .global()) { completion(firstError.value) }
+                }
             }
         }
+        if case .failure(let error) = result { return error }
+        return nil
+    }
+
+    /// Asks iCloud to download `url`. Errors are ignored: the file then opens as it is, and the system
+    /// reports a failed download itself.
+    public static func startDownloading(_ url: URL) async {
+        await run { try? FileManager.default.startDownloadingUbiquitousItem(at: url) }
     }
 
     /// `ArchivePath.split` off the main actor.
@@ -222,4 +254,12 @@ struct LivePathQueries: PathQueriesProvider {
     func canonicalPath(_ url: URL) async -> String { await PathQueries.canonicalPath(url) }
     func resolvingSymlink(_ url: URL) async -> URL { await PathQueries.resolvingSymlink(url) }
     func entryExists(_ url: URL) async -> Bool { await PathQueries.entryExists(url) }
+}
+
+/// The first error reported by several concurrent completions.
+private final class FirstError: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (any Error)?
+    var value: (any Error)? { lock.withLock { stored } }
+    func set(_ error: any Error) { lock.withLock { if stored == nil { stored = error } } }
 }

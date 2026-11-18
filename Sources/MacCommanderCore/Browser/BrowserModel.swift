@@ -87,6 +87,8 @@ public final class BrowserModel {
     @ObservationIgnored private let settings: ViewSettingsStore
     @ObservationIgnored private let loader: DirectoryLoader
     @ObservationIgnored private let opener: @MainActor (URL) -> Void
+    /// Starts an iCloud download before a not-yet-downloaded file is handed to `opener`.
+    @ObservationIgnored private let downloader: @MainActor (URL) async -> Void
     @ObservationIgnored private let catalog: ArchiveCatalog
     @ObservationIgnored private let queries: any PathQueriesProvider
     /// `currentURL` with its symlinks resolved, computed off the main actor by the load that listed it.
@@ -142,11 +144,12 @@ public final class BrowserModel {
         opener: @escaping @MainActor (URL) -> Void = { PathQueries.openWithDefaultApp($0) },
         operations: FileOperationCenter = FileOperationCenter(),
         catalog: ArchiveCatalog = .shared,
-        searchEngine: any FileSearchEngine = CompositeSearch()
+        searchEngine: any FileSearchEngine = CompositeSearch(),
+        downloader: @escaping @MainActor (URL) async -> Void = { await PathQueries.startDownloading($0) }
     ) {
         self.init(
             start: start, settings: settings, loader: loader, opener: opener, operations: operations,
-            catalog: catalog, searchEngine: searchEngine, pathQueries: LivePathQueries())
+            catalog: catalog, searchEngine: searchEngine, downloader: downloader, pathQueries: LivePathQueries())
     }
 
     /// `pathQueries` is a test hook; the public initializer passes the real `PathQueries`.
@@ -158,6 +161,7 @@ public final class BrowserModel {
         operations: FileOperationCenter = FileOperationCenter(),
         catalog: ArchiveCatalog = .shared,
         searchEngine: any FileSearchEngine = CompositeSearch(),
+        downloader: @escaping @MainActor (URL) async -> Void = { await PathQueries.startDownloading($0) },
         pathQueries: any PathQueriesProvider
     ) {
         history = NavigationHistory(start: start)
@@ -165,6 +169,7 @@ public final class BrowserModel {
         self.searchEngine = searchEngine
         self.loader = loader
         self.opener = opener
+        self.downloader = downloader
         self.operations = operations
         self.catalog = catalog
         self.queries = pathQueries
@@ -341,6 +346,7 @@ public final class BrowserModel {
             endSearch()
             await navigate(to: item.url, anyBrowsable: false, openFallback: true, generation: generation)
         } else {
+            if item.cloudStatus == .notDownloaded { await downloader(item.url) }
             opener(item.url)
         }
     }
