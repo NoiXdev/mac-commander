@@ -25,6 +25,8 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
 
 @MainActor
 @Suite struct BrowserModelArchiveTests {
+    private let defaults = TemporaryDefaults()
+
     private static let tree: [String: String] = [
         "a.txt": "aaa",
         "img/x.png": "x",
@@ -32,7 +34,7 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
     ]
 
     private func makeStore() -> ViewSettingsStore {
-        ViewSettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        ViewSettingsStore(defaults: defaults.make())
     }
 
     private func names(_ model: BrowserModel) -> [String] {

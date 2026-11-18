@@ -10,8 +10,10 @@ private final class CallLog {
 
 @MainActor
 @Suite struct BrowserModelCloudTests {
+    private let defaults = TemporaryDefaults()
+
     private func makeStore() -> ViewSettingsStore {
-        ViewSettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        ViewSettingsStore(defaults: defaults.make())
     }
 
     private func item(_ status: CloudStatus?) -> FileItem {

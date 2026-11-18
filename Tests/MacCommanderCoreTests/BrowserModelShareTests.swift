@@ -21,10 +21,12 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
 /// A share named "Media" that may be mounted at `tmp/share` or (after a remount) at `tmp/share-1`.
 @MainActor
 @Suite struct BrowserModelShareTests {
+    private let defaults = TemporaryDefaults()
+
     private let shareID = UUID()
 
     private func makeStore() -> ViewSettingsStore {
-        ViewSettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        ViewSettingsStore(defaults: defaults.make())
     }
 
     /// Resolves paths under any of `mountPoints` to the "Media" share, like `ShareManager.mountPoint(containing:)`.
