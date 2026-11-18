@@ -80,15 +80,21 @@ struct BrowserWindow: View {
             let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
             model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
             if !storedPath.hasPrefix("/") {
-                // New window: starts at home at once; the preferred folder's existence is checked off main.
+                // New window: starts at home at once; the preferred folder is checked off main, then replaces
+                // the start (no Back entry to home), unless the user navigated meanwhile.
                 let prefs = preferences.preferences
                 let home = model.currentURL
                 Task {
                     let folder = await PathQueries.run {
-                        prefs.newWindowFolder(exists: { FileManager.default.fileExists(atPath: $0.path) })
+                        prefs.newWindowFolder(exists: { url in
+                            var isDirectory: ObjCBool = false
+                            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                                && isDirectory.boolValue
+                        })
                     }
-                    // Only if the user hasn't navigated meanwhile.
-                    if folder != home, model.currentURL == home { _ = await model.navigate(to: folder) }
+                    if folder.standardizedFileURL.path != home.standardizedFileURL.path {
+                        await model.replaceStart(with: folder)
+                    }
                 }
             }
             // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.

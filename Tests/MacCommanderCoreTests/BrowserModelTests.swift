@@ -126,6 +126,8 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
 
 @MainActor
 @Suite struct BrowserModelTests {
+    private let defaults = TemporaryDefaults()
+
     /// Makes the first listing of `folder` stale by navigating to `other` before it is checked.
     private func navigateAwayDuringNextListing(of folder: URL, to other: URL, in model: BrowserModel) {
         let fired = Flag()
@@ -137,7 +139,7 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
     }
 
     private func makeStore() -> ViewSettingsStore {
-        ViewSettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        ViewSettingsStore(defaults: defaults.make())
     }
 
     private func names(_ model: BrowserModel) -> [String] {
@@ -158,6 +160,32 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(names(model) == ["alpha.txt", "Beta", "file2.txt", "file10.txt"])
         #expect(model.loadError == nil)
         #expect(model.isLoading == false)
+    }
+
+    @Test func replaceStartHasNoBackEntry() async throws {
+        let dir = try TemporaryDirectory()
+        let home = try dir.folder("home")
+        let preferred = try dir.folder("preferred")
+        try dir.file("preferred/inside.txt")
+        let file = try dir.file("file.txt")
+        let model = BrowserModel(start: home, settings: makeStore())
+        await model.reload()
+
+        #expect(await model.replaceStart(with: file) == false)
+        #expect(await model.replaceStart(with: dir.url.appendingPathComponent("missing")) == false)
+        #expect(samePath(model.currentURL, home))
+
+        #expect(await model.replaceStart(with: preferred))
+        #expect(samePath(model.currentURL, preferred))
+        #expect(model.history.canGoBack == false)
+        #expect(names(model) == ["inside.txt"])
+
+        // Once the user navigated, the start stays.
+        let other = BrowserModel(start: home, settings: makeStore())
+        await other.reload()
+        await other.navigate(to: dir.url)
+        #expect(await other.replaceStart(with: preferred) == false)
+        #expect(samePath(other.currentURL, dir.url))
     }
 
     @Test func navigateToFileOrMissingPathDoesNothing() async throws {

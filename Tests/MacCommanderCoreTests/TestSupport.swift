@@ -29,3 +29,21 @@ final class TemporaryDirectory {
         try? FileManager.default.removeItem(at: url)
     }
 }
+
+/// Hands out `UserDefaults` suites with fresh UUID names and removes them all on deinit. Held by a test
+/// suite instance, which Swift Testing creates per test, so the suites go away after each test.
+final class TemporaryDefaults: @unchecked Sendable {
+    // @unchecked: `names` is only touched under `lock`.
+    private let lock = NSLock()
+    private var names: [String] = []
+
+    func make() -> UserDefaults {
+        let name = UUID().uuidString
+        lock.withLock { names.append(name) }
+        return UserDefaults(suiteName: name)!
+    }
+
+    deinit {
+        for name in names { UserDefaults(suiteName: name)?.removePersistentDomain(forName: name) }
+    }
+}

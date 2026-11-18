@@ -108,8 +108,10 @@ private struct GatedQueries: PathQueriesProvider {
 
 @MainActor
 @Suite struct BrowserModelSearchTests {
+    private let defaults = TemporaryDefaults()
+
     private func makeStore() -> ViewSettingsStore {
-        ViewSettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        ViewSettingsStore(defaults: defaults.make())
     }
 
     private func names(_ model: BrowserModel) -> [String] {
@@ -210,6 +212,43 @@ private struct GatedQueries: PathQueriesProvider {
         #expect(model2.isSearching == false)
         #expect(samePath(model2.currentURL, other))
         #expect(names(model2) == ["inside.txt"])
+    }
+
+    @Test func staleUpdatesDroppedWithoutCancellation() async throws {
+        let (dir, found) = try makeTree(results: ["a1.txt", "a2.txt", "b1.txt"])
+        let gateA = Gate()
+        // Search 0 keeps going whatever happens (it never checks cancellation).
+        let engine = FakeSearchEngine { query, index, continuation in
+            let matching = found.filter { $0.name.hasPrefix(query.text) }
+            if index == 0 {
+                continuation.yield(.results([matching[0]], truncated: false))
+                await gateA.wait()
+            }
+            continuation.yield(.results(matching, truncated: false))
+            continuation.yield(.finished)
+        }
+        let gates = QueryGates()
+        let model = BrowserModel(
+            start: dir.url, settings: makeStore(), searchEngine: engine, pathQueries: GatedQueries(gates: gates))
+        await model.reload()
+        let first = Task { await model.startSearch("a") }
+        #expect(await waitUntil { names(model) == ["a1.txt"] })
+
+        // "b" is typed: its request is current while its folder check hangs, and search 0's task still runs
+        // (it is only cancelled once "b" starts). Search 0's next snapshot must not land.
+        gates.archivePath = dir.url.standardizedFileURL.path
+        let second = Task { await model.startSearch("b") }
+        #expect(await waitUntil { gates.reached == 1 })
+        gateA.open()
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(names(model) == ["a1.txt"])
+
+        gates.gate.open()
+        await second.value
+        #expect(await waitUntil { names(model) == ["b1.txt"] })
+        await first.value
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(names(model) == ["b1.txt"])
     }
 
     @Test func backEndsSearchWithoutMovingHistory() async throws {
@@ -388,6 +427,49 @@ private struct GatedQueries: PathQueriesProvider {
         model.operations.announceChanged(folders: [parent])
         #expect(await waitUntil { names(model) == ["a.txt"] && !model.searchIsRunning })
         #expect(model.selection.isEmpty)
+    }
+
+    @Test func vanishedResultDroppedBeforeRerunYields() async throws {
+        let (dir, found) = try makeTree(results: ["a.txt", "b.txt"])
+        let gate = Gate()
+        let engine = FakeSearchEngine { _, index in
+            // The re-run hangs (a slow network walk) and would still list the deleted file.
+            if index > 0 { await gate.wait() }
+            return [.results(found, truncated: false), .finished]
+        }
+        let model = makeModel(start: dir.url, engine: engine)
+        await model.reload()
+        await model.startSearch("txt")
+        #expect(await waitUntil { names(model) == ["a.txt", "b.txt"] && !model.searchIsRunning })
+        model.selection = [found[0].url]
+
+        try FileManager.default.removeItem(at: found[0].url)
+        model.operations.announceChanged(folders: [found[0].url.deletingLastPathComponent()])
+
+        #expect(await waitUntil { names(model) == ["b.txt"] })
+        #expect(engine.queries.count == 2)
+        #expect(model.searchIsRunning)
+        #expect(model.selection.isEmpty)
+        gate.open()
+    }
+
+    @Test func renamedResultShowsNewNameAtOnce() async throws {
+        let (dir, found) = try makeTree(results: ["a.txt", "b.txt"])
+        let gate = Gate()
+        let engine = FakeSearchEngine { _, index in
+            if index > 0 { await gate.wait() }
+            return [.results(found, truncated: false), .finished]
+        }
+        let model = makeModel(start: dir.url, engine: engine)
+        await model.reload()
+        await model.startSearch("txt")
+        #expect(await waitUntil { names(model) == ["a.txt", "b.txt"] && !model.searchIsRunning })
+
+        _ = try await model.rename(found[0].url, to: "c.txt")
+
+        #expect(names(model) == ["b.txt", "c.txt"])
+        #expect(engine.queries.count == 2)
+        gate.open()
     }
 
     @Test func createInResultFolderRerunsSearch() async throws {

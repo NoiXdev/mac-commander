@@ -217,6 +217,25 @@ public final class BrowserModel {
         return await navigate(to: requested, anyBrowsable: false, openFallback: false, generation: beginNavigation())
     }
 
+    /// A new window's preferred folder, known only after the window opened at a stand-in (home): replaces the
+    /// start of the history instead of visiting it, so Back doesn't lead to the stand-in. Ignored (false) when
+    /// `url` isn't a folder, or once anything was navigated: history entries exist, a search is shown, or a
+    /// navigation request was made meanwhile. Checks `url` off the main actor, like `navigate`.
+    @discardableResult
+    public func replaceStart(with url: URL) async -> Bool {
+        let historyAtStart = history
+        let generation = navigationGeneration
+        guard !historyAtStart.canGoBack, !historyAtStart.canGoForward, !isSearching else { return false }
+        func untouched() -> Bool { generation == navigationGeneration && history == historyAtStart && !isSearching }
+        guard await queries.info(url).isDirectory, untouched() else { return false }
+        let target = await queries.resolvingSymlink(url)
+        guard untouched() else { return false }
+        history = NavigationHistory(start: target)
+        clearSelection()
+        await load()
+        return true
+    }
+
     /// Starts a navigation request; any request started earlier is superseded from now on.
     private func beginNavigation() -> Int {
         navigationGeneration += 1
@@ -435,7 +454,9 @@ public final class BrowserModel {
     /// Starts `query`, replacing any search shown. `keepingResults`: a re-run of the shown search (after a
     /// change), which keeps its results, truncation flag and selection until the new search has as many results
     /// or finishes: engines send growing snapshots, and a partial first one must not replace the full list.
-    private func runSearch(_ query: SearchQuery, keepingResults: Bool) -> Task<Void, Never> {
+    /// `pruning`: shown results checked first (one blocking batch); the ones gone are dropped at once, so a
+    /// trashed or moved result doesn't stay listed until a slow re-run catches up.
+    private func runSearch(_ query: SearchQuery, keepingResults: Bool, pruning: [URL] = []) -> Task<Void, Never> {
         searchGeneration += 1
         let generation = searchGeneration
         searchTask?.cancel()
@@ -450,8 +471,11 @@ public final class BrowserModel {
             clearSelection()
         }
         let stream = searchEngine.search(query, includeHidden: settings.settings.showHiddenFiles)
-        let shownCount = keepingResults ? searchResults.count : 0
         let task = Task { [weak self] in
+            if !pruning.isEmpty {
+                guard await self?.dropVanishedResults(pruning, generation: generation) == true else { return }
+            }
+            guard let shownCount = self.map({ keepingResults ? $0.searchResults.count : 0 }) else { return }
             // A re-run's snapshot held back until it catches up with the shown results (or the search finishes).
             var heldBack: (found: [FileItem], truncated: Bool)?
             var caughtUp = !keepingResults
@@ -484,10 +508,31 @@ public final class BrowserModel {
         return task
     }
 
-    /// Runs the shown search again (same query), keeping its results until the new ones arrive.
-    private func rerunSearch() {
+    /// Runs the shown search again (same query), keeping its results until the new ones arrive. Results whose
+    /// parent is one of `changedFolders` are checked first, and dropped when gone.
+    private func rerunSearch(changedFolders: [URL] = []) {
         guard let search else { return }
-        _ = runSearch(search, keepingResults: true)
+        let changed = Set(changedFolders.map { $0.standardizedFileURL.path })
+        let candidates = searchResults.map(\.url).filter {
+            changed.contains($0.deletingLastPathComponent().standardizedFileURL.path)
+        }
+        _ = runSearch(search, keepingResults: true, pruning: candidates)
+    }
+
+    /// Drops the results among `urls` that no longer exist (lstat; only "no such file" counts, so an
+    /// unreachable share keeps its rows). False when a newer search request came first.
+    private func dropVanishedResults(_ urls: [URL], generation: Int) async -> Bool {
+        let gone = await PathQueries.run { () -> Set<String> in
+            Set(urls.filter { url in
+                var info = stat()
+                return lstat(url.path, &info) != 0 && (errno == ENOENT || errno == ENOTDIR)
+            }.map { $0.standardizedFileURL.path })
+        }
+        guard generation == searchGeneration else { return false }
+        guard !gone.isEmpty else { return true }
+        searchResults.removeAll { gone.contains($0.url.standardizedFileURL.path) }
+        await presentSearch(generation: generation)
+        return generation == searchGeneration
     }
 
     /// Sorts `searchResults` off the main actor and publishes them, unless something newer started.
@@ -563,8 +608,16 @@ public final class BrowserModel {
             selection.insert(renamed)
         }
         if isSearching {
-            // A rename posts no folder change: show the renamed result (or drop it, if it no longer matches).
+            // Shows the new name at once, then re-runs (a rename posts no folder change), which drops the
+            // result if it no longer matches.
+            let reloaded = await PathQueries.run { try? FileItem.load(renamed) }
+            guard isSearching else { return renamed }
+            let oldPath = url.standardizedFileURL.path
+            if let reloaded, let index = searchResults.firstIndex(where: { $0.url.standardizedFileURL.path == oldPath }) {
+                searchResults[index] = reloaded
+            }
             rerunSearch()
+            await presentSearch(generation: searchGeneration)
             return renamed
         }
         guard await reloadIfStillShowing(url.deletingLastPathComponent(), since: historyAtStart) else {
@@ -1128,7 +1181,7 @@ public final class BrowserModel {
     /// While a search is shown, a change that may touch its results re-runs it instead (tag edits, operations).
     private func foldersDidChange(_ folders: [URL]) async {
         if let search {
-            if searchIsAffected(by: folders, query: search) { rerunSearch() }
+            if searchIsAffected(by: folders, query: search) { rerunSearch(changedFolders: folders) }
             return
         }
         guard folders.contains(where: { isCurrentDirectory($0) }) else { return }
