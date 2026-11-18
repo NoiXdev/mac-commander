@@ -10,11 +10,6 @@ struct GeneralSettings: View {
     /// The Settings window, so the folder panel can be a sheet on it.
     private let windowState = State(initialValue: WindowBox())
 
-    /// Opens the Full Disk Access pane of System Settings. A placeholder until the onboarding alert (Task 10)
-    /// is shared with this button.
-    static let fullDiskAccessURL = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!
-
     var body: some View {
         Form {
             Section {
@@ -49,7 +44,7 @@ struct GeneralSettings: View {
             Section {
                 LabeledContent(String(localized: "Full Disk Access:")) {
                     Button(String(localized: "Full Disk Access…")) {
-                        PathQueries.openWithDefaultApp(Self.fullDiskAccessURL)
+                        FullDiskAccessHint.present(preferences: preferences)
                     }
                 }
             }

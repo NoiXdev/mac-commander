@@ -7,7 +7,8 @@ struct MacCommanderApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     // The App value is created once, so plain properties are enough (no `@State`).
     private let settings = ViewSettingsStore()
-    private let preferences = PreferencesStore()
+    /// Owned by the app delegate, which needs it at launch (the Full Disk Access hint).
+    private var preferences: PreferencesStore { appDelegate.preferences }
     private let favorites = FavoritesStore()
     private let operations = FileOperationCenter()
     private let clipboard = FileClipboard()
@@ -55,12 +56,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let quitTimeout: Duration = .seconds(2)
 
     let shares = NetworkShares()
+    let preferences = PreferencesStore()
     /// Set once quitting was answered (the work finished or the timeout passed).
     private var didReplyToTerminate = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { await ArchivePreviewCache.shared.purge() }
         shares.start()
+        FullDiskAccessHint.enqueueIfNeeded(preferences: preferences)
         TagCatalog.shared.start(standard: TagMenu.standardTags())
     }
 
@@ -116,8 +119,7 @@ final class NetworkShares {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = String(localized: "MacCommander can’t save your network shares: \(error)")
-            // After launch finished, so the alert doesn't hold up the first window.
-            Task { alert.runModal() }
+            LaunchAlertQueue.shared.enqueue { alert.runModal() }
         }
         prompter.start()
         monitor.start()
@@ -170,7 +172,7 @@ final class RememberSharePrompter {
     private func presentNext() {
         guard isRunning, !isPresenting, let mounted = manager.rememberPrompts.first else { return }
         isPresenting = true
-        Task {
+        LaunchAlertQueue.shared.enqueue { [self] in
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = String(localized: "Remember this share?")
