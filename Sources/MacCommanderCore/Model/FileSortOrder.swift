@@ -58,7 +58,19 @@ public struct FileSortOrder: Codable, Equatable, Sendable {
         case .dateAdded: Self.compare(lhs.dateAdded ?? .distantPast, rhs.dateAdded ?? .distantPast)
         case .size: Self.compare(lhs.size ?? 0, rhs.size ?? 0)
         case .kind: lhs.kind.localizedStandardCompare(rhs.kind)
-        case .tags: .orderedSame
+        case .tags: Self.compareTags(lhs.tags, rhs.tags)
+        }
+    }
+
+    /// Joined names, localized-standard order; untagged items sort after tagged ones.
+    private static func compareTags(_ lhs: [FileTag], _ rhs: [FileTag]) -> ComparisonResult {
+        switch (lhs.isEmpty, rhs.isEmpty) {
+        case (true, true): return .orderedSame
+        case (true, false): return .orderedDescending
+        case (false, true): return .orderedAscending
+        case (false, false):
+            return lhs.map(\.name).joined(separator: ", ")
+                .localizedStandardCompare(rhs.map(\.name).joined(separator: ", "))
         }
     }
 

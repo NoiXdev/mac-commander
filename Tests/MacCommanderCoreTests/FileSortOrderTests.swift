@@ -5,17 +5,26 @@ import Testing
 
 @Suite struct FileSortOrderTests {
     private func item(
-        _ name: String, directory: Bool = false, size: Int64? = nil, path: String? = nil
+        _ name: String, directory: Bool = false, size: Int64? = nil, path: String? = nil,
+        tags: [String] = []
     ) -> FileItem {
-        FileItem(
+        var item = FileItem(
             url: URL(fileURLWithPath: "/virtual/\(path ?? name)"), name: name,
             isDirectory: directory, isPackage: false, isHidden: false,
             size: directory ? nil : size, dateModified: nil, dateCreated: nil, dateAdded: nil,
             kind: "")
+        item.tags = tags.map { FileTag(name: $0, color: .none) }
+        return item
     }
 
     private func names(_ order: FileSortOrder, _ items: [FileItem]) -> [String] {
         order.sorted(items).map(\.name)
+    }
+
+    @Test func sortsByTags() {
+        let items = [item("x", tags: ["B"]), item("y", tags: ["A"]), item("z")]
+        let order = FileSortOrder(column: .tags, ascending: true, foldersOnTop: false)
+        #expect(names(order, items) == ["y", "x", "z"])
     }
 
     @Test func sortsNaturally() {
