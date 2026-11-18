@@ -11,8 +11,10 @@ struct ItemInfo: Sendable {
     var created: Date?
     var modified: Date?
     var parent: String
+    var tags: [FileTag]
 
-    /// One `resourceValues` call; can stall on network volumes, so it runs on the blocking-I/O queue.
+    /// One `resourceValues` call and the tag attribute; can stall on network volumes, so it runs on the
+    /// blocking-I/O queue.
     static func load(_ url: URL) async -> ItemInfo {
         await PathQueries.run { loadNow(url) }
     }
@@ -29,7 +31,8 @@ struct ItemInfo: Sendable {
             fileSize: values?.fileSize.map(Int64.init),
             created: values?.creationDate,
             modified: values?.contentModificationDate,
-            parent: url.deletingLastPathComponent().path)
+            parent: url.deletingLastPathComponent().path,
+            tags: TagStore.readNow(url))
     }
 }
 
@@ -72,6 +75,7 @@ struct InfoWindow: View {
                 row(String(localized: "Created"), info?.created.map { $0.formatted(Self.dateStyle) } ?? "")
                 row(String(localized: "Modified"), info?.modified.map { $0.formatted(Self.dateStyle) } ?? "")
                 row(String(localized: "Where"), info?.parent ?? "")
+                tagsRow
             }
         }
         .padding(20)
@@ -89,6 +93,71 @@ struct InfoWindow: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// Chips with a remove button, then "+" for the Tags menu. Every edit is written, then the info reloaded.
+    private var tagsRow: some View {
+        GridRow(alignment: .firstTextBaseline) {
+            Text(String(localized: "Tags"))
+                .foregroundStyle(.secondary)
+                .gridColumnAlignment(.trailing)
+            TagChipFlow(spacing: 4) {
+                ForEach(info?.tags ?? [], id: \.self) { tag in
+                    tagChip(tag)
+                }
+                Button {
+                    showTagMenu()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help(String(localized: "Add or remove tags"))
+                .disabled(info == nil)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func tagChip(_ tag: FileTag) -> some View {
+        HStack(spacing: 4) {
+            Image(nsImage: TagMenu.dotImage(tag.color))
+            Text(tag.name)
+            Button {
+                Task { await editTags(.remove(tag)) }
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(String(localized: "Remove “\(tag.name)”"))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(Capsule().fill(Color.secondary.opacity(0.15)))
+    }
+
+    /// The Tags submenu as a pop-up menu at the mouse.
+    private func showTagMenu() {
+        guard let info else { return }
+        let item = TagMenu.make(for: [url], current: [info.tags], window: NSApp.keyWindow) {
+            Task { await reloadInfo() }
+        }
+        guard let menu = item.submenu else { return }
+        item.submenu = nil
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    private func editTags(_ change: TagChange) async {
+        do {
+            try await TagStore.setTags(change, on: [url])
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+        await reloadInfo()
+    }
+
+    private func reloadInfo() async {
+        info = await ItemInfo.load(url)
     }
 
     private func load() async {
@@ -127,5 +196,45 @@ struct InfoWindow: View {
 
     private static func fileSizeText(_ bytes: Int64) -> String {
         "\(byteString(bytes)) (\(bytes.formatted()) bytes)"
+    }
+}
+
+/// Lays its subviews out left to right, wrapping to a new line when the width runs out.
+private struct TagChipFlow: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let frames = frames(for: subviews, width: proposal.width ?? .infinity)
+        let width = frames.map(\.maxX).max() ?? 0
+        let height = frames.map(\.maxY).max() ?? 0
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let frames = frames(for: subviews, width: bounds.width)
+        for (subview, frame) in zip(subviews, frames) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    private func frames(for subviews: Subviews, width: CGFloat) -> [CGRect] {
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += lineHeight + spacing
+                lineHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + spacing
+            lineHeight = max(lineHeight, size.height)
+        }
+        return frames
     }
 }

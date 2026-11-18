@@ -210,6 +210,7 @@ extension FileListController: NSOutlineViewDelegate {
                 outlineView.makeView(withIdentifier: .nameCell, owner: self) as? FileNameCellView
                 ?? FileNameCellView()
             cell.textField?.stringValue = node.item.name
+            cell.showTags(node.item.tags)
             if isInArchive {
                 // Entries inside an archive don't exist on disk: the type icon is all there is.
                 cell.imageView?.image = icons.placeholder(for: node.item)

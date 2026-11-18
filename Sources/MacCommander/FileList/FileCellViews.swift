@@ -15,12 +15,15 @@ extension NSUserInterfaceItemIdentifier {
     }
 }
 
-/// Name column: icon + name. `hasFileIcon` is false while a type placeholder is shown.
+/// Name column: icon + name + tag dots. `hasFileIcon` is false while a type placeholder is shown.
 final class FileNameCellView: NSTableCellView {
     var hasFileIcon = false
     private(set) var isEditing = false
     /// Active while editing: the field spans the cell instead of hugging the text.
     private var editingTrailing: NSLayoutConstraint?
+    private let tagDots = TagDotsView()
+    /// The gap between the name and the dots; inactive while editing (the dots are hidden then).
+    private var dotsGap: NSLayoutConstraint?
 
     init() {
         super.init(frame: .zero)
@@ -33,10 +36,18 @@ final class FileNameCellView: NSTableCellView {
         label.lineBreakMode = .byTruncatingMiddle
         label.cell?.truncatesLastVisibleLine = true
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tagDots.translatesAutoresizingMaskIntoConstraints = false
+        tagDots.setContentHuggingPriority(.required, for: .horizontal)
+        tagDots.setContentCompressionResistancePriority(.required, for: .horizontal)
         addSubview(icon)
         addSubview(label)
+        addSubview(tagDots)
         imageView = icon
         textField = label
+        let gap = tagDots.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 0)
+        // Weaker than the label's hugging: the dots follow the text instead of stretching the label.
+        let dotsAtEnd = tagDots.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
+        dotsAtEnd.priority = NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1)
         NSLayoutConstraint.activate([
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -45,8 +56,19 @@ final class FileNameCellView: NSTableCellView {
             label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 5),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            gap,
+            dotsAtEnd,
+            tagDots.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
+            tagDots.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
+        dotsGap = gap
         editingTrailing = label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
+    }
+
+    /// Shows the colored tags after the name (at most three).
+    func showTags(_ tags: [FileTag]) {
+        tagDots.show(tags)
+        dotsGap?.constant = tagDots.colors.isEmpty ? 0 : 4
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -62,7 +84,15 @@ final class FileNameCellView: NSTableCellView {
         label.focusRingType = editing ? .exterior : .none
         label.lineBreakMode = editing ? .byClipping : .byTruncatingMiddle
         label.cell?.isScrollable = editing
-        editingTrailing?.isActive = editing
+        tagDots.isHidden = editing
+        // Deactivate before activating so the two never conflict.
+        if editing {
+            dotsGap?.isActive = false
+            editingTrailing?.isActive = true
+        } else {
+            editingTrailing?.isActive = false
+            dotsGap?.isActive = true
+        }
     }
 
     override func prepareForReuse() {
@@ -138,7 +168,7 @@ enum FileListFormat {
         case .dateAdded: date(item.dateAdded)
         case .size: item.isDirectory ? "--" : item.size.map { sizeFormatter.string(fromByteCount: $0) } ?? "--"
         case .kind: item.kind
-        case .tags: ""
+        case .tags: item.tags.map(\.name).joined(separator: ", ")
         }
     }
 

@@ -150,6 +150,11 @@ enum FileContextMenu {
             menu.addItem(.separator())
         }
 
+        menu.addItem(TagMenu.make(for: urls, current: all.map(\.tags), window: window) {
+            tagsDidChange(in: urls, model: model)
+        })
+        menu.addItem(.separator())
+
         menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls, open: openInfo) })
         menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(all) })
         menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
@@ -209,6 +214,15 @@ enum FileContextMenu {
                 await FileActions.extract(entries(), from: archive, into: destination, model: model, window: window)
             }
         })
+    }
+
+    /// The folder watcher only sees changes to the folder itself, not to its files' extended attributes,
+    /// so a tag change is announced like a file operation's: the model re-lists the current folder (local
+    /// or network) and the list re-lists the affected inline-expanded subfolders.
+    private static func tagsDidChange(in urls: [URL], model: BrowserModel) {
+        let folders = urls.map { $0.deletingLastPathComponent().standardizedFileURL }
+        NotificationCenter.default.post(
+            name: FileOperationCenter.foldersDidChange, object: model.operations, userInfo: ["folders": folders])
     }
 
     /// Paste into `destination`; disabled while the clipboard is empty.
