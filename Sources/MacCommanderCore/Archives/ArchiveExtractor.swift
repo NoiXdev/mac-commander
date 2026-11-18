@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Synchronization
 
 /// Extraction runs in two steps. First, bsdtar unpacks the requested entries into a private staging folder
 /// next to the destination. Then the transfer engine moves them into place, which brings conflicts,
@@ -14,6 +15,10 @@ import Foundation
 public enum ArchiveExtractor {
     static let bsdtar = URL(fileURLWithPath: "/usr/bin/bsdtar")
     static let stagingPrefix = ".mc-partial-"
+
+    /// Test hook: called with each new staging folder right after it is created, before bsdtar runs.
+    /// Called for every extraction in the process, so a hook must ignore staging folders it doesn't expect.
+    static let afterStagingCreatedHook = Mutex<(@Sendable (URL) -> Void)?>(nil)
 
     /// Extracts `entries` (paths inside the archive, "" = everything) into a new hidden staging folder
     /// `<destination>/.mc-partial-<UUID>` and returns the staged top-level items: for each requested entry
@@ -38,6 +43,7 @@ public enum ArchiveExtractor {
         try fileManager.createDirectory(
             at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         do {
+            afterStagingCreatedHook.withLock { $0 }?(staging)
             var arguments = [
                 "-x", "-f", archive.path, "-C", staging.path, "--no-same-owner",
                 // Always pass a passphrase: without one bsdtar prompts "Enter passphrase:" forever.

@@ -102,7 +102,13 @@ public final class FileUndoStack {
 
     private func undoNext() async -> UndoOutcome {
         guard let record = records.popLast() else { return UndoOutcome(record: nil, result: .failure(.nothingToUndo)) }
-        if case .failure(let error) = await Self.reverse(record.action, trash: trash) {
+        let action = record.action
+        let trash = trash
+        // On its own thread: reversing moves and trashes items, possibly on a dead share.
+        let reversed = await SerialQueueExecutor.withOwnThread(label: "MacCommander op undo") {
+            await Self.reverse(action, trash: trash)
+        }
+        if case .failure(let error) = reversed {
             return UndoOutcome(record: record, result: .failure(error))
         }
         let restored: [URL]

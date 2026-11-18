@@ -338,32 +338,44 @@ struct ArchiveExtractorTests {
         #expect(quarantine(clean.items[0]) == nil)
     }
 
+    /// Cancels while the staging folder exists. The hook holds the extraction right after staging is created
+    /// (it runs on the operation's own thread, so blocking there starves nothing) until the test has
+    /// cancelled. Polling for the folder was flaky: it exists for only ~15 ms, and under a full parallel run
+    /// the poll loop went up to ~700 ms between polls, so the whole extraction often finished unseen.
     @Test func cancelRemovesStaging() async throws {
         let f = try ExtractFixture()
-        let src = try f.tmp.folder("big")
-        let random = try #require(FileHandle(forReadingAtPath: "/dev/urandom"))
-        for index in 0..<3 {
-            try random.readData(ofLength: 10_000_000).write(to: src.appendingPathComponent("r\(index).bin"))
-        }
-        let archive = f.tmp.url.appendingPathComponent("big.tgz")
-        try ArchiveFixtures.run("/usr/bin/bsdtar", ["-c", "-z", "-f", archive.path, "-C", src.path, "."])
-
+        let zip = try ArchiveFixtures.makeArchive(imagesZip, format: "zip", in: f.tmp)
         let center = f.center
-        let dst = f.dst
-        let task = Task { @MainActor in
-            try await center.extractAll(archive, into: dst, resolver: failOnConflict)
-        }
-        // Cancel as soon as the staging folder exists, i.e. while bsdtar is starting or running.
-        let deadline = ContinuousClock.now + .seconds(5)
-        while !f.dstNames.contains(where: { $0.hasPrefix(".mc-partial-") }) {
-            guard ContinuousClock.now < deadline else {
-                Issue.record("staging never appeared")
-                task.cancel()
-                return
+        let destination = f.dst
+        let dst = destination.standardizedFileURL.path
+        let (created, createdSink) = AsyncStream.makeStream(of: URL.self)
+        let proceed = DispatchSemaphore(value: 0)
+        ArchiveExtractor.afterStagingCreatedHook.withLock {
+            $0 = { staging in
+                guard staging.deletingLastPathComponent().standardizedFileURL.path == dst else { return }
+                createdSink.yield(staging)
+                // Bounded, so a broken test can't hang the run.
+                _ = proceed.wait(timeout: .now() + 30)
             }
-            try await Task.sleep(for: .microseconds(200))
         }
+        defer { ArchiveExtractor.afterStagingCreatedHook.withLock { $0 = nil } }
+
+        let task = Task { @MainActor in
+            try await center.extractAll(zip, into: destination, resolver: failOnConflict)
+        }
+        // Ends the stream if the extraction finishes without ever reaching the hook.
+        Task {
+            _ = try? await task.value
+            createdSink.finish()
+        }
+        var iterator = created.makeAsyncIterator()
+        guard let staging = await iterator.next() else {
+            Issue.record("staging was never created")
+            return
+        }
+        #expect(f.dstNames == [staging.lastPathComponent])
         task.cancel()
+        proceed.signal()
 
         await #expect(throws: CancellationError.self) { _ = try await task.value }
         #expect(f.dstNames.isEmpty)

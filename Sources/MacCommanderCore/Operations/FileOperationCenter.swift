@@ -12,7 +12,7 @@ public struct FileOperationStatus: Identifiable, Sendable, Equatable {
 
 /// Runs file operations app-wide: publishes their progress, records undo and announces changed folders.
 ///
-/// Every operation runs in its own `Task` (off the main actor where it touches the disk), listed in
+/// Every operation runs in its own `Task` on its own thread (`SerialQueueExecutor`), listed in
 /// `operations` while it runs. When it ends, completed work is pushed as one undo record — including the
 /// completed part of a stopped, cancelled or failed transfer — and `foldersDidChange` is posted.
 @MainActor @Observable
@@ -61,7 +61,8 @@ public final class FileOperationCenter {
         let trash = trashItem
         let sameVolume = sameVolume
         let allowClone = allowClone
-        let result = await run(title: Self.transferTitle(sources, into: destination, mode: mode)) { progress in
+        let title = Self.transferTitle(sources, into: destination, mode: mode)
+        let result = await run(kind: "transfer", title: title) { progress in
             await FileTransfer.run(
                 sources, into: destination, mode: mode, resolver: resolver, trash: trash, sameVolume: sameVolume,
                 allowClone: allowClone, progress: progress)
@@ -94,7 +95,7 @@ public final class FileOperationCenter {
         let sameVolume = sameVolume
         let allowClone = allowClone
         let plan = groups
-        let result = await run(title: Self.duplicateTitle(items)) { progress in
+        let result = await run(kind: "duplicate", title: Self.duplicateTitle(items)) { progress in
             var merged = TransferResult(completed: [], replaced: [], skipped: [], outcome: .finished)
             for group in plan {
                 // Copying into the item's own folder always picks a free copy name; there are no conflicts.
@@ -122,7 +123,7 @@ public final class FileOperationCenter {
 
     public func trash(_ items: [URL]) async -> TrashResult {
         let trash = trashItem
-        let result = await run(title: Self.trashTitle(items)) { _ in
+        let result = await run(kind: "trash", title: Self.trashTitle(items)) { _ in
             await Trasher.trash(items, using: trash)
         }
         if !result.trashed.isEmpty {
@@ -134,7 +135,7 @@ public final class FileOperationCenter {
 
     /// Zips `items` (all in one folder) next to them; see `Compressor.compress`.
     public func compress(_ items: [URL]) async throws -> URL {
-        let result = await run(title: Self.compressTitle(items)) { _ -> Result<URL, any Error> in
+        let result = await run(kind: "compress", title: Self.compressTitle(items)) { _ -> Result<URL, any Error> in
             do {
                 return .success(try await Compressor.compress(items))
             } catch {
@@ -208,7 +209,7 @@ public final class FileOperationCenter {
         let trash = trashItem
         let sameVolume = sameVolume
         let allowClone = allowClone
-        let outcome = await run(title: title) { progress -> Result<TransferResult, any Error> in
+        let outcome = await run(kind: "extract", title: title) { progress -> Result<TransferResult, any Error> in
             let staged: (staging: URL, items: [URL])
             do {
                 staged = try await stage()
@@ -287,9 +288,12 @@ public final class FileOperationCenter {
     }
 
     /// Lists a status, runs `work` in its own task (cancellable by id, and by cancelling the caller), applies
-    /// the final progress and removes the status.
+    /// the final progress and removes the status. `work` runs on its own thread
+    /// (`SerialQueueExecutor`, labelled "MacCommander op <kind>"), never on the cooperative pool: on a dead
+    /// share its file-system calls can block for minutes.
     private func run<T: Sendable>(
-        title: String, _ work: @escaping @Sendable (@escaping @Sendable (TransferProgress) -> Void) async -> T
+        kind: String, title: String,
+        _ work: @escaping @Sendable (@escaping @Sendable (TransferProgress) -> Void) async -> T
     ) async -> T {
         let id = UUID()
         let throttle = ProgressThrottle()
@@ -306,7 +310,8 @@ public final class FileOperationCenter {
                 Task { @MainActor in await self?.flush(id, throttle) }
             }
         }
-        let task = Task { await work(report) }
+        let label = "MacCommander op \(kind)"
+        let task = Task { await SerialQueueExecutor.withOwnThread(label: label) { await work(report) } }
         cancellers[id] = { task.cancel() }
 
         let value = await withTaskCancellationHandler {

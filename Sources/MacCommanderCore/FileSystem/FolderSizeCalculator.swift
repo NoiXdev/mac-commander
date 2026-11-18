@@ -21,7 +21,14 @@ public enum FolderSizeCalculator {
     }
 
     /// Test hook: `onItem` gets the running item count, once per enumerated item, before the cancellation check.
+    /// The walk runs on its own thread (`SerialQueueExecutor`): a folder on a dead share can block it for minutes.
     @concurrent static func size(of url: URL, onItem: (@Sendable (Int) -> Void)?) async throws -> FolderSize {
+        try await SerialQueueExecutor.withOwnThread(label: "MacCommander op folder size") {
+            try await walk(url, onItem: onItem)
+        }
+    }
+
+    @concurrent private static func walk(_ url: URL, onItem: (@Sendable (Int) -> Void)?) async throws -> FolderSize {
         try Task.checkCancellation()
         let root = url.resolvingSymlinksInPath()
         let keys: [URLResourceKey] = [.fileSizeKey, .isRegularFileKey]
