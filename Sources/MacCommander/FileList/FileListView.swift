@@ -69,7 +69,7 @@ struct LoadErrorView: View {
         } actions: {
             if isPermissionError, let url = Self.privacySettingsURL {
                 Button(String(localized: "Open Privacy Settings")) {
-                    NSWorkspace.shared.open(url)
+                    PathQueries.openWithDefaultApp(url)
                 }
             }
             if needsPassword, let enterPassword {

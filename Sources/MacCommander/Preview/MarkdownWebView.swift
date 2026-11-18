@@ -140,7 +140,7 @@ struct MarkdownWebView: NSViewRepresentable {
         private func openLink(_ url: URL, in webView: WKWebView) {
             switch url.scheme?.lowercased() {
             case "http", "https", "mailto":
-                NSWorkspace.shared.open(url)
+                PathQueries.openWithDefaultApp(url)
             case PreviewResourceURL.scheme:
                 guard let target = PreviewResourceURL.fileURL(for: url) else { return }
                 if let fragment = url.fragment(percentEncoded: true), !fragment.isEmpty, isShownFile(target),
