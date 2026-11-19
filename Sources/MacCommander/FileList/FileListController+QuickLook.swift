@@ -79,7 +79,7 @@ extension FileListController {
         if row < 0 {
             return FileContextMenu.forEmptySpace(
                 model: model, settings: settings, clipboard: clipboard, window: outlineView.window,
-                openInfo: openInfo)
+                openInfo: openInfo, terminalApp: terminalApp)
         }
         let items = actionItems(forClickedRow: row)
         // The menu is about to focus this list, which activates its pane: activate it now, so Copy/Move to
@@ -87,7 +87,7 @@ extension FileListController {
         if paneCommands != nil { onActivate?() }
         return FileContextMenu.forItems(
             items.topLevel, all: items.all, model: model, settings: settings, clipboard: clipboard,
-            window: outlineView.window, openInfo: openInfo, paneCommands: paneCommands,
+            window: outlineView.window, openInfo: openInfo, terminalApp: terminalApp, paneCommands: paneCommands,
             archiveQuickLook: { [weak self] in self?.showArchiveQuickLook() })
     }
 }

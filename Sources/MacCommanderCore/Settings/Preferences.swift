@@ -15,6 +15,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Tag names removed from the sidebar's Tags section (still offered in menus). Compare case-insensitively.
     public var hiddenTags: Set<String> = []
     public var didShowFullDiskAccessHint = false
+    /// The app for "Open in Terminal"; nil means no choice yet (see `TerminalApp.effective`).
+    public var terminalApp: TerminalApp?
     /// Whether windows may show a second folder pane (View ▸ Dual Pane).
     public var dualPaneEnabled = false
 
@@ -33,7 +35,7 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case newFileName, newWindowFolderPath, hiddenSidebarSections, hiddenTags, didShowFullDiskAccessHint
-        case dualPaneEnabled
+        case dualPaneEnabled, terminalApp
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -45,6 +47,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         didShowFullDiskAccessHint =
             (try? c.decodeIfPresent(Bool.self, forKey: .didShowFullDiskAccessHint)) ?? d.didShowFullDiskAccessHint
         dualPaneEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .dualPaneEnabled)) ?? d.dualPaneEnabled
+        // An unknown app name (say from a newer version) means no choice.
+        terminalApp = try? c.decodeIfPresent(TerminalApp.self, forKey: .terminalApp)
         // Unknown section names are dropped, the rest kept.
         var sections: Set<SidebarSection> = []
         if var raw = try? c.nestedUnkeyedContainer(forKey: .hiddenSidebarSections) {

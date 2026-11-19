@@ -29,6 +29,27 @@ enum FileActions {
         for url in urls { open(url) }
     }
 
+    /// Opens a shell in each of `folders` with the chosen terminal app (`TerminalApp.effective`): the folder is
+    /// handed to the app like a document, so no Automation permission is needed.
+    static func openInTerminal(_ folders: [URL], chosen: TerminalApp?, window: NSWindow?) {
+        guard !folders.isEmpty else { return }
+        let workspace = NSWorkspace.shared
+        let app = TerminalApp.effective(chosen: chosen) {
+            workspace.urlForApplication(withBundleIdentifier: $0.bundleIdentifier) != nil
+        }
+        guard let appURL = workspace.urlForApplication(withBundleIdentifier: app.bundleIdentifier) else {
+            showAlert([String(localized: "Couldn’t open \(app.displayName): the app isn’t installed.")], window: window)
+            return
+        }
+        workspace.open(folders, withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+            guard let error else { return }
+            let message = error.localizedDescription
+            Task { @MainActor in
+                showAlert([String(localized: "Couldn’t open \(app.displayName): \(message)")], window: window)
+            }
+        }
+    }
+
     /// Selects `urls` in a Finder window.
     static func revealInFinder(_ urls: [URL]) {
         guard !urls.isEmpty else { return }

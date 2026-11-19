@@ -33,6 +33,7 @@ struct FileListView: NSViewControllerRepresentable {
     /// The list's pane is active; only an active pane's list takes keyboard focus when it appears.
     var isActive = true
     @Environment(\.openWindow) private var openWindow
+    @Environment(PreferencesStore.self) private var preferences
 
     func makeNSViewController(context: Context) -> FileListController {
         let controller = FileListController(
@@ -40,6 +41,7 @@ struct FileListView: NSViewControllerRepresentable {
             openInfo: { [openWindow] url in openWindow(id: "info", value: url) })
         controller.reconnect = reconnect
         controller.signIn = signIn
+        controller.terminalApp = { [preferences] in preferences.preferences.terminalApp }
         controller.onActivate = onActivate
         controller.onSwitchPane = onSwitchPane
         controller.paneCommands = paneCommands

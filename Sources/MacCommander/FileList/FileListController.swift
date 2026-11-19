@@ -12,6 +12,8 @@ final class FileListController: NSViewController {
     let clipboard: FileClipboard
     /// Opens the info window for a URL (SwiftUI's `openWindow`, supplied by `FileListView`).
     var openInfo: (URL) -> Void
+    /// The terminal chosen in Settings, for "Open in Terminal" (supplied by `FileListView`).
+    var terminalApp: () -> TerminalApp? = { nil }
     /// "Reconnect" for a dropped network share (supplied by `FileListView`); nil hides the button.
     var reconnect: ((DisconnectedShare) -> Void)? {
         didSet { if isViewLoaded, case .shareDisconnected? = model.loadError { applyLoadError() } }

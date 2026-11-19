@@ -27,7 +27,7 @@ enum FileContextMenu {
     /// Right-click on empty space (spec 2.2.3).
     static func forEmptySpace(
         model: BrowserModel, settings: ViewSettingsStore, clipboard: FileClipboard, window: NSWindow?,
-        openInfo: @escaping (URL) -> Void
+        openInfo: @escaping (URL) -> Void, terminalApp: @escaping () -> TerminalApp?
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -83,6 +83,10 @@ enum FileContextMenu {
         menu.addItem(.separator())
         let folderURL = model.currentURL
         menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL], open: openInfo) })
+        // During a search the current folder is hidden behind the results, but it's still where the user is.
+        menu.addItem(ActionMenuItem(String(localized: "Open in Terminal")) {
+            FileActions.openInTerminal([folderURL], chosen: terminalApp(), window: window)
+        })
         return menu
     }
 
@@ -92,7 +96,7 @@ enum FileContextMenu {
     static func forItems(
         _ items: [FileItem], all: [FileItem], model: BrowserModel, settings: ViewSettingsStore,
         clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void,
-        paneCommands: PaneCommands? = nil, archiveQuickLook: @escaping @MainActor () -> Void
+        terminalApp: @escaping () -> TerminalApp?, paneCommands: PaneCommands? = nil, archiveQuickLook: @escaping @MainActor () -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -170,6 +174,10 @@ enum FileContextMenu {
         menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls, open: openInfo) })
         menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(all) })
         menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
+        let terminalFolders = TerminalApp.folders(for: all)
+        menu.addItem(ActionMenuItem(String(localized: "Open in Terminal")) {
+            FileActions.openInTerminal(terminalFolders, chosen: terminalApp(), window: window)
+        })
         menu.addItem(.separator())
 
         addNewItemActions(to: menu, model: model, in: folder, isEnabled: folder != nil || !model.isSearching)

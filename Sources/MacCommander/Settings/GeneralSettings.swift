@@ -52,6 +52,13 @@ struct GeneralSettings: View {
                 }
             }
             Section {
+                Picker(String(localized: "Terminal app:"), selection: terminalApp) {
+                    ForEach(installedTerminals, id: \.self) { app in
+                        Text(app.displayName).tag(app)
+                    }
+                }
+            }
+            Section {
                 LabeledContent(String(localized: "Full Disk Access:")) {
                     Button(String(localized: "Full Disk Access…")) {
                         FullDiskAccessHint.present(preferences: preferences)
@@ -64,6 +71,22 @@ struct GeneralSettings: View {
     }
 
     /// The chosen folder's path with `~` for home, or "Home".
+    /// Terminal plus iTerm when it's installed (Terminal ships with macOS).
+    private var installedTerminals: [TerminalApp] {
+        TerminalApp.allCases.filter { $0 == .terminal || Self.isInstalled($0) }
+    }
+
+    /// The effective app (see `TerminalApp.effective`); picking one stores it as the choice.
+    private var terminalApp: Binding<TerminalApp> {
+        Binding(
+            get: { TerminalApp.effective(chosen: preferences.preferences.terminalApp, isInstalled: Self.isInstalled) },
+            set: { preferences.preferences.terminalApp = $0 })
+    }
+
+    private static func isInstalled(_ app: TerminalApp) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier) != nil
+    }
+
     private var folderDescription: String {
         guard let path = preferences.preferences.newWindowFolderPath else { return String(localized: "Home") }
         return (path as NSString).abbreviatingWithTildeInPath

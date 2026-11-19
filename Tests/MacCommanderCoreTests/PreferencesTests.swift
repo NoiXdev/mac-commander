@@ -93,4 +93,17 @@ struct PreferencesTests {
         #expect(again.preferences.dualPaneEnabled == false)
         #expect(again.preferences.newFileName == "b.md")
     }
+
+    @Test func terminalAppRoundTripsAndDecodesLeniently() throws {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = PreferencesStore(defaults: defaults)
+        #expect(store.preferences.terminalApp == nil)
+        store.preferences.terminalApp = .terminal
+        #expect(PreferencesStore(defaults: defaults).preferences.terminalApp == .terminal)
+        let decoded = try JSONDecoder().decode(
+            Preferences.self, from: Data(#"{"terminalApp": "hyper", "newFileName": "a.md"}"#.utf8))
+        #expect(decoded.terminalApp == nil)
+        #expect(decoded.newFileName == "a.md")
+    }
 }
