@@ -69,6 +69,11 @@ struct PaneTransferSheet: View {
         }
         .padding(20)
         .onAppear { fieldFocused = true }
+        // However the sheet goes away, a check still running must not confirm a transfer afterwards.
+        .onDisappear {
+            check?.cancel()
+            check = nil
+        }
     }
 
     /// Parses the path, then checks off the main actor that it is a folder; confirms or shows the error.

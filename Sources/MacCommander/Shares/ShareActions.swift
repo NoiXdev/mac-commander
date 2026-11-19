@@ -9,7 +9,12 @@ import SwiftUI
 final class ShareSheets {
     var showConnectToServer = false
     /// The share the sign-in sheet is shown for.
-    var signIn: SavedShare?
+    var signIn: SavedShare? {
+        didSet { if signIn == nil { signInPane = nil } }
+    }
+    /// The pane whose Disconnected placeholder asked for the sign-in; it navigates once signed in. nil (a
+    /// request from the sidebar, ⌘K or a queued launch sign-in): the window's active pane.
+    @ObservationIgnored weak var signInPane: BrowserModel?
     /// The share the Edit sheet is shown for.
     var editing: SavedShare?
     /// Go to Folder (owned by the window; mirrored here so the share commands can see it).
@@ -28,10 +33,14 @@ final class ShareSheets {
 @MainActor
 enum ShareActions {
     /// A click on a share that isn't connected (or a Retry): probes and mounts with the saved methods. With no
-    /// `model` (the Settings window) it only connects; nothing navigates.
-    static func connect(_ share: SavedShare, manager: ShareManager, model: BrowserModel?, sheets: ShareSheets) async {
+    /// `model` (the Settings window) it only connects; nothing navigates. `pane`: the pane that asked (its
+    /// Disconnected placeholder); a sign-in sheet this leads to navigates that pane (see `showSignIn`).
+    static func connect(
+        _ share: SavedShare, manager: ShareManager, model: BrowserModel?, sheets: ShareSheets,
+        pane: BrowserModel? = nil
+    ) async {
         let outcome = await manager.connect(share.id)
-        await handle(outcome, for: share, manager: manager, model: model, sheets: sheets)
+        await handle(outcome, for: share, manager: manager, model: model, sheets: sheets, pane: pane)
     }
 
     /// "Reconnect" in a window's Disconnected placeholder: the same flow as a click on the share. Once
@@ -41,7 +50,7 @@ enum ShareActions {
         sheets: ShareSheets
     ) async {
         guard let share = store.shares.first(where: { $0.id == disconnected.id }) else { return }
-        await connect(share, manager: manager, model: model, sheets: sheets)
+        await connect(share, manager: manager, model: model, sheets: sheets, pane: model)
     }
 
     /// Connected: a window showing the share's Disconnected placeholder returns to the same folder under the
@@ -52,7 +61,7 @@ enum ShareActions {
     /// With no `model` (the Settings window) a connected share stays where it is: nothing navigates.
     static func handle(
         _ outcome: ConnectOutcome, for share: SavedShare, manager: ShareManager, model: BrowserModel?,
-        sheets: ShareSheets
+        sheets: ShareSheets, pane: BrowserModel? = nil
     ) async {
         switch outcome {
         case .connected(let mountPoint):
@@ -60,9 +69,9 @@ enum ShareActions {
             guard await !model.shareDidConnect(id: share.id, mountPoint: mountPoint) else { return }
             await model.navigate(to: share.url.folder(atMountPoint: mountPoint))
         case .needsSignIn:
-            await showSignIn(share, sheets: sheets)
+            await showSignIn(share, sheets: sheets, pane: pane)
         case .unreachable:
-            await showUnreachable(share, manager: manager, model: model, sheets: sheets)
+            await showUnreachable(share, manager: manager, model: model, sheets: sheets, pane: pane)
         case .failed(let message):
             await waitForSheetToClose(sheets.window.window)
             FileActions.showAlert(
@@ -72,7 +81,8 @@ enum ShareActions {
 
     /// The alert for a share whose server doesn't answer: Retry connects again, Cancel does nothing.
     static func showUnreachable(
-        _ share: SavedShare, manager: ShareManager, model: BrowserModel?, sheets: ShareSheets
+        _ share: SavedShare, manager: ShareManager, model: BrowserModel?, sheets: ShareSheets,
+        pane: BrowserModel? = nil
     ) async {
         let alert = NSAlert()
         alert.alertStyle = .warning
@@ -80,7 +90,7 @@ enum ShareActions {
         alert.addButton(withTitle: String(localized: "Retry"))
         alert.addButton(withTitle: String(localized: "Cancel"))
         guard await run(alert, window: sheets.window.window) == .alertFirstButtonReturn else { return }
-        await connect(share, manager: manager, model: model, sheets: sheets)
+        await connect(share, manager: manager, model: model, sheets: sheets, pane: pane)
     }
 
     /// Unmounts the share (forced while its server is unreachable); an error is shown on the window.
@@ -122,13 +132,15 @@ enum ShareActions {
 
     /// Shows the sign-in sheet for `share`. While another sheet of the window is up (or still animating out)
     /// the request waits for it to close, however long that takes, so it is never dropped; it is dropped only
-    /// when the window closes.
-    static func showSignIn(_ share: SavedShare, sheets: ShareSheets) async {
+    /// when the window closes. `pane`: the pane that asked; the sheet navigates it once signed in (nil: the
+    /// window's active pane).
+    static func showSignIn(_ share: SavedShare, sheets: ShareSheets, pane: BrowserModel? = nil) async {
         while sheets.isPresentingSheet || sheets.window.window?.attachedSheet != nil {
             if sheets.signIn?.id == share.id { return }
             guard let window = sheets.window.window, window.isVisible else { return }
             try? await Task.sleep(for: .milliseconds(100))
         }
+        sheets.signInPane = pane
         sheets.signIn = share
     }
 

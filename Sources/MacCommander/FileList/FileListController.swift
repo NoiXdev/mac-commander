@@ -67,7 +67,13 @@ final class FileListController: NSViewController {
     /// batch that hangs (unresponsive server) doesn't hold up the icons of the next folder shown.
     var iconBatchFolder: URL?
     /// Inline rename state (see `FileListController+Rename.swift`).
-    var rename = InlineRenameState()
+    var rename = InlineRenameState() {
+        didSet {
+            if (oldValue.session == nil) != (rename.session == nil) { onRenamingChanged?(rename.session != nil) }
+        }
+    }
+    /// An inline rename started or ended (supplied by `FileListView`).
+    var onRenamingChanged: ((Bool) -> Void)?
     /// Extracts archive entries for Quick Look, for `selection` (row URLs). Space with the same selection or a
     /// selection change cancels it (see `toggleQuickLook`).
     var quickLookTask: (task: Task<Void, Never>, selection: [URL])?

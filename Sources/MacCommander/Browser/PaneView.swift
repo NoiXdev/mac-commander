@@ -41,16 +41,19 @@ struct PaneView: View {
         VStack(spacing: 0) {
             FileListView(
                 model: model, settings: settings, clipboard: clipboard,
-                reconnect: { [shareStore, shareManager, shareSheets, model] disconnected in
+                // The placeholder's pane becomes active and is the one that navigates once connected.
+                reconnect: { [layout, shareStore, shareManager, shareSheets, model] disconnected in
+                    layout.activate(model)
                     Task {
                         await ShareActions.reconnect(
                             disconnected, store: shareStore, manager: shareManager, model: model,
                             sheets: shareSheets)
                     }
                 },
-                signIn: { [shareStore, shareSheets] disconnected in
+                signIn: { [layout, shareStore, shareSheets, model] disconnected in
+                    layout.activate(model)
                     guard let share = shareStore.shares.first(where: { $0.id == disconnected.id }) else { return }
-                    Task { await ShareActions.showSignIn(share, sheets: shareSheets) }
+                    Task { await ShareActions.showSignIn(share, sheets: shareSheets, pane: model) }
                 },
                 // Activation follows keyboard focus, so menu commands (focused model) and responder-chain
                 // commands (first-responder list) target the same pane.
@@ -63,6 +66,8 @@ struct PaneView: View {
                         canTransfer: { [layout] in layout.transferRequest(move: false) != nil },
                         requestTransfer: { [layout] move in layout.requestTransfer(move: move) })
                     : nil,
+                // Copy/Move to Other Pane in the menu bar is off while the active pane renames inline.
+                onRenamingChanged: { [layout, model] in layout.setRenaming($0, for: model) },
                 focusSerial: layout.focusSerial,
                 isFocusTarget: layout.focusTarget == model.paneID,
                 isActive: isActive)

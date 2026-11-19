@@ -18,6 +18,8 @@ public final class PaneLayout {
 
     @ObservationIgnored private let makePane: @MainActor (URL) -> BrowserModel
     private var searchTexts: [ObjectIdentifier: String] = [:]
+    /// The panes whose list is renaming an item inline (reported by the UI).
+    private var renamingPanes: Set<ObjectIdentifier> = []
 
     public init(
         primary: BrowserModel, rememberedSecondFolder: URL? = nil,
@@ -45,6 +47,7 @@ public final class PaneLayout {
         guard let removed = inactive else { return }
         rememberedSecondFolder = removed.currentURL
         searchTexts[ObjectIdentifier(removed)] = nil
+        renamingPanes.remove(ObjectIdentifier(removed))
         panes = [active]
         activeIndex = 0
     }
@@ -77,6 +80,16 @@ public final class PaneLayout {
         searchTexts[ObjectIdentifier(pane)] = text
     }
 
+    // MARK: - Inline rename
+
+    /// The active pane's list is renaming an item inline; Copy/Move to Other Pane is off meanwhile.
+    public var isActiveRenaming: Bool { renamingPanes.contains(ObjectIdentifier(active)) }
+
+    public func setRenaming(_ isRenaming: Bool, for pane: BrowserModel) {
+        let id = ObjectIdentifier(pane)
+        if isRenaming { renamingPanes.insert(id) } else { renamingPanes.remove(id) }
+    }
+
     // MARK: - Cross-pane folders
 
     /// The inactive pane's folder when it shows a real folder (no search/tag view, not in an archive, no
@@ -91,13 +104,15 @@ public final class PaneLayout {
     }
 
     /// Exchanges the two panes' folders (one history entry each, so Back undoes it per pane).
+    /// Both navigations run at once, so a slow or dead server behind one pane doesn't hold up the other.
     public func swapFolders() async {
         guard let other = inactive else { return }
         let activePane = active
         let activeURL = activePane.currentURL
         let otherURL = other.currentURL
-        await activePane.navigate(to: otherURL)
-        await other.navigate(to: activeURL)
+        async let toOther = activePane.navigate(to: otherURL)
+        async let toActive = other.navigate(to: activeURL)
+        _ = await (toOther, toActive)
     }
 
     public func showActiveFolderInOtherPane() async {

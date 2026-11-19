@@ -118,28 +118,30 @@ struct BrowserCommands: Commands {
                     get: { layout?.isDual == false },
                     set: { if $0 { layout?.showSingle() } }))
                     .keyboardShortcut("1")
-                    .disabled(layout == nil)
+                    // Not while the transfer sheet is up: it targets the other pane.
+                    .disabled(layout == nil || layout?.pendingTransfer != nil)
                 Toggle(String(localized: "Dual Pane"), isOn: Binding(
                     get: { layout?.isDual == true },
                     set: { if $0 { layout?.showDual() } }))
                     .keyboardShortcut("2")
                     .disabled(layout == nil)
                 Button(String(localized: "Swap Panes")) { runLayout { await $0.swapFolders() } }
-                    .disabled(layout?.isDual != true)
+                    .disabled(layout?.isDual != true || layout?.pendingTransfer != nil)
                 Button(String(localized: "Same Folder in Other Pane")) {
                     runLayout { await $0.showActiveFolderInOtherPane() }
                 }
-                .disabled(layout?.canShowActiveFolderInOtherPane != true)
+                .disabled(layout?.canShowActiveFolderInOtherPane != true || layout?.pendingTransfer != nil)
             }
         }
     }
 
     private var isDual: Bool { layout?.isDual ?? false }
 
-    /// A copy/move to the other pane is possible (see `PaneLayout.transferRequest`), and the window isn't
-    /// showing a sheet (the transfer sheet itself, Go to Folder or a share sheet).
+    /// A copy/move to the other pane is possible (see `PaneLayout.transferRequest`), the window isn't
+    /// showing a sheet (the transfer sheet itself, Go to Folder or a share sheet) and the active list isn't
+    /// renaming an item inline.
     private func canRequestTransfer(move: Bool) -> Bool {
-        guard let layout, layout.pendingTransfer == nil, goToFolder?.wrappedValue != true,
+        guard let layout, layout.pendingTransfer == nil, !layout.isActiveRenaming, goToFolder?.wrappedValue != true,
             shareSheets?.isPresentingSheet != true
         else { return false }
         return layout.transferRequest(move: move) != nil

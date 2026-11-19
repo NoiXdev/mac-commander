@@ -205,9 +205,12 @@ struct BrowserWindow: View {
             storedIsDual = stored.isDual
             storedActivePane = stored.active
         }
-        // Turning the setting off makes every window single-pane, keeping its active pane.
+        // Turning the setting off makes every window single-pane, keeping its active pane. A transfer sheet
+        // that targets the other pane closes first.
         .onChange(of: preferences.preferences.dualPaneEnabled) { _, enabled in
-            if !enabled { layout.showSingle() }
+            guard !enabled else { return }
+            layout.pendingTransfer = nil
+            layout.showSingle()
         }
         // The last path component at once (no disk access), the localized name once it's resolved. A tag view
         // shows the tag's name.
@@ -276,8 +279,11 @@ struct BrowserWindow: View {
         .sheet(isPresented: Bindable(shareSheets).showConnectToServer) {
             ConnectToServerSheet(model: model, sheets: shareSheets)
         }
-        .sheet(item: Bindable(shareSheets).signIn) { share in
-            SignInSheet(share: share, model: model, sheets: shareSheets)
+        // The pane that asked for the sign-in (its Disconnected placeholder) while it is still shown; else the
+        // active pane.
+        .sheet(item: Bindable(shareSheets).signIn) { [shareSheets] share in
+            let pane = shareSheets.signInPane.flatMap { pane in layout.panes.contains { $0 === pane } ? pane : nil }
+            SignInSheet(share: share, model: pane ?? model, sheets: shareSheets)
         }
         .sheet(item: Bindable(shareSheets).editing) { share in
             EditShareSheet(share: share)

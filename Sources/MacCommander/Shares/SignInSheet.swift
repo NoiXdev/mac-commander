@@ -118,7 +118,9 @@ struct SignInSheet: View {
                 return
             }
             dismiss()
-            await ShareActions.handle(outcome, for: share, manager: manager, model: model, sheets: sheets)
+            // A Retry that needs sign-in again stays with this sheet's pane.
+            await ShareActions.handle(
+                outcome, for: share, manager: manager, model: model, sheets: sheets, pane: model)
         }
     }
 }

@@ -25,6 +25,8 @@ struct FileListView: NSViewControllerRepresentable {
     var onSwitchPane: (() -> Void)? = nil
     /// nil while dual-pane mode isn't enabled or the window is single-pane (F5/F6 beep, no context items).
     var paneCommands: PaneCommands? = nil
+    /// An inline rename started (true) or ended (false).
+    var onRenamingChanged: ((Bool) -> Void)? = nil
     /// `PaneLayout.focusSerial`: the list takes keyboard focus when it changed and `isFocusTarget` is true.
     var focusSerial = 0
     var isFocusTarget = false
@@ -41,6 +43,7 @@ struct FileListView: NSViewControllerRepresentable {
         controller.onActivate = onActivate
         controller.onSwitchPane = onSwitchPane
         controller.paneCommands = paneCommands
+        controller.onRenamingChanged = onRenamingChanged
         controller.takesFocusOnAppear = isActive
         // A request made before this list existed isn't for it.
         controller.appliedFocusSerial = focusSerial
@@ -55,6 +58,7 @@ struct FileListView: NSViewControllerRepresentable {
         controller.onActivate = onActivate
         controller.onSwitchPane = onSwitchPane
         controller.paneCommands = paneCommands
+        controller.onRenamingChanged = onRenamingChanged
         controller.takesFocusOnAppear = isActive
         controller.applyFocusRequest(serial: focusSerial, isTarget: isFocusTarget)
     }

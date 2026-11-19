@@ -3,6 +3,35 @@ import Testing
 
 @testable import MacCommanderCore
 
+/// Polls until `condition` holds or the deadline passes.
+@MainActor
+private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
+}
+
+/// Suspends callers of `wait()` until `open()`.
+@MainActor
+private final class Gate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+}
+
 @MainActor
 struct PaneLayoutTests {
     private let defaults = TemporaryDefaults()
@@ -116,6 +145,23 @@ struct PaneLayoutTests {
         #expect(layout.searchText(for: left) == "a")
     }
 
+    @Test func renamingIsPerPaneAndDroppedWithThePane() throws {
+        let (dir, a, _) = try folders()
+        defer { withExtendedLifetime(dir) {} }
+        let layout = makeLayout(start: a)
+        layout.showDual()
+        let right = layout.panes[1]
+        layout.setRenaming(true, for: right)
+        #expect(!layout.isActiveRenaming)
+        layout.activate(right)
+        #expect(layout.isActiveRenaming)
+        layout.setRenaming(false, for: right)
+        #expect(!layout.isActiveRenaming)
+        layout.setRenaming(true, for: layout.panes[0])
+        layout.showSingle()
+        #expect(!layout.isActiveRenaming)
+    }
+
     @Test func transferTargetIsOtherPaneFolder() throws {
         let (dir, a, _) = try folders()
         defer { withExtendedLifetime(dir) {} }
@@ -135,6 +181,34 @@ struct PaneLayoutTests {
         #expect(samePath(layout.panes[1].currentURL, a))
         await layout.panes[0].goBack()
         #expect(samePath(layout.panes[0].currentURL, a))
+    }
+
+    @Test func swapFoldersDoesNotWaitForSlowPane() async throws {
+        let (dir, a, b) = try folders()
+        defer { withExtendedLifetime(dir) {} }
+        let layout = makeLayout(start: a)
+        layout.showDual()
+        let left = layout.panes[0]
+        let right = layout.panes[1]
+        await left.reload()
+        await right.navigate(to: b)
+        let gate = Gate()
+        // The active (left) pane's listing of its new folder hangs, like a dead server.
+        left.afterListingHook = { url in
+            if samePath(url, b) { await gate.wait() }
+        }
+
+        let swap = Task { await layout.swapFolders() }
+        let otherArrived = await waitUntil {
+            right.listedURL.map { samePath($0, a) } == true && !right.isLoading
+        }
+        #expect(otherArrived)
+        // The slow pane is still listing its new folder.
+        #expect(left.listedURL.map { samePath($0, a) } == true)
+        gate.open()
+        await swap.value
+        #expect(samePath(left.currentURL, b))
+        #expect(samePath(right.currentURL, a))
     }
 
     @Test func sameFolderInOtherPane() async throws {
