@@ -385,7 +385,7 @@ Use the existing private `run(kind: "convert", title:)` and progress reporting (
 @Test func listedWhileRunningAndRemovedAfter() // operations contains one status during the run, none after
 ```
 
-(Follow `FileOperationCenterTests` for building a center with a test Trasher, so the real Trash is never touched.)
+(Build the center like `FileOperationCenterTests` does — `FileOperationCenter(undo: FileUndoStack(trash: trash), trash: trash)` with its test trash — so the real Trash is never touched.)
 
 - [ ] **Step 2: Run** `scripts/test.sh --filter ConvertOperationTests`. Expect a compile failure.
 - [ ] **Step 3: Implement.**
