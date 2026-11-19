@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import MacCommanderCore
 
@@ -35,5 +36,14 @@ struct ProcessRunnerTests {
         task.cancel()
         await #expect(throws: CancellationError.self) { try await task.value }
         #expect(ContinuousClock.now - start < .seconds(2))
+    }
+
+    @Test func streamsLinesSplitOnCRAndLF() async throws {
+        let lines = Mutex<[String]>([])
+        let output = try await ProcessRunner.run(
+            url("/bin/sh"), ["-c", "printf 'a\\rb\\nc' ; printf 'x\\n' >&2"],
+            onLine: { line in lines.withLock { $0.append(line) } })
+        #expect(Set(lines.withLock { $0 }) == ["a", "b", "c", "x"])
+        #expect(output.status == 0)
     }
 }
