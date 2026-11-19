@@ -636,12 +636,15 @@ public final class BrowserModel {
         selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 
-    /// For a just-created model: lists the current folder (a listing already in flight is superseded by
-    /// this one) and selects the items of `urls` that are in it, spelled as in `items`. Others are ignored.
+    /// For a just-created model: selects the items of `urls` that are in the current folder (others are
+    /// ignored) and lists the folder. The selection is seeded first, so whichever listing lands last
+    /// (this one, or a concurrent `reload()` that supersedes it) normalizes it to the items' spellings.
     public func select(_ urls: [URL]) async {
         let historyAtStart = history
-        guard await reloadIfStillShowing(currentURL, since: historyAtStart) else { return }
         let inFolder = urls.filter { isCurrentDirectory($0.deletingLastPathComponent()) }
+        guard !inFolder.isEmpty, !isSearching else { return }
+        selection = Set(inFolder)
+        guard await reloadIfStillShowing(currentURL, since: historyAtStart) else { return }
         selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 

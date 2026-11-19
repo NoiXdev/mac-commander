@@ -741,17 +741,39 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
     @Test func selectRightAfterCreation() async throws {
         let dir = try TemporaryDirectory()
         let work = try dir.folder("work")
-        let other = try dir.folder("other")
+        try dir.folder("other")
         let a = try dir.file("work/a.txt")
         try dir.file("work/b.txt")
         let elsewhere = try dir.file("other/a.txt")
-        _ = other
         let model = BrowserModel(start: work, settings: makeStore())
 
         await model.select([a, elsewhere])
 
         let item = try #require(model.items.first { $0.url.lastPathComponent == "a.txt" })
         #expect(model.selection == [item.url])
+    }
+
+    @Test func selectSurvivesConcurrentReload() async throws {
+        for selectFirst in [true, false] {
+            let dir = try TemporaryDirectory()
+            let work = try dir.folder("work")
+            let a = try dir.file("work/a.txt")
+            try dir.file("work/b.txt")
+            let model = BrowserModel(start: work, settings: makeStore())
+
+            let first = Task { @MainActor in
+                if selectFirst { await model.select([a]) } else { await model.reload() }
+            }
+            await Task.yield()
+            let second = Task { @MainActor in
+                if selectFirst { await model.reload() } else { await model.select([a]) }
+            }
+            await first.value
+            await second.value
+
+            let item = try #require(model.items.first { $0.url.lastPathComponent == "a.txt" })
+            #expect(model.selection == [item.url])
+        }
     }
 
     @Test func revealNavigatesAndSelects() async throws {
