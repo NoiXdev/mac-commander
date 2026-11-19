@@ -49,7 +49,7 @@ struct MacCommanderApp: App {
 /// Purges the archive preview cache (extracted copies for Quick Look and Open) at launch, which also removes
 /// leftovers of a session that didn't quit normally, and at quit. Owns the network shares (one store, manager
 /// and monitor for the whole app), starts them at launch and stops them at quit.
-/// Starts the tag catalog (`TagCatalog.shared`) at launch.
+/// Starts the tag catalog (`TagCatalog.shared`) and the ffmpeg check (`FFmpegLocator.shared`) at launch.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// How long quitting waits for the purge and the share list's last write.
@@ -65,6 +65,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         shares.start()
         FullDiskAccessHint.enqueueIfNeeded(preferences: preferences)
         TagCatalog.shared.start(standard: TagMenu.standardTags())
+        // The Convert menu is built from the cached result and never waits for the check.
+        Task { _ = await FFmpegLocator.shared.status() }
     }
 
     /// Quitting waits (`.terminateLater`) for the preview cache purge and for pending writes of the share list

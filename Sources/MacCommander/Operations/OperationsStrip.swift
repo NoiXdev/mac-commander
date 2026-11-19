@@ -77,7 +77,7 @@ private struct OperationRow: View {
                     ProgressView().progressViewStyle(.linear)
                 }
                 if let progress = operation.progress, progress.totalBytes > 0 {
-                    Text(Self.byteText(progress))
+                    Text(operation.countsFiles ? Self.fileText(progress) : Self.byteText(progress))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -99,5 +99,10 @@ private struct OperationRow: View {
         let completed = ByteCountFormatter.string(fromByteCount: progress.completedBytes, countStyle: .file)
         let total = ByteCountFormatter.string(fromByteCount: progress.totalBytes, countStyle: .file)
         return String(localized: "\(completed) of \(total)")
+    }
+
+    /// A conversion reports thousandths of a file as bytes; its text counts the files.
+    private static func fileText(_ progress: TransferProgress) -> String {
+        String(localized: "\(progress.completedItems) of \(progress.totalItems) files")
     }
 }

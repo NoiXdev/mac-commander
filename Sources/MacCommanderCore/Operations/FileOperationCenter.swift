@@ -8,6 +8,8 @@ public struct FileOperationStatus: Identifiable, Sendable, Equatable {
     public let title: String
     /// nil = indeterminate.
     public var progress: TransferProgress?
+    /// True when progress counts files (a conversion) rather than bytes.
+    public var countsFiles = false
 }
 
 /// A file of a conversion batch that produced nothing; `message` is the error's description.
@@ -400,7 +402,7 @@ public final class FileOperationCenter {
     ) async -> T {
         let id = UUID()
         let throttle = ProgressThrottle()
-        operations.append(FileOperationStatus(id: id, title: title, progress: nil))
+        operations.append(FileOperationStatus(id: id, title: title, progress: nil, countsFiles: kind == "convert"))
 
         let report: @Sendable (TransferProgress) -> Void = { [weak self] progress in
             let schedule = throttle.state.withLock { state in

@@ -125,11 +125,12 @@ struct ConvertOperationTests {
         let f = try Fixture()
         let zip = try ArchiveFixtures.makeEncryptedZip(["a.txt": "A"], password: "pw", in: f.tmp)
         let center = f.center
-        let seen = Mutex<[(title: String, incorrect: Bool)]>([])
+        let seen = Mutex<[(title: String, incorrect: Bool, countsFiles: [Bool])]>([])
 
         let result = await f.convert([zip], to: .tarGz) { archive, incorrect in
             let titles = await MainActor.run { center.operations.map(\.title) }
-            seen.withLock { $0.append((titles.joined(separator: "|"), incorrect)) }
+            let countsFiles = await MainActor.run { center.operations.map(\.countsFiles) }
+            seen.withLock { $0.append((titles.joined(separator: "|"), incorrect, countsFiles)) }
             #expect(archive == zip)
             return incorrect ? "pw" : "wrong"
         }
@@ -137,6 +138,8 @@ struct ConvertOperationTests {
         let calls = seen.withLock { $0 }
         #expect(calls.map(\.title) == ["Converting “\(zip.lastPathComponent)”…", "Converting “\(zip.lastPathComponent)”…"])
         #expect(calls.map(\.incorrect) == [false, true])
+        // The strip shows "1 of 2 files", not bytes.
+        #expect(calls.map(\.countsFiles) == [[true], [true]])
         #expect(result.outputs.count == 1)
         #expect(result.failures.isEmpty)
         #expect(await f.center.catalog.password(for: zip) == "pw")

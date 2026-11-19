@@ -92,7 +92,8 @@ enum FileContextMenu {
 
     /// Right-click on rows. `all` are the clicked row, or the whole selection if it contains it; `items` are
     /// those without rows inside a selected folder. Duplicate, Copy, Cut, Move to Trash and Compress act on
-    /// `items`, so a folder selected with its expanded contents is handled once; the rest go by `all`.
+    /// `items`, so a folder selected with its expanded contents is handled once; the rest (Convert included:
+    /// any folder hides it) go by `all`.
     static func forItems(
         _ items: [FileItem], all: [FileItem], model: BrowserModel, settings: ViewSettingsStore,
         clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void,
@@ -163,6 +164,10 @@ enum FileContextMenu {
             menu.addItem(ActionMenuItem(title) {
                 Task { @MainActor in await FileActions.compress(items, model: model, window: window) }
             })
+            menu.addItem(.separator())
+        }
+        if let convert = ConvertActions.menuItem(for: all, model: model, window: window) {
+            menu.addItem(convert)
             menu.addItem(.separator())
         }
 
