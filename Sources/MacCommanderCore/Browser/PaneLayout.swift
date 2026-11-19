@@ -13,6 +13,8 @@ public final class PaneLayout {
     /// Incremented whenever a pane should take keyboard focus; `focusTarget` is that pane.
     public private(set) var focusSerial = 0
     public private(set) var focusTarget: ObjectIdentifier?
+    /// The request the window's transfer sheet shows; set by `requestTransfer`, cleared by the sheet.
+    public var pendingTransfer: PaneTransferRequest?
 
     @ObservationIgnored private let makePane: @MainActor (URL) -> BrowserModel
     private var searchTexts: [ObjectIdentifier: String] = [:]
