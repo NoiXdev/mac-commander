@@ -106,4 +106,22 @@ struct PreferencesTests {
         #expect(decoded.terminalApp == nil)
         #expect(decoded.newFileName == "a.md")
     }
+
+    @Test func globalShortcutDefaultsToNil() {
+        #expect(Preferences().globalShortcut == nil)
+    }
+
+    @Test func globalShortcutRoundTrips() throws {
+        var prefs = Preferences()
+        prefs.globalShortcut = GlobalShortcut(keyCode: 46, modifiers: [.control, .option], key: "M")
+        let data = try JSONEncoder().encode(prefs)
+        #expect(try JSONDecoder().decode(Preferences.self, from: data).globalShortcut == prefs.globalShortcut)
+    }
+
+    @Test func unreadableGlobalShortcutIsNil() throws {
+        let json = #"{"globalShortcut": "garbage", "newFileName": "x.txt"}"#
+        let prefs = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+        #expect(prefs.globalShortcut == nil)
+        #expect(prefs.newFileName == "x.txt")
+    }
 }
