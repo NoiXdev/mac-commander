@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    # `macos-latest`, not a pinned older image, and the same label
+    # release.yml builds the shipped app on: the gate should read the
+    # compiler the release is built with, and both workflows meet a new
+    # image together. A moving label can move under us; the toolchain step
+    # below prints `xcodebuild -version` AND `swift --version`, so the
+    # figures travel with every run rather than with a comment.
+    runs-on: macos-latest
+    # A net for a hung test runner, so a stuck job fails instead of burning
+    # the runner's six-hour default. Not measured on a runner yet: locally
+    # (Swift 6.4, 2026-11-19) a clean `swift build` took 38 s and the suite
+    # of 581 tests ran in under 5 s. Tighten both budgets once real runs
+    # give figures to derive them from.
+    timeout-minutes: 30
+    env:
+      # ---------------------------------------------------------------------
+      # Compiler-warning budget. Raising it accepts a warning forever; read
+      # the "Warning gate" step's printed list before you touch this number.
+      #
+      # 4 is the count measured locally on 2026-11-19 (Swift 6.4, clean
+      # build plus test-target compile), so the gate starts green and stops
+      # any NEW warning. The four it pays for:
+      #   Sources/MacCommanderCore/Preview/MarkdownHTML.swift:85:17
+      #     variable 'opens' was never mutated
+      #   Sources/MacCommanderCore/Shares/KeychainCredentialStore.swift:46:56
+      #     'kSecUseAuthenticationUIFail' was deprecated in macOS 11.0
+      #   Tests/MacCommanderCoreTests/BrowserModelTests.swift:298:21 and
+      #   :299:22  expression of type 'NavigationResult' is unused
+      # Fix one, lower the number. The runner's toolchain may print a
+      # different set; the step's own list is the authority, not this one.
+      # The gate counts warnings instead of passing `-warnings-as-errors`
+      # because that flag would also apply to dependency targets nobody here
+      # can fix.
+      # ---------------------------------------------------------------------
+      MAX_WARNINGS: 4
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Toolchain
+        # Printed because inferring the Swift version from the Xcode version
+        # is how macSCP's gate once ended up reading a compiler nobody built
+        # with. No Metal toolchain step: unlike macSCP (SwiftTerm), nothing
+        # in this package compiles a `.metal` file.
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+      - name: Build
+        run: |
+          set -o pipefail
+          swift build 2>&1 | tee "$RUNNER_TEMP/build.log"
+      - name: Third-party notices cover every pin
+        # There is no notices generator in this repository (macSCP's
+        # `scripts/third-party-notices --check`). This is the minimal
+        # equivalent: every pin in Package.resolved must have a
+        # `## <identity> <version>` heading in THIRD-PARTY-NOTICES.md, the
+        # file scripts/build-app.sh ships inside the app bundle. A dependency
+        # bump that forgets the notices turns this red.
+        run: |
+          set -euo pipefail
+          missing=0
+          while IFS=$'\t' read -r identity version; do
+            if grep -Fq "## $identity $version" THIRD-PARTY-NOTICES.md; then
+              echo "ok: $identity $version"
+            else
+              echo "::error file=THIRD-PARTY-NOTICES.md::no '## $identity $version' section for the pin in Package.resolved"
+              missing=1
+            fi
+          done < <(jq -r '.pins[] | [.identity, (.state.version // .state.revision)] | @tsv' Package.resolved)
+          exit "$missing"
+      - name: Unit-Tests
+        # `--event-stream-output-path` writes one JSON line per Swift Testing
+        # event into a file the job log cannot lose: macSCP measured the
+        # Actions log dropping test verdicts under interleaved output. The
+        # step below reads the file back; the artifact keeps it.
+        #
+        # scripts/test.sh is plain `swift test "$@"` wherever Xcode is
+        # installed, as on this runner; it is called rather than `swift test`
+        # so the command contributors are told to run is the one CI runs.
+        #
+        # MC_KEYCHAIN_TESTS must stay unset here: those tests write to the
+        # real Keychain. The guard makes a stray repository variable or
+        # job-level env fail loudly instead of running them.
+        #
+        # Known flaky timing tests that a slow runner can turn red without
+        # anything being broken: BrowserModelTests.operationInCurrentFolderReloads
+        # and BrowserModelTests.changesDuringSlowLoadCoalesceIntoOneFollowUp.
+        # Re-run the job before chasing one of them.
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          if [ -n "${MC_KEYCHAIN_TESTS:-}" ]; then
+            echo "::error::MC_KEYCHAIN_TESTS is set; CI must not run the Keychain tests."
+            exit 1
+          fi
+          scripts/test.sh --event-stream-output-path "$RUNNER_TEMP/test-events.jsonl" \
+            2>&1 | tee "$RUNNER_TEMP/test.log"
+      - name: Test verdicts from the event stream
+        # Runs on red and green alike: it names every test that recorded an
+        # issue, from the event file rather than from stdout, so a red run
+        # always says which test. `issueRecorded` carries the test's id and
+        # the expectation text; `testEnded` carries the verdict sentence.
+        if: always()
+        run: |
+          set -euo pipefail
+          events="$RUNNER_TEMP/test-events.jsonl"
+          if [ ! -s "$events" ]; then
+            echo "::warning::no event stream was written at $events"
+            exit 0
+          fi
+          echo "events: $(wc -l < "$events" | tr -d ' ') lines"
+          jq -r 'select(.kind == "event" and .payload.kind == "issueRecorded")
+                 | "::error::issue in \(.payload.testID // "<no test>"): \((.payload.messages // []) | map(.text) | join(" | "))"' \
+            "$events" || true
+          failed=$(jq -r 'select(.kind == "event" and .payload.kind == "testEnded")
+                          | (.payload.messages // []) | map(.text) | join(" ")
+                          | select(test(" failed after "))' "$events" || true)
+          if [ -n "$failed" ]; then
+            echo "----- failed verdicts -----"
+            printf '%s\n' "$failed"
+            echo "---------------------------"
+          else
+            echo "no failed verdict in the event stream"
+          fi
+      - name: Upload the event stream
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: test-events
+          path: ${{ runner.temp }}/test-events.jsonl
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Warning gate
+        # A gate that cannot fail is worse than no gate.
+        #
+        # It counts unique `file:line:column` locations, not matching lines:
+        # the compiler prints the same warning once per compilation pass, so
+        # the raw line count overstates the real figure. ANSI colour and
+        # hyperlink escapes are stripped first -- the Swift toolchain colours
+        # its diagnostics even into a file, and a coloured line does not
+        # start with the location the pattern looks for (measured locally on
+        # 2026-11-19: without stripping, four real warnings counted as zero).
+        #
+        # Both build logs are scanned so that warnings in test targets count
+        # too: `swift build` does not compile them, `swift test` does.
+        run: |
+          set -euo pipefail
+          cat "$RUNNER_TEMP/build.log" "$RUNNER_TEMP/test.log" \
+            | perl -pe 's/\e\][^\e\a]*(?:\e\\|\a)//g; s/\e\[[0-9;]*[A-Za-z]//g' \
+            > "$RUNNER_TEMP/compile.log"
+          warnings=$(grep -E '^[^[:space:]]+:[0-9]+:[0-9]+: warning:' \
+            "$RUNNER_TEMP/compile.log" | sort -u || true)
+          locations=$(printf '%s' "$warnings" \
+            | grep -oE '^[^[:space:]]+:[0-9]+:[0-9]+:' \
+            | sort -u || true)
+          if [ -n "$locations" ]; then
+            count=$(printf '%s\n' "$locations" | wc -l | tr -d ' ')
+          else
+            count=0
+          fi
+          echo "Unique warning locations: $count (budget: $MAX_WARNINGS)"
+          if [ -n "$warnings" ]; then
+            echo "----- warnings -----"
+            printf '%s\n' "$warnings"
+            echo "--------------------"
+          fi
+          if [ "$count" -gt "$MAX_WARNINGS" ]; then
+            echo "::error::$count compiler warning locations exceed the budget of $MAX_WARNINGS. Fix the new warning, or raise MAX_WARNINGS in .github/workflows/ci.yml and say in the commit message which warning it now pays for."
+            exit 1
+          fi
+          if [ "$count" -lt "$MAX_WARNINGS" ]; then
+            echo "::notice::Only $count warning locations left, below the budget of $MAX_WARNINGS. Lower MAX_WARNINGS in .github/workflows/ci.yml to keep the gate tight."
+          fi
+      - name: App bundle builds
+        # scripts/build-app.sh is what assembles the shipped bundle (Info.plist,
+        # THIRD-PARTY-NOTICES.md, icon). Running it here, ad-hoc signed and
+        # in debug, catches a broken bundle step on every push instead of
+        # only on release day. MC_SIGN_IDENTITY and MC_NOTARY_PROFILE are
+        # unset, so nothing is signed with a real identity or notarized.
+        run: |
+          set -euo pipefail
+          scripts/build-app.sh -c debug
+          codesign --verify --strict build/MacCommander.app
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/MacCommander.app/Contents/Info.plist

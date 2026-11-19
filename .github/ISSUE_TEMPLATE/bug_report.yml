@@ -1,0 +1,141 @@
+name: Bug report
+description: Something in MacCommander behaves differently than it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. The fields below are the ones that
+        usually decide whether a report can be acted on or has to be
+        guessed at.
+
+        **Please do not paste passwords, or a share address that carries
+        credentials in it** (anything of the shape
+        `smb://user:secret@host/share`). MacCommander keeps network share
+        passwords in your Keychain, and nothing below needs them. If a file
+        or folder name is private, describe it instead of pasting it.
+
+  - type: input
+    id: version
+    attributes:
+      label: MacCommander version
+      description: MacCommander → About MacCommander, or the name of the file you installed from.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac.
+      placeholder: "15.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app?
+      options:
+        - Browsing, list view or sidebar (favorites, iCloud, locations)
+        - Network shares (SMB / NFS / AFP, Keychain sign-in)
+        - File operations (copy, move, trash, undo, operations strip)
+        - Archives (browse, extract, compress)
+        - Convert (images, audio, video, documents, archives, BIN/CUE → ISO)
+        - Dual-pane mode (F5 / F6 / F7 / F8)
+        - Search or tags
+        - Preview pane or Quick Look (incl. Markdown)
+        - Open in Terminal
+        - Show in Finder / default file browser / global hotkey
+        - Somewhere else / not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ffmpeg
+    attributes:
+      label: Is Homebrew ffmpeg installed?
+      description: |
+        Only matters for Convert. Some formats are only offered when
+        `ffmpeg` from Homebrew is found; `which ffmpeg` in Terminal tells
+        you whether it is.
+      options:
+        - Not about Convert
+        - "Yes"
+        - "No"
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, in as much detail as you have. Copy an error message word for word if there was one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to get there
+      description: |
+        The steps you took, from opening the app onwards. If you cannot
+        reproduce it on purpose, say so — that is useful information, not a
+        reason to leave the report out.
+      placeholder: |
+        1. Open a folder on an SMB share from the sidebar
+        2. Select three files and press F5 in dual-pane mode
+        3. …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Does it happen every time?
+      options:
+        - Every time
+        - Often, but not always
+        - Saw it once
+        - Have not tried again
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: The files, folders or share involved
+      description: |
+        Whatever is relevant: file types and rough sizes, how many items,
+        where they live (internal disk, external drive and its format, iCloud
+        Drive, a network share and what serves it — a NAS, another Mac, a
+        Windows machine), and for Convert the source and target format.
+        Names can be made up; the shape is what matters.
+
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: |
+        Screenshots, a crash report (Console → Crash Reports), what you had
+        tried before it started. Read a crash report before you post it —
+        it can contain file paths from your machine.
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Before you post
+      options:
+        - label: I searched the existing issues and this is not one of them.
+          required: true
+        - label: Nothing I pasted above contains a password or a share address with credentials in it.
+          required: true
