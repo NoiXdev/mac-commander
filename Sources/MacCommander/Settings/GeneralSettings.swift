@@ -3,12 +3,16 @@ import MacCommanderCore
 import SwiftUI
 
 /// General settings: list columns and hidden files, the default name for new files, the folder new windows
-/// open, and the Full Disk Access hint.
+/// open, "Show in Finder", and the Full Disk Access hint.
 struct GeneralSettings: View {
     @Environment(ViewSettingsStore.self) private var settings
     @Environment(PreferencesStore.self) private var preferences
     /// The Settings window, so the folder panel can be a sheet on it.
     private let windowState = State(initialValue: WindowBox())
+    /// The global `NSFileViewer` value, re-read each time the pane appears (another app may have changed it).
+    private let fileViewerState = State(initialValue: false)
+    private let fileViewer = FileViewerSetting(
+        bundleIdentifier: Bundle.main.bundleIdentifier ?? "dev.noix.MacCommander", store: CFGlobalDefaultsStore())
 
     var body: some View {
         Form {
@@ -52,6 +56,14 @@ struct GeneralSettings: View {
                 }
             }
             Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(String(localized: "Use MacCommander for “Show in Finder”"), isOn: fileViewerEnabled)
+                    Text(String(localized: "Other apps’ “Show in Finder” opens a MacCommander window. Folders opened from Spotlight or the Dock still open in the Finder."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section {
                 Picker(String(localized: "Terminal app:"), selection: terminalApp) {
                     ForEach(installedTerminals, id: \.self) { app in
                         Text(app.displayName).tag(app)
@@ -68,6 +80,17 @@ struct GeneralSettings: View {
         }
         .formStyle(.grouped)
         .background(WindowReader(box: windowState.wrappedValue))
+        .onAppear { fileViewerState.wrappedValue = fileViewer.isEnabled }
+    }
+
+    /// Writes the global value, then shows what is actually stored.
+    private var fileViewerEnabled: Binding<Bool> {
+        Binding(
+            get: { fileViewerState.wrappedValue },
+            set: { [fileViewer] on in
+                fileViewer.setEnabled(on)
+                fileViewerState.wrappedValue = fileViewer.isEnabled
+            })
     }
 
     /// The chosen folder's path with `~` for home, or "Home".

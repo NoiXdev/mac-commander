@@ -47,10 +47,15 @@ extension PaneLayout {
 /// One browser window: sidebar, toolbar and the panes of its `PaneLayout` (see `PaneView`). The sidebar,
 /// toolbar, search field, title, preview, sheets and menus act on the active pane.
 struct BrowserWindow: View {
+    /// The main `WindowGroup`'s id, for `openWindow`.
+    static let sceneID = "browser"
+
     @Environment(ViewSettingsStore.self) private var settings
     @Environment(PreferencesStore.self) private var preferences
     @Environment(FileOperationCenter.self) private var operations
     @Environment(ShareManager.self) private var shareManager
+    @Environment(OpenRequestRouter.self) private var router
+    @Environment(\.openWindow) private var openWindow
     // Restored per window: both panes' folders (the second one's also while it is closed), the mode and the
     // active pane. `currentFolderPath` is v1's key, for the first pane.
     @SceneStorage("currentFolderPath") private var storedPath = ""
@@ -90,40 +95,64 @@ struct BrowserWindow: View {
             }
         }
         .onAppear {
+            router.windowAppeared()
             guard layout == nil else { return }
-            // Every pane, also one opened later by `showDual()`, is made by this one factory with the app's stores.
-            let makePane = Self.paneFactory(
-                settings: settings, preferences: preferences, operations: operations, shareManager: shareManager)
-            let model = makePane(Self.startURL(storedPath: storedPath))
-            if !storedPath.hasPrefix("/") {
-                // New window: starts at home at once; the preferred folder is checked off main, then replaces
-                // the start (no Back entry to home), unless the user navigated meanwhile.
-                let prefs = preferences.preferences
-                let home = model.currentURL
+            let isFresh = !storedPath.hasPrefix("/")
+            if isFresh, router.openWindow == nil, router.isReceiving {
+                // Cold launch to open items: the first window waits for their grouping, so it shows the first
+                // request instead of starting at home next to a window for it.
                 Task {
-                    let folder = await PathQueries.run {
-                        prefs.newWindowFolder(exists: { url in
-                            var isDirectory: ObjCBool = false
-                            return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
-                                && isDirectory.boolValue
-                        })
-                    }
-                    if folder.standardizedFileURL.path != home.standardizedFileURL.path {
-                        await model.replaceStart(with: folder)
-                    }
+                    await router.waitForReceives()
+                    setUp(request: router.openWindow == nil ? router.takePending() : nil)
+                }
+            } else {
+                setUp(request: isFresh ? router.takePending() : nil)
+            }
+        }
+        .onDisappear { router.windowDisappeared() }
+    }
+
+    /// Builds the window's panes: at the restored folders, at `request` (a fresh window taking an incoming open),
+    /// or at the "new window" folder. Then registers `openWindow` with the router.
+    private func setUp(request: OpenRequest?) {
+        guard layout == nil else { return }
+        // Every pane, also one opened later by `showDual()`, is made by this one factory with the app's stores.
+        let makePane = Self.paneFactory(
+            settings: settings, preferences: preferences, operations: operations, shareManager: shareManager)
+        let model = makePane(request?.folder ?? Self.startURL(storedPath: storedPath))
+        if let request {
+            if !request.selection.isEmpty {
+                Task { await model.select(request.selection) }
+            }
+        } else if !storedPath.hasPrefix("/") {
+            // New window: starts at home at once; the preferred folder is checked off main, then replaces
+            // the start (no Back entry to home), unless the user navigated meanwhile.
+            let prefs = preferences.preferences
+            let home = model.currentURL
+            Task {
+                let folder = await PathQueries.run {
+                    prefs.newWindowFolder(exists: { url in
+                        var isDirectory: ObjCBool = false
+                        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                            && isDirectory.boolValue
+                    })
+                }
+                if folder.standardizedFileURL.path != home.standardizedFileURL.path {
+                    await model.replaceStart(with: folder)
                 }
             }
-            // A gone second folder falls back like the first (the model's first load, off the main actor).
-            let second = storedSecondPath.hasPrefix("/") ? URL(fileURLWithPath: storedSecondPath, isDirectory: true) : nil
-            let layout = PaneLayout(primary: model, rememberedSecondFolder: second, makePane: makePane)
-            // New windows start single (their scene storage is empty); with the setting off, restored ones too.
-            if storedIsDual, preferences.preferences.dualPaneEnabled {
-                layout.showDual()
-                layout.activate(layout.panes[min(max(storedActivePane, 0), layout.panes.count - 1)])
-            }
-            previews = [layout.active.paneID: makePreview(layout.active, layout: layout)]
-            self.layout = layout
         }
+        // A gone second folder falls back like the first (the model's first load, off the main actor).
+        let second = storedSecondPath.hasPrefix("/") ? URL(fileURLWithPath: storedSecondPath, isDirectory: true) : nil
+        let layout = PaneLayout(primary: model, rememberedSecondFolder: second, makePane: makePane)
+        // New windows start single (their scene storage is empty); with the setting off, restored ones too.
+        if storedIsDual, preferences.preferences.dualPaneEnabled {
+            layout.showDual()
+            layout.activate(layout.panes[min(max(storedActivePane, 0), layout.panes.count - 1)])
+        }
+        previews = [layout.active.paneID: makePreview(layout.active, layout: layout)]
+        self.layout = layout
+        router.register(openWindow: { [openWindow] in openWindow(id: Self.sceneID) })
     }
 
     /// Makes a pane's model: starts at the given folder; new-file names and share lookups come from the app's

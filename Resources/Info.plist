@@ -18,6 +18,18 @@
     <key>NSDownloadsFolderUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
     <key>NSRemovableVolumesUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
     <key>NSNetworkVolumesUsageDescription</key><string>MacCommander needs access to show and manage your files.</string>
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key><string>Folder</string>
+            <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.folder</string>
+            </array>
+        </dict>
+    </array>
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>

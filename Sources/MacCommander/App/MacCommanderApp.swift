@@ -15,7 +15,9 @@ struct MacCommanderApp: App {
     private let clipboard = FileClipboard()
 
     var body: some Scene {
-        WindowGroup {
+        // Opened by id through `OpenRequestRouter`. External open events (reveals, folders) go to the app
+        // delegate only: the router makes their windows, so SwiftUI mustn't add one of its own.
+        WindowGroup(id: BrowserWindow.sceneID) {
             BrowserWindow()
                 .environment(settings)
                 .environment(preferences)
@@ -24,7 +26,9 @@ struct MacCommanderApp: App {
                 .environment(clipboard)
                 .environment(appDelegate.shares.store)
                 .environment(appDelegate.shares.manager)
+                .environment(appDelegate.router)
         }
+        .handlesExternalEvents(matching: [])
         .commands {
             BrowserCommands(settings: settings, preferences: preferences)
         }
@@ -35,6 +39,7 @@ struct MacCommanderApp: App {
                 InfoWindow(url: url, operations: operations)
             }
         }
+        .handlesExternalEvents(matching: [])
         .windowResizability(.contentSize)
 
         Settings {
@@ -52,6 +57,7 @@ struct MacCommanderApp: App {
 /// and monitor for the whole app), starts them at launch and stops them at quit. Owns the file operation center,
 /// whose running operations it cancels at quit.
 /// Starts the tag catalog (`TagCatalog.shared`) and the ffmpeg check (`FFmpegLocator.shared`) at launch.
+/// Hands opened folders and items to the `OpenRequestRouter`.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// How long quitting waits for cancelled operations, the purge and the share list's last write.
@@ -60,10 +66,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let shares = NetworkShares()
     let preferences = PreferencesStore()
     let operations = FileOperationCenter()
+    let router = OpenRequestRouter()
     /// Set once quitting was answered (the work finished or the timeout passed).
     private var didReplyToTerminate = false
 
+    /// Our own Reveal in Finder (`activateFileViewerSelecting`) keeps going to the Finder while the global
+    /// `NSFileViewer` names this app: the app's own domain overrides the global one for this process only.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        UserDefaults.standard.set("com.apple.finder", forKey: FileViewerSetting.key)
+    }
+
+    /// Reveals from other apps, Dock drops, `open -a` and Open With; on a cold launch before any window exists.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        router.receive(urls.filter(\.isFileURL))
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        router.launchFinished()
         Task { await ArchivePreviewCache.shared.purge() }
         shares.start()
         FullDiskAccessHint.enqueueIfNeeded(preferences: preferences)
