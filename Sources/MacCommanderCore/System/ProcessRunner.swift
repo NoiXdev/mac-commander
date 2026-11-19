@@ -48,9 +48,9 @@ public enum ProcessRunner {
 
     /// Runs `executable` with stdin = /dev/null. Drains stdout and stderr concurrently (no pipe deadlock),
     /// and returns once the process has exited and both pipes have reached EOF. Task cancellation
-    /// terminates the process (SIGTERM, SIGKILL after `killDelay`) and throws `CancellationError`. A launch failure is rethrown as is; a
-    /// non-zero exit is not an error here, the caller inspects `status`. `onLine` (optional) receives every
-    /// stdout and stderr line as it arrives, possibly from a background thread.
+    /// terminates the process (SIGTERM, SIGKILL after `killDelay`) and throws `CancellationError`. A launch
+    /// failure is rethrown as is; a non-zero exit is not an error here, the caller inspects `status`. `onLine`
+    /// (optional) receives every stdout and stderr line as it arrives, possibly from a background thread.
     @concurrent public static func run(
         _ executable: URL, _ arguments: [String], currentDirectory: URL? = nil,
         onLine: (@Sendable (String) -> Void)? = nil
