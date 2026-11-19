@@ -71,4 +71,26 @@ struct PreferencesTests {
         let url = prefs.newWindowFolder(exists: { FileManager.default.fileExists(atPath: $0.path) })
         #expect(url == FileManager.default.homeDirectoryForCurrentUser)
     }
+
+    @Test func dualPaneDefaultsOffAndRoundTrips() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = PreferencesStore(defaults: defaults)
+        #expect(store.preferences.dualPaneEnabled == false)
+        store.preferences.dualPaneEnabled = true
+        #expect(PreferencesStore(defaults: defaults).preferences.dualPaneEnabled == true)
+    }
+
+    @Test func dualPaneDecodesLeniently() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(Data(#"{"newFileName": "a.md"}"#.utf8), forKey: PreferencesStore.key)
+        let store = PreferencesStore(defaults: defaults)
+        #expect(store.preferences.dualPaneEnabled == false)
+        #expect(store.preferences.newFileName == "a.md")
+        defaults.set(Data(#"{"dualPaneEnabled": "yes", "newFileName": "b.md"}"#.utf8), forKey: PreferencesStore.key)
+        let again = PreferencesStore(defaults: defaults)
+        #expect(again.preferences.dualPaneEnabled == false)
+        #expect(again.preferences.newFileName == "b.md")
+    }
 }

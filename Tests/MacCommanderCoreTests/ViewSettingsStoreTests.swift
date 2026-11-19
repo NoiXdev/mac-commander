@@ -96,4 +96,28 @@ import Testing
             #expect(mixed.showHiddenFiles)
         }
     }
+
+    @Test func previewIsSeparatePerMode() {
+        var s = ViewSettings()
+        #expect(s.showsPreview(dualPane: false) == false && s.showsPreview(dualPane: true) == false)
+        s.togglePreview(dualPane: false)
+        #expect(s.showPreview && !s.showPreviewInDualPane)
+        s.togglePreview(dualPane: true)
+        #expect(s.showsPreview(dualPane: true))
+        s.togglePreview(dualPane: false)
+        #expect(!s.showPreview && s.showPreviewInDualPane)
+    }
+
+    @Test func dualPreviewDecodesLeniently() {
+        withDefaults { defaults in
+            defaults.set(Data(#"{"showPreview": true}"#.utf8), forKey: "viewSettings.v1")
+            let store = ViewSettingsStore(defaults: defaults)
+            #expect(store.settings.showPreview)
+            #expect(store.settings.showPreviewInDualPane == false)
+            store.settings.showPreviewInDualPane = true
+            #expect(ViewSettingsStore(defaults: defaults).settings.showPreviewInDualPane)
+            defaults.set(Data(#"{"showPreviewInDualPane": 3}"#.utf8), forKey: "viewSettings.v1")
+            #expect(ViewSettingsStore(defaults: defaults).settings.showPreviewInDualPane == false)
+        }
+    }
 }

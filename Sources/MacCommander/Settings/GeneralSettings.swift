@@ -18,6 +18,16 @@ struct GeneralSettings: View {
             }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
+                    Toggle(
+                        String(localized: "Enable dual-pane mode"),
+                        isOn: Bindable(preferences).preferences.dualPaneEnabled)
+                    Text(String(localized: "Adds a second folder pane to windows (View ▸ Dual Pane, ⌘2)."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
                     TextField(
                         String(localized: "Default name for new files"),
                         text: Bindable(preferences).preferences.newFileName)

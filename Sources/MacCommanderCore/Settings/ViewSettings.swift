@@ -66,12 +66,22 @@ public struct ViewSettings: Codable, Equatable, Sendable {
     public var showCheckboxColumn = true
     public var showPreview = false
     public var markdownShowsSource = false
+    /// The preview pane's visibility in dual-pane mode, kept separate from `showPreview`.
+    public var showPreviewInDualPane = false
 
     public init() {}
 
+    public func showsPreview(dualPane: Bool) -> Bool {
+        dualPane ? showPreviewInDualPane : showPreview
+    }
+
+    public mutating func togglePreview(dualPane: Bool) {
+        if dualPane { showPreviewInDualPane.toggle() } else { showPreview.toggle() }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case columnLayout, sortOrder, showHiddenFiles, showCheckboxColumn
-        case showPreview, markdownShowsSource
+        case showPreview, markdownShowsSource, showPreviewInDualPane
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -86,6 +96,8 @@ public struct ViewSettings: Codable, Equatable, Sendable {
         showPreview = (try? c.decodeIfPresent(Bool.self, forKey: .showPreview)) ?? d.showPreview
         markdownShowsSource =
             (try? c.decodeIfPresent(Bool.self, forKey: .markdownShowsSource)) ?? d.markdownShowsSource
+        showPreviewInDualPane =
+            (try? c.decodeIfPresent(Bool.self, forKey: .showPreviewInDualPane)) ?? d.showPreviewInDualPane
     }
 }
 

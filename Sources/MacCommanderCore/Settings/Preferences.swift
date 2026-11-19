@@ -15,21 +15,25 @@ public struct Preferences: Codable, Equatable, Sendable {
     /// Tag names removed from the sidebar's Tags section (still offered in menus). Compare case-insensitively.
     public var hiddenTags: Set<String> = []
     public var didShowFullDiskAccessHint = false
+    /// Whether windows may show a second folder pane (View ▸ Dual Pane).
+    public var dualPaneEnabled = false
 
     public init(
         newFileName: String = Preferences.defaultNewFileName, newWindowFolderPath: String? = nil,
         hiddenSidebarSections: Set<SidebarSection> = [], hiddenTags: Set<String> = [],
-        didShowFullDiskAccessHint: Bool = false
+        didShowFullDiskAccessHint: Bool = false, dualPaneEnabled: Bool = false
     ) {
         self.newFileName = newFileName
         self.newWindowFolderPath = newWindowFolderPath
         self.hiddenSidebarSections = hiddenSidebarSections
         self.hiddenTags = hiddenTags
         self.didShowFullDiskAccessHint = didShowFullDiskAccessHint
+        self.dualPaneEnabled = dualPaneEnabled
     }
 
     private enum CodingKeys: String, CodingKey {
         case newFileName, newWindowFolderPath, hiddenSidebarSections, hiddenTags, didShowFullDiskAccessHint
+        case dualPaneEnabled
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -40,6 +44,7 @@ public struct Preferences: Codable, Equatable, Sendable {
         newWindowFolderPath = try? c.decodeIfPresent(String.self, forKey: .newWindowFolderPath)
         didShowFullDiskAccessHint =
             (try? c.decodeIfPresent(Bool.self, forKey: .didShowFullDiskAccessHint)) ?? d.didShowFullDiskAccessHint
+        dualPaneEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .dualPaneEnabled)) ?? d.dualPaneEnabled
         // Unknown section names are dropped, the rest kept.
         var sections: Set<SidebarSection> = []
         if var raw = try? c.nestedUnkeyedContainer(forKey: .hiddenSidebarSections) {
