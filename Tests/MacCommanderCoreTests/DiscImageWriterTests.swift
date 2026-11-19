@@ -103,6 +103,23 @@ import Testing
         #expect(iso.count == 2048)
     }
 
+    @Test func refusesNonCueSource() async throws {
+        let dir = try TemporaryDirectory()
+        let bin = dir.url.appendingPathComponent("game.bin")
+        try Data(count: 2352 * 4).write(to: bin)
+        await #expect(throws: DiscImageError.notCueSheet("game.bin")) { _ = try await run(bin, dir) }
+        expectNoOutput(dir)
+    }
+
+    @Test func oversizedCueIsUnreadable() async throws {
+        let dir = try TemporaryDirectory()
+        let header = "FILE \"game.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:00\n"
+        let cue = try write(dir, sectors: [sector(2352, fill: 1)],
+                            cue: header + String(repeating: "REM padding\n", count: (1 << 20) / 12 + 1))
+        await #expect(throws: DiscImageError.unreadable("game.cue")) { _ = try await run(cue, dir) }
+        expectNoOutput(dir)
+    }
+
     @Test func sizeMismatchRejected() async throws {
         let dir = try TemporaryDirectory()
         let cue = try write(dir, sectors: [Data(count: 2352 * 2 + 5)],

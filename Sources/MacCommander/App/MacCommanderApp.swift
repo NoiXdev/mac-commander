@@ -10,7 +10,8 @@ struct MacCommanderApp: App {
     /// Owned by the app delegate, which needs it at launch (the Full Disk Access hint).
     private var preferences: PreferencesStore { appDelegate.preferences }
     private let favorites = FavoritesStore()
-    private let operations = FileOperationCenter()
+    /// Owned by the app delegate, which cancels the running operations at quit.
+    private var operations: FileOperationCenter { appDelegate.operations }
     private let clipboard = FileClipboard()
 
     var body: some Scene {
@@ -48,15 +49,17 @@ struct MacCommanderApp: App {
 
 /// Purges the archive preview cache (extracted copies for Quick Look and Open) at launch, which also removes
 /// leftovers of a session that didn't quit normally, and at quit. Owns the network shares (one store, manager
-/// and monitor for the whole app), starts them at launch and stops them at quit.
+/// and monitor for the whole app), starts them at launch and stops them at quit. Owns the file operation center,
+/// whose running operations it cancels at quit.
 /// Starts the tag catalog (`TagCatalog.shared`) and the ffmpeg check (`FFmpegLocator.shared`) at launch.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// How long quitting waits for the purge and the share list's last write.
+    /// How long quitting waits for cancelled operations, the purge and the share list's last write.
     static let quitTimeout: Duration = .seconds(2)
 
     let shares = NetworkShares()
     let preferences = PreferencesStore()
+    let operations = FileOperationCenter()
     /// Set once quitting was answered (the work finished or the timeout passed).
     private var didReplyToTerminate = false
 
@@ -69,18 +72,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { _ = await FFmpegLocator.shared.status() }
     }
 
-    /// Quitting waits (`.terminateLater`) for the preview cache purge and for pending writes of the share list
-    /// (`ShareStore.flush`), both off the main thread, but at most `quitTimeout`: the cache's actor may be
-    /// busy with work on a slow volume. Then it goes on to `applicationWillTerminate` as usual.
+    /// With operations running, quitting asks first and then cancels them all. Quitting waits
+    /// (`.terminateLater`) for the cancelled operations to end (their tools terminated, temporary folders
+    /// removed), the preview cache purge and pending writes of the share list (`ShareStore.flush`), all off
+    /// the main thread, but at most `quitTimeout`: the cache's actor may be busy with work on a slow volume.
+    /// Then it goes on to `applicationWillTerminate` as usual.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if !operations.operations.isEmpty {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = String(localized: "Cancel running operations and quit?")
+            alert.addButton(withTitle: String(localized: "Quit"))
+            alert.addButton(withTitle: String(localized: "Don't Quit"))
+            guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+        }
         shares.stop()
         didReplyToTerminate = false
         let store = shares.store
+        let operations = operations
         Task {
             // Concurrently, so a slow purge doesn't use up the bound before the share list is written.
+            async let cancelled: Void = operations.cancelAll()
             async let purged: Void = ArchivePreviewCache.shared.purge()
             async let flushed: Void = store.flush()
-            _ = await (purged, flushed)
+            _ = await (cancelled, purged, flushed)
             replyToTerminate(sender)
         }
         Task {

@@ -38,6 +38,16 @@ struct ProcessRunnerTests {
         #expect(ContinuousClock.now - start < .seconds(2))
     }
 
+    @Test func cancellationKillsAProcessIgnoringSIGTERM() async throws {
+        // `exec` keeps the ignored SIGTERM; only SIGKILL ends it.
+        let task = Task { try await ProcessRunner.run(url("/bin/sh"), ["-c", "trap '' TERM; exec sleep 30"]) }
+        try await Task.sleep(for: .milliseconds(200))
+        let start = Date()
+        task.cancel()
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        #expect(Date().timeIntervalSince(start) < 5)
+    }
+
     @Test func streamsLinesSplitOnCRAndLF() async throws {
         let lines = Mutex<[String]>([])
         let output = try await ProcessRunner.run(

@@ -95,6 +95,15 @@ struct ConverterTests {
         #expect(document.string?.contains("Hello, converter.") == true)
     }
 
+    @Test func htmlToPDF() async throws {
+        let dir = try TemporaryDirectory()
+        let source = try dir.file("page.html", contents: "<html><body><h1>Title here</h1><p>Body text.</p></body></html>")
+        let pdf = try await convert(source, .pdf)
+        let document = try #require(PDFDocument(url: pdf.output))
+        #expect(document.string?.contains("Title here") == true)
+        #expect(document.string?.contains("<h1>") == false)
+    }
+
     @Test func wavToM4A() async throws {
         let dir = try TemporaryDirectory()
         let source = try wav("a.wav", in: dir)
@@ -119,6 +128,21 @@ struct ConverterTests {
         #expect(entries.isSuperset(of: ["stuff/one.txt", "stuff/sub/two.txt"]))
         #expect(!entries.contains { $0.contains(".mc-partial-") })
         #expect(try contents(dir.url) == ["stuff", "stuff.tar.gz", "stuff.zip"])
+    }
+
+    @Test func repackKeepsAtSignNames() async throws {
+        let dir = try TemporaryDirectory()
+        try dir.file("in/@notes.txt", contents: "notes")
+        try dir.file("in/plain.txt", contents: "plain")
+        let tgz = dir.url.appendingPathComponent("at.tar.gz")
+        let made = try await ProcessRunner.run(
+            URL(filePath: "/usr/bin/bsdtar"),
+            ["-c", "-z", "-f", tgz.path, "-C", dir.url.appendingPathComponent("in").path, "--", "./@notes.txt", "plain.txt"])
+        #expect(made.status == 0)
+        let outcome = try await convert(tgz, .zip)
+        let list = try await ProcessRunner.run(URL(filePath: "/usr/bin/bsdtar"), ["-tf", outcome.output.path])
+        let entries = Set(String(decoding: list.stdout, as: UTF8.self).split(separator: "\n").map(String.init))
+        #expect(entries == ["@notes.txt", "plain.txt"])
     }
 
     @Test func compoundExtensionsStayWhole() async throws {
@@ -203,6 +227,48 @@ struct ConverterTests {
         #expect(calls.first?.contains("-c copy") == true)
         #expect(calls.last?.contains("h264_videotoolbox") == true)
         #expect(try contents(dir.url) == ["tools", "v.mkv", "v.mp4"])
+    }
+
+    /// A fake `ffprobe` beside the fake ffmpeg (same `tools/` folder).
+    private func ffprobe(_ body: String, in dir: TemporaryDirectory) throws {
+        let url = dir.url.appendingPathComponent("tools/ffprobe")
+        try ("#!/bin/sh\n" + body + "\n").write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+    }
+
+    private func loggingFFmpeg(_ log: URL, in dir: TemporaryDirectory) throws -> URL {
+        try script("""
+            echo "$*" >> '\(log.path)'
+            eval last=\\${$#}
+            echo encoded > "$last"
+            """, in: dir)
+    }
+
+    @Test func ffprobeDecidesRemuxCodecs() async throws {
+        let dir = try TemporaryDirectory()
+        let source = try dir.file("v.mkv", contents: "video")
+        let log = dir.url.appendingPathComponent("tools/log.txt")
+        let ffmpeg = try loggingFFmpeg(log, in: dir)
+        try ffprobe("""
+            case "$*" in *"stream=codec_type,codec_name"*"v.mkv") ;; *) exit 1;; esac
+            printf 'codec_name=hevc\\ncodec_type=video\\ncodec_name=flac\\ncodec_type=audio\\n'
+            """, in: dir)
+        _ = try await convert(source, .mp4FFmpeg, ffmpeg: ffmpeg)
+        let calls = try String(contentsOf: log, encoding: .utf8).split(separator: "\n")
+        #expect(calls.count == 1)
+        #expect(calls.first?.contains("-c:v copy -tag:v hvc1 -c:a aac -b:a 192k") == true)
+        #expect(try contents(dir.url) == ["tools", "v.mkv", "v.mp4"])
+    }
+
+    @Test func failingFFprobeKeepsPlainRemux() async throws {
+        let dir = try TemporaryDirectory()
+        let source = try dir.file("v.mkv", contents: "video")
+        let log = dir.url.appendingPathComponent("tools/log.txt")
+        let ffmpeg = try loggingFFmpeg(log, in: dir)
+        try ffprobe("echo 'Invalid data' >&2; exit 1", in: dir)
+        _ = try await convert(source, .mp4FFmpeg, ffmpeg: ffmpeg)
+        let calls = try String(contentsOf: log, encoding: .utf8).split(separator: "\n")
+        #expect(calls.first?.contains("-c copy") == true)
     }
 
     @Test func ffmpegFailureReportsStderr() async throws {

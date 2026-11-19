@@ -4,7 +4,8 @@ import Synchronization
 
 /// Why a single conversion failed.
 public enum ConvertError: Error, Equatable, Sendable {
-    /// The tool's first non-empty stderr line, or "<tool> failed (status n)".
+    /// The tool's first non-empty stderr line (ffmpeg's last one: it prints its input summary first),
+    /// or "<tool> failed (status n)".
     case toolFailed(String)
     case disc(DiscImageError)
     /// Kept inspectable: the batch asks for a password on `.passwordRequired` / `.incorrectPassword`.
@@ -55,7 +56,11 @@ public enum Converter {
         var zeroed = 0
         switch target {
         case .pdf:
-            try await MainActor.run { try DocumentPDFRenderer.render(source, to: output) }
+            // Only the text system's work runs on the main actor; the share is read and written here.
+            let document = try Data(contentsOf: source)
+            let ext = source.pathExtension
+            let pdf = try await MainActor.run { try DocumentPDFRenderer.render(document, fileExtension: ext) }
+            try pdf.write(to: output, options: .withoutOverwriting)
         case .iso:
             do {
                 zeroed = try await DiscImageWriter.writeISO(cue: source, to: output, progress: progress)
@@ -91,7 +96,9 @@ public enum Converter {
         _ source: URL, target: ConvertTarget, output: URL, ffmpeg: URL?,
         progress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        let invocations = ConvertCommand.invocations(source: source, target: target, output: output, ffmpeg: ffmpeg)
+        let codecs = target == .mp4FFmpeg ? await probeCodecs(source, ffmpeg: ffmpeg) : nil
+        let invocations = ConvertCommand.invocations(
+            source: source, target: target, output: output, ffmpeg: ffmpeg, codecs: codecs)
         guard !invocations.isEmpty else {
             throw ConvertError.toolFailed(String(localized: "This conversion needs ffmpeg (brew install ffmpeg)."))
         }
@@ -108,6 +115,16 @@ public enum Converter {
                 result, tool: invocation.executable.lastPathComponent, lastLine: target.needsFFmpeg)
         }
         throw failure
+    }
+
+    /// The source's codecs from the `ffprobe` beside `ffmpeg`; nil when there is none or it fails.
+    private static func probeCodecs(_ source: URL, ffmpeg: URL?) async -> MediaCodecs? {
+        guard let ffprobe = ffmpeg?.deletingLastPathComponent().appendingPathComponent("ffprobe"),
+            FileManager().isExecutableFile(atPath: ffprobe.path),
+            let result = try? await ProcessRunner.run(ffprobe, ConvertCommand.ffprobeArguments(source: source)),
+            result.status == 0
+        else { return nil }
+        return ConvertCommand.mediaCodecs(ffprobeOutput: String(decoding: result.stdout, as: UTF8.self))
     }
 
     /// Progress parsing for the tools that print it. `onLine` may run on both drain threads at once,
@@ -161,9 +178,12 @@ public enum Converter {
             case .tarGz: ["-z", "--format", "pax"]
             default: ["--format", "7zip"]
             }
-        let names = staged.items.map(\.lastPathComponent)
+        // "./" keeps a name starting with "@" from being read as bsdtar's "@archive" operand;
+        // `-s` strips it again from the stored entry names.
+        let names = staged.items.map { "./" + $0.lastPathComponent }
         let result = try await ProcessRunner.run(
-            bsdtar, ["-c", "-f", output.path] + format + ["--"] + names, currentDirectory: staged.staging)
+            bsdtar, ["-c", "-f", output.path] + format + ["-s", ",^\\./,,"] + ["--"] + names,
+            currentDirectory: staged.staging)
         if result.status != 0 { throw toolFailure(result, tool: "bsdtar") }
     }
 

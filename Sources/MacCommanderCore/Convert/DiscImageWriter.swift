@@ -3,6 +3,8 @@ import Foundation
 /// Converts a BIN/CUE CD image to an ISO by extracting the 2048-byte user data of every data sector.
 public enum DiscImageWriter {
     private static let chunkBytes = 1 << 20
+    /// A larger "CUE sheet" is not one; it is never read whole.
+    private static let maxCueBytes = 1 << 20
 
     /// Resolves the data track's BIN next to `cue` (exact name, then case-insensitive), writes the ISO to
     /// `output` (must not exist). Returns the number of MODE2 Form 2 sectors written as zeros.
@@ -74,8 +76,17 @@ public enum DiscImageWriter {
     }
 
     private static func parseSheet(_ cue: URL) throws -> CueSheet {
+        // A BIN whose CUE sheet vanished after the menu was built would otherwise be read into memory.
+        guard cue.pathExtension.lowercased() == "cue" else { throw DiscImageError.notCueSheet(cue.lastPathComponent) }
         let data: Data
-        do { data = try Data(contentsOf: cue) } catch { throw DiscImageError.unreadable(cue.lastPathComponent) }
+        do {
+            let handle = try FileHandle(forReadingFrom: cue)
+            defer { try? handle.close() }
+            data = try handle.read(upToCount: maxCueBytes + 1) ?? Data()
+        } catch {
+            throw DiscImageError.unreadable(cue.lastPathComponent)
+        }
+        guard data.count <= maxCueBytes else { throw DiscImageError.unreadable(cue.lastPathComponent) }
         let text = String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
         return try CueSheet.parse(text)
     }

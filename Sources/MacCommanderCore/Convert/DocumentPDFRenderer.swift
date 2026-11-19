@@ -7,12 +7,31 @@ import Foundation
     /// 2 cm in points.
     static let margin: CGFloat = 72 * 2 / 2.54
 
-    /// NSAttributedString (no remote resources) → paginated PDF at the default paper size, 2 cm margins.
-    /// Loading uses no options: without `.webPreferences` the HTML importer fetches no network resources
-    /// (checked on macOS 27; passing WebPreferences re-enables loading). A password-protected or unreadable
-    /// document throws the loader's error.
-    public static func render(_ document: URL, to output: URL) throws {
-        let text = try NSAttributedString(url: document, options: [:], documentAttributes: nil)
+    /// The text system's document type for a source extension; nil lets the loader detect it.
+    nonisolated static func documentType(forExtension ext: String) -> NSAttributedString.DocumentType? {
+        switch ext.lowercased() {
+        case "txt": .plain
+        case "rtf": .rtf
+        case "html", "htm": .html
+        case "docx": .officeOpenXML
+        case "doc": .docFormat
+        case "odt": .openDocument
+        default: nil
+        }
+    }
+
+    /// The document's bytes (read by the caller, off the main thread) → NSAttributedString (no remote
+    /// resources) → paginated PDF data at the default paper size, 2 cm margins. The caller writes the result.
+    /// Loading passes no `.webPreferences`: without it the HTML importer fetches no network resources
+    /// (checked on macOS 27; passing WebPreferences re-enables loading), and without a base URL relative
+    /// references don't resolve either. A password-protected or unreadable document throws the loader's error.
+    public static func render(_ document: Data, fileExtension: String) throws -> Data {
+        var options: [NSAttributedString.DocumentReadingOptionKey: Any] = [:]
+        if let type = documentType(forExtension: fileExtension) { options[.documentType] = type }
+        if fileExtension.lowercased() == "txt", String(data: document, encoding: .utf8) != nil {
+            options[.characterEncoding] = String.Encoding.utf8.rawValue
+        }
+        let text = try NSAttributedString(data: document, options: options, documentAttributes: nil)
         let storage = NSTextStorage(attributedString: text)
         let layout = NSLayoutManager()
         storage.addLayoutManager(layout)
@@ -20,9 +39,10 @@ import Foundation
         let paper = NSPrintInfo.shared.paperSize
         let frame = CGSize(width: paper.width - 2 * margin, height: paper.height - 2 * margin)
         var mediaBox = CGRect(origin: .zero, size: paper)
-        guard let context = CGContext(output as CFURL, mediaBox: &mediaBox, nil) else {
-            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: output.path])
-        }
+        let pdf = NSMutableData()
+        guard let consumer = CGDataConsumer(data: pdf as CFMutableData),
+            let context = CGContext(consumer: consumer, mediaBox: &mediaBox, nil)
+        else { throw CocoaError(.fileWriteUnknown) }
         let graphics = NSGraphicsContext(cgContext: context, flipped: true)
         let previous = NSGraphicsContext.current
         defer { NSGraphicsContext.current = previous }
@@ -49,5 +69,6 @@ import Foundation
             placed = NSMaxRange(range)
         } while placed < layout.numberOfGlyphs
         context.closePDF()
+        return pdf as Data
     }
 }

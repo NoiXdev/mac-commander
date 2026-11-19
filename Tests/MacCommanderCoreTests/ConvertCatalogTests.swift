@@ -78,6 +78,13 @@ struct ConvertCatalogTests {
         #expect(ConvertCatalog.sources(for: [bin], cueExists: { _ in true }) == [cue])
     }
 
+    @Test func binAndCueDifferingInCaseBecomeOneSource() {
+        let bin = URL(fileURLWithPath: "/tmp/G.BIN")
+        let cue = URL(fileURLWithPath: "/tmp/g.cue")
+        #expect(ConvertCatalog.sources(for: [bin, cue], cueExists: { _ in true }) == [cue])
+        #expect(ConvertCatalog.sources(for: [cue, bin], cueExists: { _ in true }) == [cue])
+    }
+
     @Test func unknownExtensionNoMenu() {
         #expect(menu(["a.xyz"]).targets.isEmpty)
         #expect(menu(["folder/"]).targets.isEmpty)

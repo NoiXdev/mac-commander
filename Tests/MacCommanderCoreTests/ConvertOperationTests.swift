@@ -196,4 +196,37 @@ struct ConvertOperationTests {
         #expect(f.center.undo.records.last?.action == .created(result.outputs))
         #expect(Date().timeIntervalSince(start) < 10)
     }
+
+    @Test func cancelAllEndsEveryOperationAndCleansUp() async throws {
+        let f = try Fixture()
+        let one = try f.tmp.file("slow1.mkv", contents: "video")
+        let two = try f.tmp.file("slow2.mkv", contents: "video")
+        let ffmpeg = try f.ffmpeg()
+        let center = f.center
+
+        let first = Task { await center.convert([one], to: .mp4FFmpeg, ffmpeg: ffmpeg) { _, _ in nil } }
+        let second = Task { await center.convert([two], to: .mp4FFmpeg, ffmpeg: ffmpeg) { _, _ in nil } }
+        let start = Date()
+        while center.operations.count < 2, Date().timeIntervalSince(start) < 5 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(center.operations.count == 2)
+        await center.cancelAll()
+        // Returns only after each operation's work has ended: the converters' temporary folders are gone.
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: f.tmp.url.path)
+            .filter { $0.hasPrefix(".mc-partial-") }
+        #expect(leftovers.isEmpty)
+        #expect(Date().timeIntervalSince(start) < 10)
+
+        #expect(await first.value.cancelled)
+        #expect(await second.value.cancelled)
+        #expect(center.operations.isEmpty)
+    }
+
+    @Test func cancelAllWithNothingRunningReturns() async throws {
+        let center = try Fixture().center
+        await center.cancelAll()
+        #expect(center.operations.isEmpty)
+    }
 }

@@ -104,7 +104,8 @@ public enum ConvertCatalog {
     }
 
     public static func sources(for urls: [URL], cueExists: (URL) -> Bool) -> [URL] {
-        let given = Set(urls.map(\.standardizedFileURL))
+        // Case-insensitively, as the volume usually is: "G.BIN" with "g.cue" selected is one image.
+        let given = Set(urls.map { $0.standardizedFileURL.path.lowercased() })
         var result: [URL] = []
         for url in urls {
             guard rawExtension(of: url) == "bin", !url.hasDirectoryPath else {
@@ -112,7 +113,7 @@ public enum ConvertCatalog {
                 continue
             }
             let cue = cueURL(for: url)
-            if given.contains(cue.standardizedFileURL) { continue }
+            if given.contains(cue.standardizedFileURL.path.lowercased()) { continue }
             result.append(cueExists(cue) ? cue : url)
         }
         return result

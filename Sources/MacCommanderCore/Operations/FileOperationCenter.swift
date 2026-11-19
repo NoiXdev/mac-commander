@@ -49,6 +49,8 @@ public final class FileOperationCenter {
     @ObservationIgnored let catalog: ArchiveCatalog
     /// Cancels the running operation with that id.
     @ObservationIgnored private var cancellers: [UUID: @Sendable () -> Void] = [:]
+    /// Waits for the work of the running operation with that id to end.
+    @ObservationIgnored private var waiters: [UUID: @Sendable () async -> Void] = [:]
 
     public convenience init(
         undo: FileUndoStack = FileUndoStack(), trash: @escaping @Sendable (URL) throws -> URL = Trasher.systemTrash,
@@ -305,6 +307,13 @@ public final class FileOperationCenter {
         cancellers[id]?()
     }
 
+    /// Cancels every running operation and returns once the work of each has ended, its cleanup done
+    /// (a conversion's temporary folder removed, its tool terminated). For quitting.
+    public func cancelAll() async {
+        for cancel in cancellers.values { cancel() }
+        for wait in Array(waiters.values) { await wait() }
+    }
+
     /// Runs `stage` and moves its items into `destination` as one listed operation, always removing the
     /// staging folder; records undo and posts `foldersDidChange` for `destination`.
     private func runExtraction(
@@ -418,6 +427,7 @@ public final class FileOperationCenter {
         let label = "MacCommander op \(kind)"
         let task = Task { await SerialQueueExecutor.withOwnThread(label: label) { await work(report) } }
         cancellers[id] = { task.cancel() }
+        waiters[id] = { _ = await task.value }
 
         let value = await withTaskCancellationHandler {
             await task.value
@@ -426,6 +436,7 @@ public final class FileOperationCenter {
         }
 
         cancellers[id] = nil
+        waiters[id] = nil
         // The last update always lands, even if a flush is still waiting out the interval.
         if let latest = throttle.state.withLock({ $0.latest }) { setProgress(latest, of: id) }
         operations.removeAll { $0.id == id }

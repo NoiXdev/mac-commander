@@ -10,6 +10,9 @@ public struct ProcessOutput: Sendable {
 
 /// Runs child processes without blocking the calling thread.
 public enum ProcessRunner {
+    /// How long a cancelled child gets to exit after SIGTERM before it is sent SIGKILL.
+    static let killDelay: DispatchTimeInterval = .seconds(1)
+
     /// The running process, shared with the cancellation handler. `terminate()` is only valid after launch.
     private final class Run: @unchecked Sendable {
         let process = Process()
@@ -45,7 +48,7 @@ public enum ProcessRunner {
 
     /// Runs `executable` with stdin = /dev/null. Drains stdout and stderr concurrently (no pipe deadlock),
     /// and returns once the process has exited and both pipes have reached EOF. Task cancellation
-    /// terminates the process and throws `CancellationError`. A launch failure is rethrown as is; a
+    /// terminates the process (SIGTERM, SIGKILL after `killDelay`) and throws `CancellationError`. A launch failure is rethrown as is; a
     /// non-zero exit is not an error here, the caller inspects `status`. `onLine` (optional) receives every
     /// stdout and stderr line as it arrives, possibly from a background thread.
     @concurrent public static func run(
@@ -109,7 +112,12 @@ public enum ProcessRunner {
         } onCancel: {
             run.state.withLock { state in
                 state.cancelled = true
-                if state.launched { run.process.terminate() }
+                guard state.launched else { return }
+                run.process.terminate()
+                // A child that ignores SIGTERM would keep the call (and its caller) waiting forever.
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + killDelay) {
+                    if run.process.isRunning { kill(run.process.processIdentifier, SIGKILL) }
+                }
             }
         }
 

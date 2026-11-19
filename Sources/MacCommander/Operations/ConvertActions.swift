@@ -41,7 +41,9 @@ enum ConvertActions {
     /// For ISO, a CUE sheet with audio tracks is confirmed first (Cancel aborts the command).
     static func run(_ urls: [URL], to target: ConvertTarget, model: BrowserModel, window: NSWindow?) async {
         if target == .iso, !(await confirmAudioTracks(urls, window: window)) { return }
-        let ffmpeg: URL? = if case .available(let url) = await FFmpegLocator.shared.status() { url } else { nil }
+        // Only ffmpeg targets wait for the (cached) check.
+        var ffmpeg: URL?
+        if target.needsFFmpeg, case .available(let url) = await FFmpegLocator.shared.status() { ffmpeg = url }
         let sheetWindow = WindowReference(window)
         // Called from the operation's thread; the prompt runs on the main actor.
         let result = await model.operations.convert(urls, to: target, ffmpeg: ffmpeg) { archive, incorrect in
@@ -53,7 +55,10 @@ enum ConvertActions {
             String(localized: "“\(failure.source.lastPathComponent)” couldn’t be converted: \(failure.message)")
         }
         if result.zeroFilledSectors > 0 {
-            messages.append(String(localized: "\(result.zeroFilledSectors) unreadable sectors were written as zeros."))
+            messages.append(
+                result.zeroFilledSectors == 1
+                    ? String(localized: "1 unreadable sector was written as zeros.")
+                    : String(localized: "\(result.zeroFilledSectors) unreadable sectors were written as zeros."))
         }
         FileActions.showAlert(messages, window: window)
     }
@@ -79,9 +84,15 @@ enum ConvertActions {
         for (name, count) in audioTracks {
             let alert = NSAlert()
             alert.alertStyle = .informational
-            alert.messageText = String(localized: "“\(name)” has \(count) audio tracks.")
-            alert.informativeText = String(
-                localized: "An ISO can only hold the data track; the audio tracks will be left out.")
+            if count == 1 {
+                alert.messageText = String(localized: "“\(name)” has 1 audio track.")
+                alert.informativeText = String(
+                    localized: "An ISO can only hold the data track; the audio track will be left out.")
+            } else {
+                alert.messageText = String(localized: "“\(name)” has \(count) audio tracks.")
+                alert.informativeText = String(
+                    localized: "An ISO can only hold the data track; the audio tracks will be left out.")
+            }
             alert.addButton(withTitle: String(localized: "Convert"))
             alert.addButton(withTitle: String(localized: "Cancel"))
             let response: NSApplication.ModalResponse

@@ -44,6 +44,22 @@ struct FFmpegLocatorTests {
         #expect(checks.withLock { $0 } == 2)
     }
 
+    @Test func concurrentCallersShareOneCheck() async {
+        let checks = Mutex(0)
+        let locator = FFmpegLocator(
+            candidates: [first], isExecutable: { _ in true },
+            versionCheck: { _ in
+                checks.withLock { $0 += 1 }
+                try? await Task.sleep(for: .milliseconds(200))
+                return true
+            })
+        async let a = locator.status()
+        async let b = locator.status()
+        async let c = locator.status()
+        #expect(await [a, b, c] == [.available(first), .available(first), .available(first)])
+        #expect(checks.withLock { $0 } == 1)
+    }
+
     @Test func cachedStatusNilBeforeFirstCheck() {
         let locator = FFmpegLocator(candidates: [first], isExecutable: { _ in true }, versionCheck: { _ in true })
         #expect(locator.cachedStatus == nil)

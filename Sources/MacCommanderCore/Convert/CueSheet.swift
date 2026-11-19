@@ -2,6 +2,8 @@ import Foundation
 
 public enum DiscImageError: Error, Equatable, Sendable {
     case noDataTrack, multipleDataFiles, missingBin(String), sizeMismatch, unreadable(String)
+    /// The source isn't a `.cue` file (its CUE sheet went missing after the menu was built).
+    case notCueSheet(String)
 }
 
 extension DiscImageError: LocalizedError {
@@ -12,6 +14,7 @@ extension DiscImageError: LocalizedError {
         case .missingBin(let name): String(localized: "“\(name)” is missing.")
         case .sizeMismatch: String(localized: "The BIN file’s size doesn’t match its sector size.")
         case .unreadable(let name): String(localized: "“\(name)” couldn’t be read.")
+        case .notCueSheet(let name): String(localized: "“\(name)” needs its CUE sheet (.cue) beside it.")
         }
     }
 }

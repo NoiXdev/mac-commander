@@ -28,10 +28,13 @@ struct ConvertCommandTests {
         }
     }
 
-    @Test func m4a() {
-        let call = single(.m4a)
-        #expect(call?.executable.path == "/usr/bin/afconvert")
-        #expect(call?.arguments == ["-f", "m4af", "-d", "aac", "-b", "256000", "/in/a.src", out.path])
+    @Test func m4aFallsBackToDefaultBitrate() {
+        let list = ConvertCommand.invocations(source: src, target: .m4a, output: out, ffmpeg: ffmpeg)
+        #expect(list.map(\.executable.path) == ["/usr/bin/afconvert", "/usr/bin/afconvert"])
+        #expect(list.map(\.arguments) == [
+            ["-f", "m4af", "-d", "aac", "-b", "256000", "/in/a.src", out.path],
+            ["-f", "m4af", "-d", "aac", "/in/a.src", out.path],
+        ])
     }
 
     @Test func wav() {
@@ -93,11 +96,93 @@ struct ConvertCommandTests {
         ])
     }
 
+    private func mp4(_ codecs: MediaCodecs) -> [ToolInvocation] {
+        ConvertCommand.invocations(source: src, target: .mp4FFmpeg, output: out, ffmpeg: ffmpeg, codecs: codecs)
+    }
+
+    private let head = ["-nostdin", "-hide_banner", "-y", "-i", "/in/a.src", "-map", "0:v:0", "-map", "0:a?"]
+    private var tail: [String] { ["-sn", "-movflags", "+faststart", "-progress", "pipe:1", out.path] }
+    private let reencode = ["-c:v", "h264_videotoolbox", "-b:v", "8M", "-c:a", "aac", "-b:a", "192k"]
+
+    @Test func mp4ProbedH264AndAACCopiesBoth() {
+        let list = mp4(MediaCodecs(video: "h264", audio: ["aac", "mp3"]))
+        #expect(list.map(\.arguments) == [
+            head + ["-c:v", "copy", "-c:a", "copy"] + tail,
+            head + reencode + tail,
+        ])
+    }
+
+    @Test func mp4ProbedHEVCGetsHvc1Tag() {
+        let list = mp4(MediaCodecs(video: "hevc", audio: ["ac3", "eac3", "alac"]))
+        #expect(list.first?.arguments == head + ["-c:v", "copy", "-tag:v", "hvc1", "-c:a", "copy"] + tail)
+        #expect(list.count == 2)
+    }
+
+    @Test func mp4ProbedOtherAudioIsReencoded() {
+        let list = mp4(MediaCodecs(video: "h264", audio: ["aac", "flac"]))
+        #expect(list.first?.arguments == head + ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"] + tail)
+        #expect(list.last?.arguments == head + reencode + tail)
+    }
+
+    @Test func mp4ProbedNoAudioCopies() {
+        let list = mp4(MediaCodecs(video: "hevc", audio: []))
+        #expect(list.first?.arguments == head + ["-c:v", "copy", "-tag:v", "hvc1", "-c:a", "copy"] + tail)
+    }
+
+    @Test func mp4ProbedVP9OpusReencodesOnce() {
+        // The chosen command equals the fallback: it runs once.
+        #expect(mp4(MediaCodecs(video: "vp9", audio: ["opus"])).map(\.arguments) == [head + reencode + tail])
+        #expect(mp4(MediaCodecs(video: nil, audio: ["vorbis"])).map(\.arguments) == [head + reencode + tail])
+    }
+
+    @Test func mp4ProbedOtherVideoKeepsCopiedAudio() {
+        let list = mp4(MediaCodecs(video: "mpeg4", audio: ["mp3"]))
+        #expect(list.first?.arguments
+            == head + ["-c:v", "h264_videotoolbox", "-b:v", "8M", "-c:a", "copy"] + tail)
+        #expect(list.count == 2)
+    }
+
+    @Test func ffprobeArguments() {
+        #expect(ConvertCommand.ffprobeArguments(source: src) == [
+            "-v", "error", "-show_entries", "stream=codec_type,codec_name", "-of", "default=noprint_wrappers=1",
+            "/in/a.src",
+        ])
+    }
+
+    @Test func mediaCodecsParsesFFprobe() {
+        let output = """
+            codec_name=mjpeg
+            codec_type=video
+            codec_name=hevc
+            codec_type=video
+            codec_name=aac
+            codec_type=audio
+            codec_name=subrip
+            codec_type=subtitle
+            codec_name=EAC3
+            codec_type=audio
+
+            """
+        #expect(ConvertCommand.mediaCodecs(ffprobeOutput: output)
+            == MediaCodecs(video: "mjpeg", audio: ["aac", "eac3"]))
+        #expect(ConvertCommand.mediaCodecs(ffprobeOutput: "codec_type=audio\ncodec_name=opus\n")
+            == MediaCodecs(video: nil, audio: ["opus"]))
+        #expect(ConvertCommand.mediaCodecs(ffprobeOutput: "") == MediaCodecs(video: nil, audio: []))
+    }
+
     @Test func textutil() {
         for (target, format) in [(ConvertTarget.docx, "docx"), (.rtf, "rtf"), (.txt, "txt"), (.html, "html")] {
             let call = single(target)
             #expect(call?.executable.path == "/usr/bin/textutil")
             #expect(call?.arguments == ["-convert", format, "/in/a.src", "-output", out.path])
+        }
+    }
+
+    @Test func textutilNoLoadForHTML() {
+        for name in ["/in/page.html", "/in/page.HTM"] {
+            let list = ConvertCommand.invocations(
+                source: URL(filePath: name), target: .docx, output: out, ffmpeg: nil)
+            #expect(list.first?.arguments == ["-convert", "docx", "-noload", name, "-output", out.path])
         }
     }
 
