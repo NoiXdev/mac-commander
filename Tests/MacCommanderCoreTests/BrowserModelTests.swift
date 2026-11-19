@@ -738,6 +738,22 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(model.selection == [copy.url])
     }
 
+    @Test func selectRightAfterCreation() async throws {
+        let dir = try TemporaryDirectory()
+        let work = try dir.folder("work")
+        let other = try dir.folder("other")
+        let a = try dir.file("work/a.txt")
+        try dir.file("work/b.txt")
+        let elsewhere = try dir.file("other/a.txt")
+        _ = other
+        let model = BrowserModel(start: work, settings: makeStore())
+
+        await model.select([a, elsewhere])
+
+        let item = try #require(model.items.first { $0.url.lastPathComponent == "a.txt" })
+        #expect(model.selection == [item.url])
+    }
+
     @Test func revealNavigatesAndSelects() async throws {
         let dir = try TemporaryDirectory()
         try dir.folder("sub")

@@ -636,6 +636,15 @@ public final class BrowserModel {
         selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 
+    /// For a just-created model: lists the current folder (a listing already in flight is superseded by
+    /// this one) and selects the items of `urls` that are in it, spelled as in `items`. Others are ignored.
+    public func select(_ urls: [URL]) async {
+        let historyAtStart = history
+        guard await reloadIfStillShowing(currentURL, since: historyAtStart) else { return }
+        let inFolder = urls.filter { isCurrentDirectory($0.deletingLastPathComponent()) }
+        selection = Set(inFolder.map { itemURL(matching: $0) })
+    }
+
     /// Shows a real file or folder in the list: navigates to its parent folder (unless that is the current
     /// folder already) and selects it, spelled as in `items`. Targets inside an archive and missing targets
     /// are ignored. Checks the target off the main actor, like `navigate`. Returns false when ignored (the UI beeps), true otherwise.
