@@ -10,6 +10,21 @@ public struct FileOperationStatus: Identifiable, Sendable, Equatable {
     public var progress: TransferProgress?
 }
 
+/// A file of a conversion batch that produced nothing; `message` is the error's description.
+public struct ConvertFailure: Sendable, Equatable {
+    public let source: URL
+    public let message: String
+}
+
+/// What a conversion batch produced (`FileOperationCenter.convert`).
+public struct ConvertBatchResult: Sendable, Equatable {
+    public let outputs: [URL]
+    public let failures: [ConvertFailure]
+    /// MODE2 Form 2 sectors written as zeros, over all ISO outputs.
+    public let zeroFilledSectors: Int
+    public let cancelled: Bool
+}
+
 /// Runs file operations app-wide: publishes their progress, records undo and announces changed folders.
 ///
 /// Every operation runs in its own `Task` on its own thread (`SerialQueueExecutor`), listed in
@@ -147,6 +162,94 @@ public final class FileOperationCenter {
         }
         postFoldersDidChange(items.map { $0.deletingLastPathComponent() })
         return try result.get()
+    }
+
+    /// Converts `ConvertCatalog.sources(for: items)` one after another in one listed operation titled
+    /// "Converting “a.heic”…" / "Converting 3 items…". Progress = (done + current fraction) / count.
+    /// `askPassword(archive, incorrect)` is called for an encrypted archive (nil = skip it, recorded as a
+    /// failure "cancelled"). Cancel stops the batch (cancelled = true, finished outputs kept).
+    /// Undo record `.created(outputs)` titled "Convert" when outputs is non-empty. Posts folders-did-change.
+    ///
+    /// A file already in the target's format is skipped silently. A file that fails doesn't stop the others.
+    public func convert(
+        _ items: [URL], to target: ConvertTarget, ffmpeg: URL?,
+        askPassword: @escaping @Sendable (URL, Bool) async -> String?
+    ) async -> ConvertBatchResult {
+        let catalog = catalog
+        let result = await run(kind: "convert", title: Self.convertTitle(items)) { progress in
+            await Self.convertBatch(
+                items, to: target, ffmpeg: ffmpeg, catalog: catalog, askPassword: askPassword, progress: progress)
+        }
+        if !result.outputs.isEmpty {
+            undo.push(FileUndoRecord(action: .created(result.outputs), title: String(localized: "Convert")))
+        }
+        postFoldersDidChange(items.map { $0.deletingLastPathComponent() })
+        return result
+    }
+
+    /// The batch itself, on the operation's thread. Progress is reported in thousandths of a file.
+    private nonisolated static func convertBatch(
+        _ items: [URL], to target: ConvertTarget, ffmpeg: URL?, catalog: ArchiveCatalog,
+        askPassword: @escaping @Sendable (URL, Bool) async -> String?,
+        progress: @escaping @Sendable (TransferProgress) -> Void
+    ) async -> ConvertBatchResult {
+        let sources = ConvertCatalog.sources(for: items, cueExists: { FileManager.default.fileExists(atPath: $0.path) })
+        // Same-format rule (spec §2.6): the target's extension is keyed like a file's, aliases included.
+        let targetKey = ConvertCatalog.formatKey(of: URL(fileURLWithPath: "x." + target.fileExtension))
+        let unit: Int64 = 1000
+        var outputs: [URL] = []
+        var failures: [ConvertFailure] = []
+        var zeroed = 0
+        var state = TransferProgress(
+            totalBytes: Int64(sources.count) * unit, completedBytes: 0, totalItems: sources.count, completedItems: 0,
+            currentName: nil)
+        progress(state)
+
+        for source in sources {
+            if Task.isCancelled { break }
+            defer {
+                state.completedItems += 1
+                state.completedBytes = Int64(state.completedItems) * unit
+                progress(state)
+            }
+            if ConvertCatalog.formatKey(of: source) == targetKey { continue }
+            state.currentName = source.lastPathComponent
+            progress(state)
+            let base = state
+            let report: @Sendable (Double) -> Void = { fraction in
+                var current = base
+                current.completedBytes += Int64(min(max(fraction, 0), 1) * Double(unit))
+                progress(current)
+            }
+
+            var password = await catalog.password(for: source)
+            while true {
+                do {
+                    let outcome = try await Converter.convert(
+                        source, to: target, ffmpeg: ffmpeg, password: password, progress: report)
+                    outputs.append(outcome.output)
+                    zeroed += outcome.zeroFilledSectors
+                    if let password { await catalog.setPassword(password, for: source) }
+                } catch ConvertError.archive(let error)
+                    where (error == .passwordRequired || error == .incorrectPassword) && !Task.isCancelled
+                {
+                    guard let given = await askPassword(source, password != nil) else {
+                        failures.append(ConvertFailure(source: source, message: String(localized: "Cancelled")))
+                        break
+                    }
+                    password = given
+                    continue
+                } catch {
+                    // A tool killed by Cancel is not a failure of this file.
+                    if !(error is CancellationError) && !Task.isCancelled {
+                        failures.append(ConvertFailure(source: source, message: error.localizedDescription))
+                    }
+                }
+                break
+            }
+        }
+        return ConvertBatchResult(
+            outputs: outputs, failures: failures, zeroFilledSectors: zeroed, cancelled: Task.isCancelled)
     }
 
     /// Extracts `entries` (paths inside `archive`, "" = everything) into `destination`. bsdtar unpacks them
@@ -417,6 +520,13 @@ public final class FileOperationCenter {
             return String(localized: "Compressing “\(name)”")
         }
         return String(localized: "Compressing \(items.count) items")
+    }
+
+    private static func convertTitle(_ items: [URL]) -> String {
+        if items.count == 1, let name = items.first?.lastPathComponent {
+            return String(localized: "Converting “\(name)”…")
+        }
+        return String(localized: "Converting \(items.count) items…")
     }
 
     private static func extractTitle(_ names: [String]) -> String {
