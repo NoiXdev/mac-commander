@@ -3,10 +3,14 @@ import MacCommanderCore
 import SwiftUI
 
 /// General settings: list columns and hidden files, the default name for new files, the folder new windows
-/// open, "Show in Finder", and the Full Disk Access hint.
+/// open, "Show in Finder", the global hotkey, and the Full Disk Access hint.
 struct GeneralSettings: View {
     @Environment(ViewSettingsStore.self) private var settings
     @Environment(PreferencesStore.self) private var preferences
+    @Environment(OpenRequestRouter.self) private var router
+    @Environment(HotKeyCenter.self) private var hotKeys
+    /// Set when the last recorded shortcut couldn't be registered.
+    private let hotKeyFailedState = State(initialValue: false)
     /// The Settings window, so the folder panel can be a sheet on it.
     private let windowState = State(initialValue: WindowBox())
     /// The global `NSFileViewer` value, re-read each time the pane appears (another app may have changed it).
@@ -64,6 +68,22 @@ struct GeneralSettings: View {
                 }
             }
             Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    LabeledContent(String(localized: "Global hotkey")) {
+                        HStack {
+                            ShortcutRecorder(shortcut: preferences.preferences.globalShortcut, onRecord: recordHotKey)
+                            Button(String(localized: "Clear"), action: clearHotKey)
+                                .disabled(preferences.preferences.globalShortcut == nil)
+                        }
+                    }
+                    if hotKeyFailedState.wrappedValue {
+                        Text(String(localized: "This shortcut is already in use"))
+                            .font(.callout)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            Section {
                 Picker(String(localized: "Terminal app:"), selection: terminalApp) {
                     ForEach(installedTerminals, id: \.self) { app in
                         Text(app.displayName).tag(app)
@@ -93,7 +113,23 @@ struct GeneralSettings: View {
             })
     }
 
-    /// The chosen folder's path with `~` for home, or "Home".
+    /// Registers the shortcut first and stores it only when that worked.
+    private func recordHotKey(_ shortcut: GlobalShortcut) {
+        let router = router
+        if hotKeys.register(shortcut, action: { router.bringAppToFront() }) {
+            preferences.preferences.globalShortcut = shortcut
+            hotKeyFailedState.wrappedValue = false
+        } else {
+            hotKeyFailedState.wrappedValue = true
+        }
+    }
+
+    private func clearHotKey() {
+        _ = hotKeys.register(nil) {}
+        preferences.preferences.globalShortcut = nil
+        hotKeyFailedState.wrappedValue = false
+    }
+
     /// Terminal plus iTerm when it's installed (Terminal ships with macOS).
     private var installedTerminals: [TerminalApp] {
         TerminalApp.allCases.filter { $0 == .terminal || Self.isInstalled($0) }
@@ -110,6 +146,7 @@ struct GeneralSettings: View {
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleIdentifier) != nil
     }
 
+    /// The chosen folder's path with `~` for home, or "Home".
     private var folderDescription: String {
         guard let path = preferences.preferences.newWindowFolderPath else { return String(localized: "Home") }
         return (path as NSString).abbreviatingWithTildeInPath

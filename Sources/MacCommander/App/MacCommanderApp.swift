@@ -48,6 +48,8 @@ struct MacCommanderApp: App {
                 .environment(preferences)
                 .environment(appDelegate.shares.store)
                 .environment(appDelegate.shares.manager)
+                .environment(appDelegate.router)
+                .environment(appDelegate.hotKeys)
         }
     }
 }
@@ -57,7 +59,8 @@ struct MacCommanderApp: App {
 /// and monitor for the whole app), starts them at launch and stops them at quit. Owns the file operation center,
 /// whose running operations it cancels at quit.
 /// Starts the tag catalog (`TagCatalog.shared`) and the ffmpeg check (`FFmpegLocator.shared`) at launch.
-/// Hands opened folders and items to the `OpenRequestRouter`.
+/// Hands opened folders and items to the `OpenRequestRouter`. Owns the global hotkey and registers the stored
+/// one at launch.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// How long quitting waits for cancelled operations, the purge and the share list's last write.
@@ -67,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let preferences = PreferencesStore()
     let operations = FileOperationCenter()
     let router = OpenRequestRouter()
+    let hotKeys = HotKeyCenter()
     /// Set once quitting was answered (the work finished or the timeout passed).
     private var didReplyToTerminate = false
 
@@ -83,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         router.launchFinished()
+        // A shortcut that's taken stays stored but inactive; Settings shows the problem when it's recorded again.
+        let router = router
+        _ = hotKeys.register(preferences.preferences.globalShortcut) { router.bringAppToFront() }
         Task { await ArchivePreviewCache.shared.purge() }
         shares.start()
         FullDiskAccessHint.enqueueIfNeeded(preferences: preferences)

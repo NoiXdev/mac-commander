@@ -111,10 +111,12 @@ final class OpenRequestRouter {
     }
 
     /// File ▸ New Window (⌘N), the main `WindowGroup`'s own item: the only way to open its window without a view's
-    /// `openWindow`.
-    private static func performNewWindowMenuItem() {
-        guard let mainMenu = NSApp.mainMenu, let (menu, index) = newWindowItem(in: mainMenu) else { return }
+    /// `openWindow`. Returns false when the item wasn't found.
+    @discardableResult
+    static func performNewWindowMenuItem() -> Bool {
+        guard let mainMenu = NSApp.mainMenu, let (menu, index) = newWindowItem(in: mainMenu) else { return false }
         menu.performActionForItem(at: index)
+        return true
     }
 
     private static func newWindowItem(in menu: NSMenu) -> (NSMenu, Int)? {
