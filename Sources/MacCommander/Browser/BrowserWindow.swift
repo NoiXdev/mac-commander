@@ -282,7 +282,34 @@ struct BrowserWindow: View {
         .sheet(item: Bindable(shareSheets).editing) { share in
             EditShareSheet(share: share)
         }
+        // F5/F6, ⌘5/⌘6 and Copy/Move to Other Pane. The other pane's folder doesn't change for an edited path.
+        .sheet(item: Bindable(layout).pendingTransfer) { request in
+            PaneTransferSheet(
+                request: request,
+                onConfirm: { [layout, shareSheets] destination in
+                    layout.pendingTransfer = nil
+                    Self.runTransfer(request, into: destination, layout: layout, window: shareSheets.window.window)
+                },
+                onCancel: { [layout] in layout.pendingTransfer = nil })
+        }
         .background(WindowReader(box: shareSheets.window))
+    }
+
+    /// Runs a confirmed pane transfer; the results are selected in the target pane when it shows `destination`.
+    private static func runTransfer(
+        _ request: PaneTransferRequest, into destination: URL, layout: PaneLayout, window: NSWindow?
+    ) {
+        let target = layout.inactive ?? layout.active
+        Task {
+            switch request.kind {
+            case .copy:
+                await FileActions.transfer(request.sources, into: destination, mode: .copy, model: target, window: window)
+            case .move:
+                await FileActions.transfer(request.sources, into: destination, mode: .move, model: target, window: window)
+            case .extract(let archive):
+                await FileActions.extract(request.entries, from: archive, into: destination, model: target, window: window)
+            }
+        }
     }
 
     /// The toolbar search field shows the active pane's text; that pane's search starts 250 ms after the last

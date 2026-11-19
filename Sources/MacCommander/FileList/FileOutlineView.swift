@@ -42,6 +42,10 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
     var onBecomeFirstResponder: (() -> Void)?
     /// Tab / ⇧Tab: switch to the other pane (dual-pane mode only; nil keeps the default key-view loop).
     var onSwitchPane: (() -> Void)?
+    /// F5 / F6: copy / move to the other pane (`move` true for F6).
+    var onTransfer: ((_ move: Bool) -> Void)?
+    /// F7: New Folder.
+    var onNewFolder: (() -> Void)?
 
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
@@ -158,6 +162,23 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
                 return
             case 49:  // Space
                 onToggleQuickLook?()
+                return
+            default:
+                break
+            }
+            // Total Commander's function keys (F-keys carry the function flag, so only these four are checked).
+            switch event.specialKey {
+            case .f5?:
+                onTransfer?(false)
+                return
+            case .f6?:
+                onTransfer?(true)
+                return
+            case .f7?:
+                onNewFolder?()
+                return
+            case .f8?:
+                commandHandler?.perform(.moveToTrash)
                 return
             default:
                 break

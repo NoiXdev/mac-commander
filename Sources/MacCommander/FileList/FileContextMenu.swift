@@ -92,7 +92,7 @@ enum FileContextMenu {
     static func forItems(
         _ items: [FileItem], all: [FileItem], model: BrowserModel, settings: ViewSettingsStore,
         clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void,
-        archiveQuickLook: @escaping @MainActor () -> Void
+        paneCommands: PaneCommands? = nil, archiveQuickLook: @escaping @MainActor () -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -114,6 +114,10 @@ enum FileContextMenu {
             menu.addItem(ActionMenuItem(quickLookTitle) { archiveQuickLook() })
             menu.addItem(.separator())
             addExtractEntriesActions(to: menu, entries: all, archive: location.archive, model: model, window: window)
+            if let paneCommands {
+                menu.addItem(.separator())
+                addPaneTransferActions(to: menu, commands: paneCommands, isInArchive: true)
+            }
             return menu
         }
         if all.count == 1, !all[0].isDirectory {
@@ -137,6 +141,7 @@ enum FileContextMenu {
         let folder = all.count == 1 && all[0].isDirectory ? all[0].url : nil
         menu.addItem(ActionMenuItem(String(localized: "Copy")) { FileActions.copy(items, clipboard: clipboard) })
         menu.addItem(ActionMenuItem(String(localized: "Cut")) { FileActions.cut(items, clipboard: clipboard) })
+        if let paneCommands { addPaneTransferActions(to: menu, commands: paneCommands, isInArchive: false) }
         let paste = pasteItem(into: folder ?? model.currentURL, model: model, clipboard: clipboard, window: window)
         if folder == nil, model.isSearching { paste.isEnabled = false }
         menu.addItem(paste)
@@ -169,6 +174,22 @@ enum FileContextMenu {
 
         addNewItemActions(to: menu, model: model, in: folder, isEnabled: folder != nil || !model.isSearching)
         return menu
+    }
+
+    /// Copy / Move to Other Pane (dual-pane mode): open the confirmation sheet. Copy extracts archive entries;
+    /// Move is disabled for them (archives are read-only).
+    private static func addPaneTransferActions(to menu: NSMenu, commands: PaneCommands, isInArchive: Bool) {
+        let canTransfer = commands.canTransfer()
+        let copy = ActionMenuItem(String(localized: "Copy to Other Pane")) {
+            if !commands.requestTransfer(false) { NSSound.beep() }
+        }
+        copy.isEnabled = canTransfer
+        let move = ActionMenuItem(String(localized: "Move to Other Pane")) {
+            if !commands.requestTransfer(true) { NSSound.beep() }
+        }
+        move.isEnabled = canTransfer && !isInArchive
+        menu.addItem(copy)
+        menu.addItem(move)
     }
 
     /// For an archive file (outside an archive), after Open: Extract All Here and Open with Archive Utility for

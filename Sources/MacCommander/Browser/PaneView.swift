@@ -21,6 +21,7 @@ struct PaneView: View {
     let showsFooter: Bool
 
     @Environment(ViewSettingsStore.self) private var settings
+    @Environment(PreferencesStore.self) private var preferences
     @Environment(FileClipboard.self) private var clipboard
     @Environment(ShareManager.self) private var shareManager
     @Environment(ShareStore.self) private var shareStore
@@ -57,6 +58,11 @@ struct PaneView: View {
                     if layout.active !== model { layout.activate(model) }
                 },
                 onSwitchPane: layout.isDual ? { [layout] in layout.switchActive() } : nil,
+                paneCommands: preferences.preferences.dualPaneEnabled && layout.isDual
+                    ? PaneCommands(
+                        canTransfer: { [layout] in layout.transferRequest(move: false) != nil },
+                        requestTransfer: { [layout] move in layout.requestTransfer(move: move) })
+                    : nil,
                 focusSerial: layout.focusSerial,
                 isFocusTarget: layout.focusTarget == model.paneID,
                 isActive: isActive)

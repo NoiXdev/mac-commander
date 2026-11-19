@@ -30,6 +30,15 @@ struct BrowserCommands: Commands {
             Button("Duplicate") { send(#selector(FileOutlineView.duplicate(_:))) }
                 .keyboardShortcut("d")
                 .disabled(model?.selection.isEmpty != false || isInArchive)
+            if preferences.preferences.dualPaneEnabled {
+                // Into the other pane's folder, after a confirmation sheet (also F5/F6 in the list).
+                Button(String(localized: "Copy to Other Pane")) { layout?.requestTransfer(move: false) }
+                    .keyboardShortcut("5")
+                    .disabled(!canRequestTransfer(move: false))
+                Button(String(localized: "Move to Other Pane")) { layout?.requestTransfer(move: true) }
+                    .keyboardShortcut("6")
+                    .disabled(!canRequestTransfer(move: true))
+            }
             Button("Move to Trash") { send(#selector(FileOutlineView.moveToTrash(_:))) }
                 .keyboardShortcut(.delete)
                 .disabled(model?.selection.isEmpty != false || isInArchive)
@@ -71,7 +80,9 @@ struct BrowserCommands: Commands {
             Button(String(localized: "Connect to Server…")) { shareSheets?.showConnectToServer = true }
                 .keyboardShortcut("k")
                 // Not while another sheet of the window is up (Connect to Server, sign-in, Edit, Go to Folder).
-                .disabled(shareSheets == nil || shareSheets?.isPresentingSheet == true || goToFolder?.wrappedValue == true)
+                .disabled(
+                    shareSheets == nil || shareSheets?.isPresentingSheet == true || goToFolder?.wrappedValue == true
+                        || layout?.pendingTransfer != nil)
             Button("Home") { go(FileManager.default.homeDirectoryForCurrentUser) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
             Button("Desktop") { go(home("Desktop")) }
@@ -113,11 +124,31 @@ struct BrowserCommands: Commands {
                     set: { if $0 { layout?.showDual() } }))
                     .keyboardShortcut("2")
                     .disabled(layout == nil)
+                Button(String(localized: "Swap Panes")) { runLayout { await $0.swapFolders() } }
+                    .disabled(layout?.isDual != true)
+                Button(String(localized: "Same Folder in Other Pane")) {
+                    runLayout { await $0.showActiveFolderInOtherPane() }
+                }
+                .disabled(layout?.canShowActiveFolderInOtherPane != true)
             }
         }
     }
 
     private var isDual: Bool { layout?.isDual ?? false }
+
+    /// A copy/move to the other pane is possible (see `PaneLayout.transferRequest`), and the window isn't
+    /// showing a sheet (the transfer sheet itself, Go to Folder or a share sheet).
+    private func canRequestTransfer(move: Bool) -> Bool {
+        guard let layout, layout.pendingTransfer == nil, goToFolder?.wrappedValue != true,
+            shareSheets?.isPresentingSheet != true
+        else { return false }
+        return layout.transferRequest(move: move) != nil
+    }
+
+    private func runLayout(_ action: @escaping @MainActor (PaneLayout) async -> Void) {
+        guard let layout else { return }
+        Task { await action(layout) }
+    }
 
     /// Inside an archive the window is read-only: commands that write are disabled.
     private var isInArchive: Bool { model?.archiveLocation != nil }

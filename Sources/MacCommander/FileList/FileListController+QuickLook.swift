@@ -82,9 +82,12 @@ extension FileListController {
                 openInfo: openInfo)
         }
         let items = actionItems(forClickedRow: row)
+        // The menu is about to focus this list, which activates its pane: activate it now, so Copy/Move to
+        // Other Pane are decided (and later run) for this pane's selection.
+        if paneCommands != nil { onActivate?() }
         return FileContextMenu.forItems(
             items.topLevel, all: items.all, model: model, settings: settings, clipboard: clipboard,
-            window: outlineView.window, openInfo: openInfo,
+            window: outlineView.window, openInfo: openInfo, paneCommands: paneCommands,
             archiveQuickLook: { [weak self] in self?.showArchiveQuickLook() })
     }
 }

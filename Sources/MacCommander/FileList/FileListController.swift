@@ -30,6 +30,8 @@ final class FileListController: NSViewController {
     var onSwitchPane: (() -> Void)? {
         didSet { outlineView.onSwitchPane = onSwitchPane }
     }
+    /// F5/F6 and Copy/Move to Other Pane (supplied by `FileListView`); nil outside dual-pane mode.
+    var paneCommands: PaneCommands?
     /// False for a pane that isn't the active one: it doesn't take keyboard focus when it appears.
     var takesFocusOnAppear = true
     /// The pane layout's focus request (`PaneLayout.focusSerial`) last handled.
@@ -191,6 +193,14 @@ final class FileListController: NSViewController {
         }
         outline.onRename = { [weak self] in self?.renameSelection() }
         outline.onToggleQuickLook = { [weak self] in self?.toggleQuickLook() }
+        outline.onTransfer = { [weak self] move in
+            guard let commands = self?.paneCommands, commands.requestTransfer(move) else { return NSSound.beep() }
+        }
+        // Beeps inside an archive and during a search, like the menu item's shortcut.
+        outline.onNewFolder = { [weak self] in
+            guard let model = self?.model else { return }
+            Task { await BrowserActions.newFolder(model) }
+        }
         outline.contextMenu = { [weak self] row in self?.contextMenu(forRow: row) }
         outline.allowsInteraction = { [weak self] in self?.showsCurrentFolder ?? false }
         outline.commandHandler = self

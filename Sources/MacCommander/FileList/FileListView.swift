@@ -2,6 +2,14 @@ import AppKit
 import MacCommanderCore
 import SwiftUI
 
+/// Copy/move to the other pane, for the list's keys (F5/F6) and context menu; they act on the active pane.
+struct PaneCommands {
+    /// `PaneLayout.transferRequest(move: false) != nil`.
+    let canTransfer: () -> Bool
+    /// `PaneLayout.requestTransfer(move:)`: shows the confirmation sheet; false (caller beeps) when impossible.
+    let requestTransfer: (_ move: Bool) -> Bool
+}
+
 /// SwiftUI wrapper around the AppKit file list.
 struct FileListView: NSViewControllerRepresentable {
     let model: BrowserModel
@@ -15,6 +23,8 @@ struct FileListView: NSViewControllerRepresentable {
     var onActivate: (() -> Void)? = nil
     /// Tab / ⇧Tab in the list; nil (single-pane mode) keeps the default key-view loop.
     var onSwitchPane: (() -> Void)? = nil
+    /// nil while dual-pane mode isn't enabled or the window is single-pane (F5/F6 beep, no context items).
+    var paneCommands: PaneCommands? = nil
     /// `PaneLayout.focusSerial`: the list takes keyboard focus when it changed and `isFocusTarget` is true.
     var focusSerial = 0
     var isFocusTarget = false
@@ -30,6 +40,7 @@ struct FileListView: NSViewControllerRepresentable {
         controller.signIn = signIn
         controller.onActivate = onActivate
         controller.onSwitchPane = onSwitchPane
+        controller.paneCommands = paneCommands
         controller.takesFocusOnAppear = isActive
         // A request made before this list existed isn't for it.
         controller.appliedFocusSerial = focusSerial
@@ -43,6 +54,7 @@ struct FileListView: NSViewControllerRepresentable {
         controller.signIn = signIn
         controller.onActivate = onActivate
         controller.onSwitchPane = onSwitchPane
+        controller.paneCommands = paneCommands
         controller.takesFocusOnAppear = isActive
         controller.applyFocusRequest(serial: focusSerial, isTarget: isFocusTarget)
     }
