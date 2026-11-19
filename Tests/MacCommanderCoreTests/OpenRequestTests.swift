@@ -62,4 +62,11 @@ import Testing
         let result = OpenRequest.requests(for: [folderLink], isFolder: OpenRequest.folderCheck)
         #expect(result == [OpenRequest(folder: folderLink.standardizedFileURL, selection: [])])
     }
+
+    /// `/tmp`, `/var` and `/etc` link into `/private`, which `resolvingSymlinksInPath()` strips again.
+    @Test func folderCheckFollowsPrivateSymlinks() {
+        for path in ["/tmp", "/var", "/etc"] {
+            #expect(OpenRequest.folderCheck(URL(fileURLWithPath: path)), "\(path)")
+        }
+    }
 }

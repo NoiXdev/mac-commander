@@ -30,7 +30,11 @@ public struct OpenRequest: Equatable, Sendable {
     /// Whether `url` is a real directory that isn't a package; symlinks are followed (`/tmp` is a folder). May
     /// block: run it off the main actor.
     public static func folderCheck(_ url: URL) -> Bool {
-        let values = try? url.resolvingSymlinksInPath().resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
+        // `realpath`, not `resolvingSymlinksInPath()`: that one strips `/private` again, leaving `/tmp` a symlink.
+        guard let resolved = realpath(url.path, nil) else { return false }
+        defer { free(resolved) }
+        let values = try? URL(fileURLWithPath: String(cString: resolved))
+            .resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
         return values?.isDirectory == true && values?.isPackage != true
     }
 }
