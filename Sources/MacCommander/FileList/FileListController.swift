@@ -141,6 +141,11 @@ final class FileListController: NSViewController {
         if takesFocusOnAppear { view.window?.makeFirstResponder(outlineView) }
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        scrollSelectionIntoViewIfRequested()
+    }
+
     /// Takes keyboard focus once per new focus request (`serial`) that names this list. After the SwiftUI
     /// update that delivered it, since becoming first responder activates the pane.
     func applyFocusRequest(serial: Int, isTarget: Bool) {

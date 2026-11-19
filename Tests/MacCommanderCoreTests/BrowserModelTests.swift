@@ -753,6 +753,24 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(model.selection == [item.url])
     }
 
+    @Test func selectAndRevealAskToScrollSelectionIntoView() async throws {
+        let dir = try TemporaryDirectory()
+        let work = try dir.folder("work")
+        let a = try dir.file("work/a.txt")
+        let model = BrowserModel(start: work, settings: makeStore())
+        #expect(!model.scrollsSelectionIntoView)
+
+        await model.select([a])
+        #expect(model.scrollsSelectionIntoView)
+
+        model.scrollsSelectionIntoView = false
+        #expect(await model.reveal(a))
+        #expect(model.scrollsSelectionIntoView)
+
+        _ = await model.navigate(to: dir.url)
+        #expect(!model.scrollsSelectionIntoView)
+    }
+
     @Test func selectSurvivesConcurrentReload() async throws {
         for selectFirst in [true, false] {
             let dir = try TemporaryDirectory()

@@ -28,7 +28,19 @@ extension FileListController {
         if rows != outlineView.selectedRowIndexes {
             applyingChanges { outlineView.selectRowIndexes(rows, byExtendingSelection: false) }
         }
+        scrollSelectionIntoViewIfRequested()
         updateCheckboxStates()
+    }
+
+    /// A reveal or an incoming open (`model.scrollsSelectionIntoView`): scrolls the first selected row into view
+    /// once its rows are shown and the list has a size (a new window may list before its first layout), then
+    /// clears the request, so later selection changes leave the user's scrolling alone.
+    func scrollSelectionIntoViewIfRequested() {
+        guard model.scrollsSelectionIntoView, showsCurrentFolder, view.window != nil,
+            !scrollView.contentView.bounds.isEmpty, let first = outlineView.selectedRowIndexes.first
+        else { return }
+        model.scrollsSelectionIntoView = false
+        outlineView.scrollRowToVisible(first)
     }
 
     func writeSelectionToModel() {

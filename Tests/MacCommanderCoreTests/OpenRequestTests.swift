@@ -47,4 +47,19 @@ import Testing
         #expect(!OpenRequest.folderCheck(file))
         #expect(!OpenRequest.folderCheck(package))
     }
+
+    @Test func folderCheckFollowsSymlinks() throws {
+        let dir = try TemporaryDirectory()
+        let folder = try dir.folder("f")
+        let file = try dir.file("a.txt")
+        let folderLink = dir.url.appendingPathComponent("folder-link")
+        let fileLink = dir.url.appendingPathComponent("file-link")
+        try FileManager.default.createSymbolicLink(at: folderLink, withDestinationURL: folder)
+        try FileManager.default.createSymbolicLink(at: fileLink, withDestinationURL: file)
+        #expect(OpenRequest.folderCheck(folderLink))
+        #expect(!OpenRequest.folderCheck(fileLink))
+        // The request keeps the path as given, not the resolved one.
+        let result = OpenRequest.requests(for: [folderLink], isFolder: OpenRequest.folderCheck)
+        #expect(result == [OpenRequest(folder: folderLink.standardizedFileURL, selection: [])])
+    }
 }

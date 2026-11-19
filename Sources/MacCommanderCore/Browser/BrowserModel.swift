@@ -70,6 +70,9 @@ public final class BrowserModel {
     /// a connect of that share counts as the recovery (see `shareDidConnect`).
     @ObservationIgnored private var recovery: (id: UUID, navigation: Int)?
     public var selection: Set<URL> = []
+    /// One-shot: set by `select` and `reveal` so the list scrolls the selection into view once it shows it, then
+    /// sets it back to false. Cleared by every navigation request. Other selection changes leave the scroll alone.
+    @ObservationIgnored public var scrollsSelectionIntoView = false
     /// Set after a create; the list starts inline editing for it, then sets it back to nil.
     public var pendingRename: URL?
 
@@ -238,6 +241,7 @@ public final class BrowserModel {
 
     /// Starts a navigation request; any request started earlier is superseded from now on.
     private func beginNavigation() -> Int {
+        scrollsSelectionIntoView = false
         navigationGeneration += 1
         return navigationGeneration
     }
@@ -637,20 +641,23 @@ public final class BrowserModel {
     }
 
     /// For a just-created model: selects the items of `urls` that are in the current folder (others are
-    /// ignored) and lists the folder. The selection is seeded first, so whichever listing lands last
-    /// (this one, or a concurrent `reload()` that supersedes it) normalizes it to the items' spellings.
+    /// ignored) and lists the folder; does nothing when none is in it. The selection is seeded first, so whichever
+    /// listing lands last (this one, or a concurrent `reload()` that supersedes it) normalizes it to the items'
+    /// spellings. Sets `scrollsSelectionIntoView`.
     public func select(_ urls: [URL]) async {
         let historyAtStart = history
         let inFolder = urls.filter { isCurrentDirectory($0.deletingLastPathComponent()) }
         guard !inFolder.isEmpty, !isSearching else { return }
+        scrollsSelectionIntoView = true
         selection = Set(inFolder)
         guard await reloadIfStillShowing(currentURL, since: historyAtStart) else { return }
         selection = Set(inFolder.map { itemURL(matching: $0) })
     }
 
     /// Shows a real file or folder in the list: navigates to its parent folder (unless that is the current
-    /// folder already) and selects it, spelled as in `items`. Targets inside an archive and missing targets
-    /// are ignored. Checks the target off the main actor, like `navigate`. Returns false when ignored (the UI beeps), true otherwise.
+    /// folder already) and selects it, spelled as in `items`, setting `scrollsSelectionIntoView`. Targets inside an
+    /// archive and missing targets are ignored. Checks the target off the main actor, like `navigate`. Returns false
+    /// when ignored (the UI beeps), true otherwise.
     @discardableResult
     public func reveal(_ url: URL) async -> Bool {
         let generation = beginNavigation()
@@ -674,6 +681,7 @@ public final class BrowserModel {
             // Selection matches items by name, so the hint doesn't matter.
             : URL(fileURLWithPath: canonicalParent, isDirectory: true)
                 .appendingPathComponent(target.lastPathComponent, isDirectory: false)
+        scrollsSelectionIntoView = true
         await selectAfterOperation([selected])
         return true
     }
