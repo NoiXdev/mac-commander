@@ -3,9 +3,10 @@ import Testing
 @testable import MacCommanderCore
 
 @Suite struct DiscImageWriterTests {
-    /// A sector of `size` bytes whose every byte is `fill`, except `submode` at offset 18 when given.
+    /// A sector of `size` bytes with a position-dependent pattern (so a wrong offset changes the output),
+    /// with `submode` at offset 18 when given.
     private func sector(_ size: Int, fill: UInt8, submode: UInt8? = nil) -> Data {
-        var data = Data(repeating: fill, count: size)
+        var data = Data((0..<size).map { UInt8(truncatingIfNeeded: $0 &* 7 &+ Int(fill) &* 31) })
         if let submode, size > 18 { data[18] = submode }
         return data
     }
@@ -119,5 +120,58 @@ import Testing
             _ = try await DiscImageWriter.writeISO(cue: cue, to: out, progress: { _ in })
         }
         #expect(try String(contentsOf: out, encoding: .utf8) == "keep")
+    }
+
+    private func expectNoOutput(_ dir: TemporaryDirectory) {
+        #expect(!FileManager.default.fileExists(atPath: dir.url.appendingPathComponent("out.iso").path))
+    }
+
+    @Test func indexPastEndOfFileRejected() async throws {
+        let dir = try TemporaryDirectory()
+        let cue = try write(dir, sectors: [sector(2352, fill: 1)],
+                            cue: "FILE \"game.bin\" BINARY\nTRACK 01 MODE1/2352\nINDEX 01 00:00:01\n")
+        await #expect(throws: DiscImageError.sizeMismatch) { _ = try await run(cue, dir) }
+        expectNoOutput(dir)
+    }
+
+    @Test func truncatedBinRejected() async throws {
+        let dir = try TemporaryDirectory()
+        let cue = try write(dir, sectors: [sector(2352, fill: 1), sector(2352, fill: 2)], cue: """
+            FILE "game.bin" BINARY
+            TRACK 01 MODE1/2352
+            INDEX 01 00:00:00
+            TRACK 02 AUDIO
+            INDEX 01 00:00:05
+            """)
+        await #expect(throws: DiscImageError.sizeMismatch) { _ = try await run(cue, dir) }
+        expectNoOutput(dir)
+    }
+
+    @Test func emptyTrackRangeRejected() async throws {
+        let dir = try TemporaryDirectory()
+        let cue = try write(dir, sectors: (0..<3).map { sector(2352, fill: UInt8($0)) }, cue: """
+            FILE "game.bin" BINARY
+            TRACK 01 MODE1/2352
+            INDEX 01 00:00:02
+            TRACK 02 AUDIO
+            INDEX 01 00:00:01
+            """)
+        await #expect(throws: DiscImageError.sizeMismatch) { _ = try await run(cue, dir) }
+        expectNoOutput(dir)
+    }
+
+    @Test func cancellationRemovesPartialOutput() async throws {
+        let dir = try TemporaryDirectory()
+        // 2 MB of 2048-byte sectors = two 1 MB chunks.
+        let cue = try write(dir, sectors: (0..<1024).map { sector(2048, fill: UInt8($0 & 0xFF)) },
+                            cue: "FILE \"game.bin\" BINARY\nTRACK 01 MODE1/2048\nINDEX 01 00:00:00\n")
+        let out = dir.url.appendingPathComponent("out.iso")
+        let task = Task<Int, any Error> {
+            try await DiscImageWriter.writeISO(cue: cue, to: out, progress: { fraction in
+                if fraction > 0 { withUnsafeCurrentTask { $0?.cancel() } }
+            })
+        }
+        await #expect(throws: CancellationError.self) { _ = try await task.value }
+        expectNoOutput(dir)
     }
 }

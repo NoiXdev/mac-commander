@@ -23,9 +23,11 @@ public enum DiscImageWriter {
         let fileSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
         guard fileSize % sectorSize == 0 else { throw DiscImageError.sizeMismatch }
         let totalSectors = fileSize / sectorSize
-        let first = min(track.index01Frames, totalSectors)
-        let last = min(track.nextStartFrames ?? totalSectors, totalSectors)
-        let count = max(0, last - first)
+        let first = track.index01Frames
+        let last = track.nextStartFrames ?? totalSectors
+        // A track that starts past the file, ends past it (truncated BIN) or is empty would give a broken ISO.
+        guard first < totalSectors, last <= totalSectors, last > first else { throw DiscImageError.sizeMismatch }
+        let count = last - first
 
         let descriptor = open(output.path, O_WRONLY | O_CREAT | O_EXCL, 0o644)
         guard descriptor >= 0 else {
@@ -63,7 +65,6 @@ public enum DiscImageWriter {
                 progress(Double(done) / Double(count))
             }
             try sink.close()
-            if count == 0 { progress(1) }
             return zeroed
         } catch {
             try? sink.close()
