@@ -5,14 +5,21 @@ import SwiftUI
 // `@Entry` and `@State` are macros whose plugin is missing under Command Line Tools, so the
 // focused-value keys are spelled out and `State` is used as a plain property.
 private struct BrowserModelKey: FocusedValueKey { typealias Value = BrowserModel }
+private struct PaneLayoutKey: FocusedValueKey { typealias Value = PaneLayout }
 private struct GoToFolderPresentedKey: FocusedValueKey { typealias Value = Binding<Bool> }
 private struct ShareSheetsKey: FocusedValueKey { typealias Value = ShareSheets }
 private struct SearchFocusedKey: FocusedValueKey { typealias Value = Binding<Bool> }
 
 extension FocusedValues {
+    /// The focused window's active pane.
     var browserModel: BrowserModel? {
         get { self[BrowserModelKey.self] }
         set { self[BrowserModelKey.self] = newValue }
+    }
+    /// The focused window's panes (mode switching, the preview setting of its mode).
+    var paneLayout: PaneLayout? {
+        get { self[PaneLayoutKey.self] }
+        set { self[PaneLayoutKey.self] = newValue }
     }
     var goToFolderPresented: Binding<Bool>? {
         get { self[GoToFolderPresentedKey.self] }
@@ -30,6 +37,13 @@ extension FocusedValues {
     }
 }
 
+extension PaneLayout {
+    /// View ▸ Single Pane / Dual Pane and the toolbar button.
+    func toggleMode() {
+        if isDual { showSingle() } else { showDual() }
+    }
+}
+
 /// One browser window: sidebar, toolbar and the panes of its `PaneLayout` (see `PaneView`). The sidebar,
 /// toolbar, search field, title, preview, sheets and menus act on the active pane.
 struct BrowserWindow: View {
@@ -37,12 +51,15 @@ struct BrowserWindow: View {
     @Environment(PreferencesStore.self) private var preferences
     @Environment(FileOperationCenter.self) private var operations
     @Environment(ShareManager.self) private var shareManager
+    // Restored per window: both panes' folders (the second one's also while it is closed), the mode and the
+    // active pane. `currentFolderPath` is v1's key, for the first pane.
     @SceneStorage("currentFolderPath") private var storedPath = ""
+    @SceneStorage("secondFolderPath") private var storedSecondPath = ""
+    @SceneStorage("isDualPane") private var storedIsDual = false
+    @SceneStorage("activePane") private var storedActivePane = 0
     private let layoutState = State<PaneLayout?>(initialValue: nil)
     /// One preview controller per pane, created when the pane first becomes active (Ruling P7-4).
     private let previewsState = State<[ObjectIdentifier: PreviewController]>(initialValue: [:])
-    /// The pane the search `.task` last ran for; a pane switch doesn't restart that pane's shown search.
-    private let searchPaneState = State<ObjectIdentifier?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
     private let shareSheetsState = State(initialValue: ShareSheets())
     /// The Finder name of a folder, resolved off the main actor; the title shows it once it matches.
@@ -56,10 +73,6 @@ struct BrowserWindow: View {
     private var previews: [ObjectIdentifier: PreviewController] {
         get { previewsState.wrappedValue }
         nonmutating set { previewsState.wrappedValue = newValue }
-    }
-    private var searchPane: ObjectIdentifier? {
-        get { searchPaneState.wrappedValue }
-        nonmutating set { searchPaneState.wrappedValue = newValue }
     }
     private var showGoToFolder: Binding<Bool> { goToFolderState.projectedValue }
     private var shareSheets: ShareSheets { shareSheetsState.wrappedValue }
@@ -78,7 +91,10 @@ struct BrowserWindow: View {
         }
         .onAppear {
             guard layout == nil else { return }
-            let model = makeModel(start: Self.startURL(storedPath: storedPath))
+            // Every pane, also one opened later by `showDual()`, is made by this one factory with the app's stores.
+            let makePane = Self.paneFactory(
+                settings: settings, preferences: preferences, operations: operations, shareManager: shareManager)
+            let model = makePane(Self.startURL(storedPath: storedPath))
             if !storedPath.hasPrefix("/") {
                 // New window: starts at home at once; the preferred folder is checked off main, then replaces
                 // the start (no Back entry to home), unless the user navigated meanwhile.
@@ -97,33 +113,55 @@ struct BrowserWindow: View {
                     }
                 }
             }
-            previews = [model.paneID: PreviewController(model: model, settings: settings)]
-            layout = PaneLayout(primary: model, makePane: { makeModel(start: $0) })
+            // A gone second folder falls back like the first (the model's first load, off the main actor).
+            let second = storedSecondPath.hasPrefix("/") ? URL(fileURLWithPath: storedSecondPath, isDirectory: true) : nil
+            let layout = PaneLayout(primary: model, rememberedSecondFolder: second, makePane: makePane)
+            // New windows start single (their scene storage is empty); with the setting off, restored ones too.
+            if storedIsDual, preferences.preferences.dualPaneEnabled {
+                layout.showDual()
+                layout.activate(layout.panes[min(max(storedActivePane, 0), layout.panes.count - 1)])
+            }
+            previews = [layout.active.paneID: makePreview(layout.active, layout: layout)]
+            self.layout = layout
         }
     }
 
-    /// A pane's model: starts at `start`; new-file names and share lookups come from the app's stores.
-    private func makeModel(start: URL) -> BrowserModel {
-        let model = BrowserModel(start: start, settings: settings, operations: operations)
-        model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
-        // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
-        model.shareResolver = { [weak shareManager] url in
-            guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
-            let status = shareManager.status[hit.share.id]
-            let isConnected = status == .connected(mountPoint: hit.mountPoint)
-            // Server known to be gone: the window shows Disconnected without statting the dead path. Not for
-            // an available share: its lookup may come from the old mount path, where another volume (a USB
-            // disk with the same name) may be mounted now, which must stay browsable.
-            let isKnownDisconnected = status == .unreachable
-            return (hit.share.id, hit.share.name, hit.mountPoint, isConnected, isKnownDisconnected)
+    /// Makes a pane's model: starts at the given folder; new-file names and share lookups come from the app's
+    /// stores, which are captured here (not read from the window's environment later).
+    private static func paneFactory(
+        settings: ViewSettingsStore, preferences: PreferencesStore, operations: FileOperationCenter,
+        shareManager: ShareManager
+    ) -> @MainActor (URL) -> BrowserModel {
+        { [settings, preferences, operations, shareManager] start in
+            let model = BrowserModel(start: start, settings: settings, operations: operations)
+            model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
+            // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
+            model.shareResolver = { [weak shareManager] url in
+                guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
+                let status = shareManager.status[hit.share.id]
+                let isConnected = status == .connected(mountPoint: hit.mountPoint)
+                // Server known to be gone: the pane shows Disconnected without statting the dead path. Not for
+                // an available share: its lookup may come from the old mount path, where another volume (a USB
+                // disk with the same name) may be mounted now, which must stay browsable.
+                let isKnownDisconnected = status == .unreachable
+                return (hit.share.id, hit.share.name, hit.mountPoint, isConnected, isKnownDisconnected)
+            }
+            // A pane showing Disconnected has the manager re-check that share (its status may be stale).
+            model.shareDropped = { [shareManager] id in shareManager.recheck(id) }
+            return model
         }
-        // A window showing Disconnected has the manager re-check that share (its status may be stale).
-        model.shareDropped = { [shareManager] id in shareManager.recheck(id) }
-        return model
+    }
+
+    /// A pane's preview controller; it shows content while the setting of the window's current mode is on.
+    private func makePreview(_ pane: BrowserModel, layout: PaneLayout) -> PreviewController {
+        PreviewController(model: pane, settings: settings, isShown: { [settings, weak layout] in
+            settings.settings.showsPreview(dualPane: layout?.isDual ?? false)
+        })
     }
 
     private func content(_ layout: PaneLayout) -> some View {
         let model = layout.active
+        let isDual = layout.isDual
         return NavigationSplitView {
             SidebarView(model: model, shareSheets: shareSheets)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
@@ -131,55 +169,46 @@ struct BrowserWindow: View {
             VStack(spacing: 0) {
                 // The panes stay the split view's first children whether or not the preview is shown, and are
                 // identified by their model, so each keeps its identity (controller, scroll position, selection)
-                // when the preview toggles or another pane comes or goes.
+                // when the preview toggles, the mode changes or another pane becomes active.
                 HSplitView {
                     ForEach(layout.panes, id: \.paneID) { pane in
                         PaneView(
-                            model: pane, layout: layout, isActive: pane === layout.active,
-                            showsActiveMarker: layout.isDual,
-                            // The scene restores the first pane's folder.
-                            onFolderChange: { url in
-                                if pane === layout.panes.first { storedPath = url.path }
-                            })
+                            model: pane, layout: layout, isActive: pane === model, showsActiveMarker: isDual,
+                            showsFooter: isDual)
                             .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    if settings.settings.showPreview, let preview = previews[model.paneID] {
+                    if settings.settings.showsPreview(dualPane: isDual), let preview = previews[model.paneID] {
                         PreviewPane(controller: preview)
                             .frame(minWidth: 240, idealWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
                 .environment(shareSheets)
+                // Single-pane mode: across the full width, below the preview too (as in v1).
+                if !isDual {
+                    PaneFooter(model: model)
+                }
                 OperationsStrip()
             }
             .searchable(text: searchText(layout), placement: .toolbar, prompt: String(localized: "Search"))
             .searchFocused($searchFieldFocused)
-            // Debounced: each keystroke restarts the wait. Clearing the field ends the search at once. Per pane:
-            // switching to a pane whose search already shows the field's text doesn't restart it.
-            .task(id: SearchRequest(pane: model.paneID, text: layout.searchText(for: model))) {
-                let text = layout.searchText(for: model)
-                let paneChanged = searchPane != model.paneID
-                searchPane = model.paneID
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty {
-                    // Not a tag view: the field is also cleared when one starts. With no search shown this still
-                    // drops a search request that is checking its folder.
-                    if case .tag? = model.search?.scope {} else { model.endSearch() }
-                    return
-                }
-                if paneChanged, model.search == SearchQuery(text: trimmed, scope: .folder(model.currentURL)) {
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(250))
-                guard !Task.isCancelled else { return }
-                await model.startSearch(text)
-            }
         }
         // On the split view, which exists exactly while the layout does (not on the Group's branches, whose
         // switch from `Color.clear` would fire them around creation). Only the active pane's preview runs;
         // closing the window stops extraction and rendering for every pane's preview. Both calls are idempotent.
         .onAppear { syncPreviews(layout) }
         .onChange(of: model.paneID) { syncPreviews(layout) }
+        .onChange(of: layout.panes.map(\.paneID)) { syncPreviews(layout) }
         .onDisappear { previews.values.forEach { $0.stop() } }
+        .onChange(of: StoredPanes(layout), initial: true) { _, stored in
+            storedPath = stored.first
+            storedSecondPath = stored.second
+            storedIsDual = stored.isDual
+            storedActivePane = stored.active
+        }
+        // Turning the setting off makes every window single-pane, keeping its active pane.
+        .onChange(of: preferences.preferences.dualPaneEnabled) { _, enabled in
+            if !enabled { layout.showSingle() }
+        }
         // The last path component at once (no disk access), the localized name once it's resolved. A tag view
         // shows the tag's name.
         .navigationTitle(title(for: model))
@@ -212,8 +241,16 @@ struct BrowserWindow: View {
                 }
                 // Archives are read-only; a shown search hides the folder the new one would land in.
                 .disabled(model.archiveLocation != nil || model.isSearching)
+                if preferences.preferences.dualPaneEnabled {
+                    Button {
+                        layout.toggleMode()
+                    } label: {
+                        Label(String(localized: "Dual Pane"), systemImage: "rectangle.split.2x1")
+                    }
+                    .help(String(localized: "Dual Pane"))
+                }
                 Button {
-                    settings.settings.showPreview.toggle()
+                    settings.settings.togglePreview(dualPane: isDual)
                 } label: {
                     Label(String(localized: "Preview"), systemImage: "sidebar.right")
                 }
@@ -228,6 +265,7 @@ struct BrowserWindow: View {
             }
         }
         .focusedSceneValue(\.browserModel, model)
+        .focusedSceneValue(\.paneLayout, layout)
         .focusedSceneValue(\.goToFolderPresented, showGoToFolder)
         .focusedSceneValue(\.searchFocused, Binding(
             get: { searchFieldFocused }, set: { searchFieldFocused = $0 }))
@@ -247,7 +285,8 @@ struct BrowserWindow: View {
         .background(WindowReader(box: shareSheets.window))
     }
 
-    /// The toolbar search field shows the active pane's text; a search starts 250 ms after the last change.
+    /// The toolbar search field shows the active pane's text; that pane's search starts 250 ms after the last
+    /// change (see `PaneView`).
     private func searchText(_ layout: PaneLayout) -> Binding<String> {
         Binding(
             get: { layout.searchText(for: layout.active) },
@@ -264,7 +303,7 @@ struct BrowserWindow: View {
             controller.stop()
             previews[id] = nil
         }
-        let activeController = previews[active.paneID] ?? PreviewController(model: active, settings: settings)
+        let activeController = previews[active.paneID] ?? makePreview(active, layout: layout)
         previews[active.paneID] = activeController
         for (id, controller) in previews where id != active.paneID { controller.stop() }
         activeController.resume()
@@ -287,10 +326,21 @@ struct BrowserWindow: View {
     }
 }
 
-/// The search `.task`'s id: the active pane and its field text.
-private struct SearchRequest: Equatable {
-    let pane: ObjectIdentifier
-    let text: String
+/// What the window's scene storage keeps of its layout.
+private struct StoredPanes: Equatable {
+    /// panes[0]'s folder.
+    let first: String
+    /// panes[1]'s folder, or the one the second pane reopens at while it is closed ("" if none).
+    let second: String
+    let isDual: Bool
+    let active: Int
+
+    @MainActor init(_ layout: PaneLayout) {
+        first = layout.panes[0].currentURL.path
+        second = (layout.isDual ? layout.panes[1].currentURL : layout.rememberedSecondFolder)?.path ?? ""
+        isDual = layout.isDual
+        active = layout.activeIndex
+    }
 }
 
 enum BrowserActions {

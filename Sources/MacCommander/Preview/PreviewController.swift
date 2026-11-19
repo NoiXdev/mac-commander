@@ -39,12 +39,12 @@ struct PreviewHeader {
     var modified: String?
 }
 
-/// Resolves what the preview panel shows for the window's selection. One per window.
+/// Resolves what the preview panel shows for a pane's selection. One per pane.
 ///
-/// Watches `model.selection`, `model.currentURL` and `settings.showPreview`. A selection or folder change
-/// resolves after 150 ms without further changes (holding ↓ through a folder resolves only once, at the
-/// end); showing the panel resolves at once. While the panel is hidden nothing is resolved, read or
-/// extracted.
+/// Watches `model.selection`, `model.currentURL` and whether the panel is shown (`isShown`). A selection or
+/// folder change resolves after 150 ms without further changes (holding ↓ through a folder resolves only
+/// once, at the end); showing the panel resolves at once. While the panel is hidden nothing is resolved,
+/// read or extracted.
 ///
 /// Each resolution bumps `generation`; its work runs in one `Task` that is cancelled when a newer
 /// resolution starts or the inputs change, and its results are applied only while the generation and
@@ -65,6 +65,8 @@ final class PreviewController {
 
     @ObservationIgnored private let model: BrowserModel
     @ObservationIgnored private let settings: ViewSettingsStore
+    /// Whether the window shows the preview panel (its mode's setting); read under observation tracking.
+    @ObservationIgnored private let isShown: @MainActor () -> Bool
     @ObservationIgnored private let registry: MacCommanderCore.PreviewRegistry
     @ObservationIgnored private(set) var generation = 0
     /// The debounce sleep before the next resolution.
@@ -89,13 +91,17 @@ final class PreviewController {
     private static let debounce = Duration.milliseconds(150)
     nonisolated private static let headerIconSize = NSSize(width: 48, height: 48)
 
-    init(model: BrowserModel, settings: ViewSettingsStore, registry: MacCommanderCore.PreviewRegistry = .standard) {
+    init(
+        model: BrowserModel, settings: ViewSettingsStore, isShown: @escaping @MainActor () -> Bool,
+        registry: MacCommanderCore.PreviewRegistry = .standard
+    ) {
         self.model = model
         self.settings = settings
+        self.isShown = isShown
         self.registry = registry
         observedSelection = model.selection
         observedURL = model.currentURL
-        observedShown = settings.settings.showPreview
+        observedShown = isShown()
         observe()
         if observedShown { resolve() }
     }
@@ -106,7 +112,7 @@ final class PreviewController {
         withObservationTracking {
             _ = model.selection
             _ = model.currentURL
-            _ = settings.settings.showPreview
+            _ = isShown()
         } onChange: { [weak self] in
             // Called before the change is applied; read the new values on the next main-actor turn.
             Task { @MainActor in self?.inputsDidChange() }
@@ -117,7 +123,7 @@ final class PreviewController {
         observe()
         let selection = model.selection
         let url = model.currentURL
-        let shown = settings.settings.showPreview
+        let shown = isShown()
         let wasShown = observedShown
         let changed = selection != observedSelection || url != observedURL
         observedSelection = selection
@@ -168,7 +174,7 @@ final class PreviewController {
     func resume() {
         guard isStopped else { return }
         isStopped = false
-        if settings.settings.showPreview { resolve() }
+        if isShown() { resolve() }
     }
 
     /// The panel was hidden: drop everything (the Quick Look view goes away with the pane).

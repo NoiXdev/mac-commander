@@ -37,6 +37,17 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
     var quickLook: QuickLookController?
     /// Handles the file commands below.
     weak var commandHandler: FileCommandHandler?
+    /// Called whenever this view became first responder (a click, Tab, or a focus request): its pane becomes
+    /// the window's active pane.
+    var onBecomeFirstResponder: (() -> Void)?
+    /// Tab / ⇧Tab: switch to the other pane (dual-pane mode only; nil keeps the default key-view loop).
+    var onSwitchPane: (() -> Void)?
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onBecomeFirstResponder?() }
+        return became
+    }
 
     /// A click in the checkbox column toggles only that row, like ⌘-click. Handled here rather
     /// than by the checkbox button, because the table would change the selection first.
@@ -151,6 +162,11 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
             default:
                 break
             }
+        }
+        // Tab and ⇧Tab; an inline rename's field editor gets its own Tab, so this is only the list's.
+        if event.keyCode == 48, flags.isDisjoint(with: [.command, .option, .control]), let onSwitchPane {
+            onSwitchPane()
+            return
         }
         if flags.contains(.command), !flags.contains(.option), !flags.contains(.control) {
             switch event.specialKey {

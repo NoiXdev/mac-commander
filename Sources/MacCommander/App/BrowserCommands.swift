@@ -4,7 +4,10 @@ import SwiftUI
 
 struct BrowserCommands: Commands {
     let settings: ViewSettingsStore
+    let preferences: PreferencesStore
+    /// The focused window's active pane.
     @FocusedValue(\.browserModel) private var model
+    @FocusedValue(\.paneLayout) private var layout
     @FocusedValue(\.goToFolderPresented) private var goToFolder
     @FocusedValue(\.shareSheets) private var shareSheets
     @FocusedValue(\.searchFocused) private var searchFocused
@@ -83,11 +86,12 @@ struct BrowserCommands: Commands {
                 .keyboardShortcut("r")
                 .disabled(model == nil)
             Divider()
+            // The setting of the focused window's mode (single- and dual-pane windows each have their own).
             Button(
-                settings.settings.showPreview
+                settings.settings.showsPreview(dualPane: isDual)
                     ? String(localized: "Hide Preview") : String(localized: "Show Preview")
             ) {
-                settings.settings.showPreview.toggle()
+                settings.settings.togglePreview(dualPane: isDual)
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
             Toggle("Show Hidden Files", isOn: Binding(
@@ -97,8 +101,23 @@ struct BrowserCommands: Commands {
             Toggle("Show Checkbox Column", isOn: Binding(
                 get: { settings.settings.showCheckboxColumn },
                 set: { settings.settings.showCheckboxColumn = $0 }))
+            if preferences.preferences.dualPaneEnabled {
+                Divider()
+                Toggle(String(localized: "Single Pane"), isOn: Binding(
+                    get: { layout?.isDual == false },
+                    set: { if $0 { layout?.showSingle() } }))
+                    .keyboardShortcut("1")
+                    .disabled(layout == nil)
+                Toggle(String(localized: "Dual Pane"), isOn: Binding(
+                    get: { layout?.isDual == true },
+                    set: { if $0 { layout?.showDual() } }))
+                    .keyboardShortcut("2")
+                    .disabled(layout == nil)
+            }
         }
     }
+
+    private var isDual: Bool { layout?.isDual ?? false }
 
     /// Inside an archive the window is read-only: commands that write are disabled.
     private var isInArchive: Bool { model?.archiveLocation != nil }

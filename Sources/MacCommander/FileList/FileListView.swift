@@ -11,6 +11,15 @@ struct FileListView: NSViewControllerRepresentable {
     var reconnect: ((DisconnectedShare) -> Void)? = nil
     /// "Sign In…" in the same placeholder.
     var signIn: ((DisconnectedShare) -> Void)? = nil
+    /// The list took keyboard focus, or its placeholder was clicked: make its pane the active one.
+    var onActivate: (() -> Void)? = nil
+    /// Tab / ⇧Tab in the list; nil (single-pane mode) keeps the default key-view loop.
+    var onSwitchPane: (() -> Void)? = nil
+    /// `PaneLayout.focusSerial`: the list takes keyboard focus when it changed and `isFocusTarget` is true.
+    var focusSerial = 0
+    var isFocusTarget = false
+    /// The list's pane is active; only an active pane's list takes keyboard focus when it appears.
+    var isActive = true
     @Environment(\.openWindow) private var openWindow
 
     func makeNSViewController(context: Context) -> FileListController {
@@ -19,6 +28,11 @@ struct FileListView: NSViewControllerRepresentable {
             openInfo: { [openWindow] url in openWindow(id: "info", value: url) })
         controller.reconnect = reconnect
         controller.signIn = signIn
+        controller.onActivate = onActivate
+        controller.onSwitchPane = onSwitchPane
+        controller.takesFocusOnAppear = isActive
+        // A request made before this list existed isn't for it.
+        controller.appliedFocusSerial = focusSerial
         return controller
     }
 
@@ -27,6 +41,10 @@ struct FileListView: NSViewControllerRepresentable {
         controller.openInfo = { [openWindow] url in openWindow(id: "info", value: url) }
         controller.reconnect = reconnect
         controller.signIn = signIn
+        controller.onActivate = onActivate
+        controller.onSwitchPane = onSwitchPane
+        controller.takesFocusOnAppear = isActive
+        controller.applyFocusRequest(serial: focusSerial, isTarget: isFocusTarget)
     }
 }
 
@@ -38,11 +56,20 @@ struct LoadErrorView: View {
     var enterPassword: (() -> Void)? = nil
     var reconnect: (() -> Void)? = nil
     var signIn: (() -> Void)? = nil
+    /// A click anywhere on the placeholder (its pane becomes active); the buttons still work.
+    var onClick: (() -> Void)? = nil
 
     private static let privacySettingsURL = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
 
     var body: some View {
+        placeholder
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded { onClick?() })
+    }
+
+    @ViewBuilder private var placeholder: some View {
         if case .shareDisconnected = error {
             ContentUnavailableView {
                 Label(String(localized: "Disconnected"), systemImage: "network.slash")

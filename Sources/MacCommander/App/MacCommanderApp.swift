@@ -25,7 +25,7 @@ struct MacCommanderApp: App {
                 .environment(appDelegate.shares.manager)
         }
         .commands {
-            BrowserCommands(settings: settings)
+            BrowserCommands(settings: settings, preferences: preferences)
         }
 
         // One window per item; opening the same URL again focuses the existing window.

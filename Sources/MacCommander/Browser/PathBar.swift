@@ -5,8 +5,17 @@ import SwiftUI
 /// Clickable breadcrumb of the current folder; while a search is shown, what it searches.
 struct PathBar: View {
     let model: BrowserModel
+    /// Dual-pane mode: true emphasizes the path (semibold), false dims it. nil (single-pane mode): the plain
+    /// v1 style, since a single pane has no active-pane marking.
+    var isActive: Bool? = nil
 
     var body: some View {
+        content
+            .foregroundStyle(isActive == false ? HierarchicalShapeStyle.secondary : .primary)
+            .fontWeight(isActive == true ? .semibold : nil)
+    }
+
+    @ViewBuilder private var content: some View {
         if let search = model.search {
             HStack(spacing: 4) {
                 Image(systemName: search.scope.isTag ? "tag" : "magnifyingglass")

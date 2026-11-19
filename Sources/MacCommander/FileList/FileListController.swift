@@ -21,6 +21,20 @@ final class FileListController: NSViewController {
         didSet { if isViewLoaded, case .shareDisconnected? = model.loadError { applyLoadError() } }
     }
 
+    /// The list took keyboard focus (or its placeholder was clicked): its pane becomes active (supplied by
+    /// `FileListView`).
+    var onActivate: (() -> Void)? {
+        didSet { outlineView.onBecomeFirstResponder = onActivate }
+    }
+    /// Tab / ⇧Tab in the list: switch panes (dual-pane mode only; supplied by `FileListView`).
+    var onSwitchPane: (() -> Void)? {
+        didSet { outlineView.onSwitchPane = onSwitchPane }
+    }
+    /// False for a pane that isn't the active one: it doesn't take keyboard focus when it appears.
+    var takesFocusOnAppear = true
+    /// The pane layout's focus request (`PaneLayout.focusSerial`) last handled.
+    var appliedFocusSerial = 0
+
     private(set) var outlineView = FileOutlineView()
     let scrollView = NSScrollView()
     var errorHost: NSHostingView<LoadErrorView>?
@@ -114,7 +128,30 @@ final class FileListController: NSViewController {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        view.window?.makeFirstResponder(outlineView)
+        if takesFocusOnAppear { view.window?.makeFirstResponder(outlineView) }
+    }
+
+    /// Takes keyboard focus once per new focus request (`serial`) that names this list. After the SwiftUI
+    /// update that delivered it, since becoming first responder activates the pane.
+    func applyFocusRequest(serial: Int, isTarget: Bool) {
+        guard serial != appliedFocusSerial else { return }
+        appliedFocusSerial = serial
+        guard isTarget else { return }
+        Task { @MainActor [weak self] in self?.takeFocus() }
+    }
+
+    /// Makes the list first responder, which activates its pane. If it can't take focus (e.g. a placeholder
+    /// hides it), the window keeps no list focused, so responder-chain commands can't reach the other pane's
+    /// list while this pane is active.
+    func takeFocus() {
+        guard let window = view.window, window.firstResponder !== outlineView else {
+            onActivate?()
+            return
+        }
+        if !window.makeFirstResponder(outlineView) {
+            window.makeFirstResponder(nil)
+            onActivate?()
+        }
     }
 
     func configureOutline() {
@@ -336,7 +373,12 @@ final class FileListController: NSViewController {
         }
         let errorView = LoadErrorView(
             error: error, enterPassword: { [weak self] in self?.askForArchivePassword() }, reconnect: reconnectAction,
-            signIn: signInAction)
+            signIn: signInAction,
+            // Dual-pane mode only (the list then has a pane to switch to): activates this pane.
+            onClick: { [weak self] in
+                guard let self, self.onSwitchPane != nil else { return }
+                self.takeFocus()
+            })
         if let errorHost {
             errorHost.rootView = errorView
             errorHost.isHidden = false
