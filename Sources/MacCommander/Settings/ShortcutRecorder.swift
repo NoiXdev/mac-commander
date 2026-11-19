@@ -57,6 +57,8 @@ private final class RecorderKeyView: NSView {
     var onRecord: (GlobalShortcut) -> Void = { _ in }
     /// Only a click starts recording, so the Settings window never makes this its first responder by itself.
     private var isClicked = false
+    /// While recording: ends it on a click anywhere else, so a later keypress isn't taken by surprise.
+    private var clickMonitor: Any?
 
     override var acceptsFirstResponder: Bool { isClicked }
 
@@ -69,13 +71,46 @@ private final class RecorderKeyView: NSView {
 
     override func becomeFirstResponder() -> Bool {
         onRecordingChange(true)
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: clicks) { [weak self] event in
+            guard let self else { return event }
+            let isInside = event.window === window && bounds.contains(convert(event.locationInWindow, from: nil))
+            if !isInside { endRecording() }
+            return event
+        }
         return true
     }
 
     override func resignFirstResponder() -> Bool {
         isClicked = false
+        if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+        clickMonitor = nil
         onRecordingChange(false)
         return true
+    }
+
+    /// Recording also ends when the window stops being key (another window or app was activated).
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if let window {
+            NotificationCenter.default.removeObserver(self, name: NSWindow.didResignKeyNotification, object: window)
+        }
+        if let newWindow {
+            NotificationCenter.default.addObserver(
+                self, selector: #selector(windowDidResignKey), name: NSWindow.didResignKeyNotification,
+                object: newWindow)
+        }
+        endRecording()
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    @objc private func windowDidResignKey(_ notification: Notification) {
+        endRecording()
+    }
+
+    private func endRecording() {
+        if let window, window.firstResponder === self {
+            window.makeFirstResponder(nil)
+        }
     }
 
     override func keyDown(with event: NSEvent) {
@@ -99,7 +134,7 @@ private final class RecorderKeyView: NSView {
         if flags.contains(.control) { modifiers.insert(.control) }
         if flags.contains(.shift) { modifiers.insert(.shift) }
         if Int(event.keyCode) == kVK_Escape, modifiers.isEmpty {
-            window?.makeFirstResponder(nil)
+            endRecording()
             return
         }
         guard let key = Self.keyName(for: event) else { return }

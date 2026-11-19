@@ -19,6 +19,8 @@ final class OpenRequestRouter {
     /// Opens a new window of the main `WindowGroup` (SwiftUI's `openWindow`, registered by `BrowserWindow`).
     @ObservationIgnored private(set) var openWindow: (() -> Void)?
     private(set) var browserWindowCount = 0
+    /// Each browser window's `WindowBox`, held weakly: a box goes away with its closed window's state.
+    @ObservationIgnored private var windowBoxes: [WeakWindowBox] = []
     /// `receive` calls whose grouping is still running off the main actor, and the windows waiting for them.
     @ObservationIgnored private var receiving = 0
     @ObservationIgnored private var receiveWaiters: [CheckedContinuation<Void, Never>] = []
@@ -47,8 +49,8 @@ final class OpenRequestRouter {
     func enqueue(_ requests: [OpenRequest]) {
         guard !requests.isEmpty else { return }
         pending += requests
-        if let openWindow {
-            requests.forEach { _ in openWindow() }
+        if openWindow != nil {
+            requests.forEach { _ in openNewWindow() }
         } else {
             openFallbackWindowIfNeeded()
         }
@@ -69,20 +71,29 @@ final class OpenRequestRouter {
         let isFirst = self.openWindow == nil
         self.openWindow = openWindow
         if isFirst {
-            pending.forEach { _ in openWindow() }
+            pending.forEach { _ in openNewWindow() }
         }
     }
 
-    func windowAppeared() {
+    func windowAppeared(_ box: WindowBox) {
         browserWindowCount += 1
+        windowBoxes.removeAll { $0.box == nil || $0.box === box }
+        windowBoxes.append(WeakWindowBox(box: box))
+    }
+
+    /// The open browser windows (also minimized ones), in the order they appeared.
+    var browserWindows: [NSWindow] {
+        windowBoxes.compactMap { $0.box?.window }
     }
 
     func windowDisappeared() {
         browserWindowCount = max(browserWindowCount - 1, 0)
     }
 
-    /// A new browser window (it starts at the "new window" folder unless a request is pending).
+    /// A new browser window (it starts at the "new window" folder unless a request is pending). With no browser
+    /// window open it uses the menu item: the stored `openWindow` belongs to a closed window then.
     func openNewWindow() {
+        if browserWindowCount == 0, Self.performNewWindowMenuItem() { return }
         if let openWindow {
             openWindow()
         } else {
@@ -129,4 +140,8 @@ final class OpenRequestRouter {
         }
         return nil
     }
+}
+
+private struct WeakWindowBox {
+    weak var box: WindowBox?
 }

@@ -18,7 +18,10 @@ final class HotKeyCenter {
 
     /// Replaces the registered hotkey with `shortcut` (nil turns it off and returns true). Returns false when
     /// macOS refuses the shortcut (taken by the system or another app); the previous one is then registered again.
+    /// Also false, leaving the previous one, for a shortcut that isn't `isValid` (a hand-edited preference without
+    /// ⌘, ⌥ or ⌃ would take a bare key system-wide).
     func register(_ shortcut: GlobalShortcut?, action: @escaping @MainActor () -> Void) -> Bool {
+        if let shortcut, !shortcut.isValid { return false }
         installHandlerIfNeeded()
         let previous = registered
         let previousAction = self.action
@@ -71,28 +74,33 @@ final class HotKeyCenter {
                     MemoryLayout<EventHotKeyID>.size, nil, &hotKeyID)
                 guard status == noErr else { return status }
                 // The application event target dispatches on the main thread.
-                MainActor.assumeIsolated {
+                let handled = MainActor.assumeIsolated {
                     Unmanaged<HotKeyCenter>.fromOpaque(userData).takeUnretainedValue().pressed(hotKeyID)
                 }
-                return noErr
+                return handled ? noErr : OSStatus(eventNotHandledErr)
             }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), nil)
         isHandlerInstalled = status == noErr
     }
 
-    private func pressed(_ hotKeyID: EventHotKeyID) {
-        guard hotKeyID.signature == Self.signature, hotKeyID.id == currentID, hotKeyRef != nil else { return }
+    /// Runs the action for our current hotkey; false for any other hotkey event (it isn't ours to handle).
+    private func pressed(_ hotKeyID: EventHotKeyID) -> Bool {
+        guard hotKeyID.signature == Self.signature, hotKeyID.id == currentID, hotKeyRef != nil else { return false }
         action?()
+        return true
     }
 }
 
 extension OpenRequestRouter {
-    /// The global hotkey's action: activates the app, which brings its windows to the front, and opens a new
-    /// browser window when none is open.
+    /// The global hotkey's action: unhides and activates the app, which brings its windows to the front. When no
+    /// browser window is on screen it restores the latest minimized one, or opens a new one when none is open.
     func bringAppToFront() {
+        if NSApp.isHidden { NSApp.unhide(nil) }
         NSApp.activate()
-        guard browserWindowCount == 0 else { return }
-        // With no window left, the menu item is the sure path: the stored `openWindow` belongs to a closed window.
-        if !Self.performNewWindowMenuItem() {
+        let windows = browserWindows
+        guard !windows.contains(where: { $0.isVisible && !$0.isMiniaturized }) else { return }
+        if let minimized = windows.last(where: \.isMiniaturized) {
+            minimized.deminiaturize(nil)
+        } else if browserWindowCount == 0 {
             openNewWindow()
         }
     }

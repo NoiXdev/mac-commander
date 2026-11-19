@@ -95,7 +95,7 @@ struct BrowserWindow: View {
             }
         }
         .onAppear {
-            router.windowAppeared()
+            router.windowAppeared(shareSheets.window)
             guard layout == nil else { return }
             let isFresh = !storedPath.hasPrefix("/")
             if isFresh, router.openWindow == nil, router.isReceiving {
