@@ -94,6 +94,14 @@ private actor FakeProber: ReachabilityProber {
         if reachable { self.reachable.insert(host) } else { self.reachable.remove(host) }
     }
 
+    /// Host names no name lookup finds (e.g. OrbStack's "OrbStack" NFS server).
+    private var unresolvable: Set<String> = []
+    func set(_ host: String, resolvable: Bool) {
+        if resolvable { unresolvable.remove(host) } else { unresolvable.insert(host) }
+    }
+
+    func resolves(host: String) async -> Bool { !unresolvable.contains(host) }
+
     func setGate(_ gate: MountGate?) { self.gate = gate }
 
     /// One gate per call, in call order (before the shared `gate`).
@@ -252,6 +260,26 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(await h.prober.probeCount == 2)
         #expect(await h.prober.timeouts.allSatisfy { $0 == .seconds(3) })
         #expect(await h.mounter.mounts.isEmpty)
+    }
+
+    /// OrbStack mounts its NFS share itself, from a server name ("OrbStack") that no name lookup finds: it can't
+    /// be probed over the network, so a mounted one is connected. SMB keeps the probe (a dead NAS's stale mount
+    /// stays unreachable).
+    @Test func mountedNFSShareWithUnresolvableHostIsConnected() async throws {
+        let h = try Harness()
+        let orb = try h.share("nfs://orbstack/OrbStack", autoReconnect: false)
+        let nas = try h.share("smb://office-nas/Projekte", autoReconnect: false)
+        await h.prober.set("orbstack", resolvable: false)
+        await h.prober.set("office-nas", resolvable: false)
+        await h.volumes.set([
+            MountedShare(mountPoint: volume("/Users/me/OrbStack"), url: try url("nfs://orbstack/OrbStack")),
+            MountedShare(mountPoint: volume("/Volumes/Projekte"), url: try url("smb://office-nas/Projekte")),
+        ])
+
+        await h.refresh()
+
+        #expect(h.manager.status[orb.id] == .connected(mountPoint: volume("/Users/me/OrbStack")))
+        #expect(h.manager.status[nas.id] == .unreachable)
     }
 
     @Test func checkingOnlyOnFirstLoad() async throws {

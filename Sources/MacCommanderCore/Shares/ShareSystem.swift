@@ -44,6 +44,8 @@ public protocol ShareMounter: Sendable {
 /// A TCP connect to `host:port`, giving up after `timeout`.
 public protocol ReachabilityProber: Sendable {
     func isReachable(host: String, port: Int, timeout: Duration) async -> Bool
+    /// Whether a name lookup finds `host` (an IP address always counts as found).
+    func resolves(host: String) async -> Bool
 }
 
 /// A network volume currently mounted on this Mac, by whatever app mounted it.

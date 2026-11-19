@@ -261,17 +261,14 @@ public final class ShareManager {
 
     /// Reachability by `probeKey`.
     private func probe(_ shares: [SavedShare]) async -> [String: Bool] {
-        var targets: [String: (host: String, port: Int)] = [:]
+        var targets: [String: ShareURL] = [:]
         for share in shares {
-            targets[Self.probeKey(share)] = (share.url.host, share.url.probePort)
+            targets[Self.probeKey(share)] = share.url
         }
         let prober = prober
-        let timeout = Self.probeTimeout
         return await withTaskGroup(of: (String, Bool).self) { group in
-            for (key, target) in targets {
-                group.addTask {
-                    (key, await prober.isReachable(host: target.host, port: target.port, timeout: timeout))
-                }
+            for (key, url) in targets {
+                group.addTask { (key, await Self.isReachable(url, prober: prober)) }
             }
             var result: [String: Bool] = [:]
             for await (key, isReachable) in group { result[key] = isReachable }
@@ -280,7 +277,16 @@ public final class ShareManager {
     }
 
     private func probe(_ share: SavedShare) async -> Bool {
-        await prober.isReachable(host: share.url.host, port: share.url.probePort, timeout: Self.probeTimeout)
+        await Self.isReachable(share.url, prober: prober)
+    }
+
+    /// A TCP connect to the share's port. Except for an NFS server whose name no lookup finds: such a share is
+    /// mounted by a local app from a server only it knows (OrbStack's "OrbStack:/OrbStack" is served on
+    /// 127.0.0.1 at a changing port), so there is nothing to probe; it counts as reachable and is connected
+    /// exactly while it's mounted. SMB, AFP and WebDAV always probe, so a dead NAS's stale mount stays unreachable.
+    private static func isReachable(_ url: ShareURL, prober: any ReachabilityProber) async -> Bool {
+        if url.scheme == "nfs", await !prober.resolves(host: url.host) { return true }
+        return await prober.isReachable(host: url.host, port: url.probePort, timeout: probeTimeout)
     }
 
     private func classify(_ share: SavedShare, mounted: [MountedShare], reachable: Bool) {

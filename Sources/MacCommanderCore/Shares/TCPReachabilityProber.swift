@@ -33,6 +33,18 @@ public struct TCPReachabilityProber: ReachabilityProber {
         }
     }
 
+    /// `getaddrinfo` (it may block on DNS, so it runs on its own thread through `PathQueries.run`).
+    public func resolves(host: String) async -> Bool {
+        await PathQueries.run {
+            var hints = addrinfo()
+            hints.ai_socktype = SOCK_STREAM
+            var result: UnsafeMutablePointer<addrinfo>?
+            let status = getaddrinfo(host, nil, &hints, &result)
+            if let result { freeaddrinfo(result) }
+            return status == 0
+        }
+    }
+
     static func failsFast(_ error: NWError) -> Bool {
         switch error {
         case .posix(.ECONNREFUSED), .posix(.EHOSTUNREACH), .posix(.ENETUNREACH): return true

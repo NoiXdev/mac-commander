@@ -66,6 +66,12 @@ import Testing
         #expect(clock.now - start < .seconds(4))
     }
 
+    /// An IP address always resolves; a name under the reserved `.invalid` domain never does.
+    @Test func proberResolvesAddressesNotUnknownNames() async {
+        #expect(await TCPReachabilityProber().resolves(host: "127.0.0.1"))
+        #expect(await !TCPReachabilityProber().resolves(host: "maccommander-test.invalid"))
+    }
+
     @Test func volumeListerKeepsOnlyNetworkShares() throws {
         let shares = SystemVolumeLister.shares(from: [
             ("apfs", "/dev/disk3s1s1", "/"),
