@@ -208,8 +208,10 @@ struct ConverterTests {
     @Test func ffmpegFailureReportsStderr() async throws {
         let dir = try TemporaryDirectory()
         let source = try wav("a.wav", in: dir)
-        let ffmpeg = try script("echo '' >&2; echo 'Unknown encoder' >&2; exit 1", in: dir)
-        await #expect(throws: ConvertError.toolFailed("Unknown encoder")) {
+        let ffmpeg = try script(
+            "echo 'Input #0, wav, from a.wav:' >&2; echo '  Duration: 00:00:00.10' >&2; echo 'Error: bad codec' >&2; echo '' >&2; exit 1",
+            in: dir)
+        await #expect(throws: ConvertError.toolFailed("Error: bad codec")) {
             _ = try await convert(source, .mp3, ffmpeg: ffmpeg)
         }
         #expect(try contents(dir.url) == ["a.wav", "tools"])

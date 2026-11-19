@@ -103,7 +103,9 @@ public enum Converter {
             let result = try await ProcessRunner.run(
                 invocation.executable, invocation.arguments, onLine: lineHandler(for: target, progress: progress))
             if result.status == 0 { return }
-            failure = toolFailure(result, tool: invocation.executable.lastPathComponent)
+            // ffmpeg prints its input summary first; its actual error is the last line.
+            failure = toolFailure(
+                result, tool: invocation.executable.lastPathComponent, lastLine: target.needsFFmpeg)
         }
         throw failure
     }
@@ -133,10 +135,12 @@ public enum Converter {
         }
     }
 
-    private static func toolFailure(_ result: ProcessOutput, tool: String) -> ConvertError {
-        let line = result.stderr.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+    /// The first (or with `lastLine`, the last) non-empty stderr line, else "<tool> failed (status n)".
+    private static func toolFailure(_ result: ProcessOutput, tool: String, lastLine: Bool = false) -> ConvertError {
+        let lines = result.stderr.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
             .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty }
+            .filter { !$0.isEmpty }
+        let line = lastLine ? lines.last : lines.first
         return .toolFailed(line ?? String(localized: "\(tool) failed (status \(result.status))"))
     }
 
