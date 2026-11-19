@@ -30,38 +30,39 @@ extension FocusedValues {
     }
 }
 
-/// One browser window: sidebar, file list, path bar and toolbar.
+/// One browser window: sidebar, toolbar and the panes of its `PaneLayout` (see `PaneView`). The sidebar,
+/// toolbar, search field, title, preview, sheets and menus act on the active pane.
 struct BrowserWindow: View {
     @Environment(ViewSettingsStore.self) private var settings
     @Environment(PreferencesStore.self) private var preferences
     @Environment(FileOperationCenter.self) private var operations
-    @Environment(FileClipboard.self) private var clipboard
     @Environment(ShareManager.self) private var shareManager
-    @Environment(ShareStore.self) private var shareStore
     @SceneStorage("currentFolderPath") private var storedPath = ""
-    /// True while the window is key (or the app's active window); see the refresh on focus below.
-    @Environment(\.appearsActive) private var appearsActive
-    private let modelState = State<BrowserModel?>(initialValue: nil)
-    private let previewState = State<PreviewController?>(initialValue: nil)
+    private let layoutState = State<PaneLayout?>(initialValue: nil)
+    /// One preview controller per pane, created when the pane first becomes active (Ruling P7-4).
+    private let previewsState = State<[ObjectIdentifier: PreviewController]>(initialValue: [:])
+    /// The pane the search `.task` last ran for; a pane switch doesn't restart that pane's shown search.
+    private let searchPaneState = State<ObjectIdentifier?>(initialValue: nil)
     private let goToFolderState = State(initialValue: false)
     private let shareSheetsState = State(initialValue: ShareSheets())
     /// The Finder name of a folder, resolved off the main actor; the title shows it once it matches.
     private let titleState = State<(url: URL, name: String)?>(initialValue: nil)
-    /// The toolbar search field's text; a search starts 250 ms after the last change.
-    private let searchTextState = State(initialValue: "")
     /// `FocusState` is a property wrapper (no macro plugin needed).
     @FocusState private var searchFieldFocused: Bool
-    private var model: BrowserModel? {
-        get { modelState.wrappedValue }
-        nonmutating set { modelState.wrappedValue = newValue }
+    private var layout: PaneLayout? {
+        get { layoutState.wrappedValue }
+        nonmutating set { layoutState.wrappedValue = newValue }
     }
-    private var preview: PreviewController? {
-        get { previewState.wrappedValue }
-        nonmutating set { previewState.wrappedValue = newValue }
+    private var previews: [ObjectIdentifier: PreviewController] {
+        get { previewsState.wrappedValue }
+        nonmutating set { previewsState.wrappedValue = newValue }
+    }
+    private var searchPane: ObjectIdentifier? {
+        get { searchPaneState.wrappedValue }
+        nonmutating set { searchPaneState.wrappedValue = newValue }
     }
     private var showGoToFolder: Binding<Bool> { goToFolderState.projectedValue }
     private var shareSheets: ShareSheets { shareSheetsState.wrappedValue }
-    private var searchText: Binding<String> { searchTextState.projectedValue }
     private var resolvedTitle: (url: URL, name: String)? {
         get { titleState.wrappedValue }
         nonmutating set { titleState.wrappedValue = newValue }
@@ -69,16 +70,15 @@ struct BrowserWindow: View {
 
     var body: some View {
         Group {
-            if let model, let preview {
-                content(model, preview: preview)
+            if let layout {
+                content(layout)
             } else {
                 Color.clear
             }
         }
         .onAppear {
-            guard model == nil else { return }
-            let model = BrowserModel(start: Self.startURL(storedPath: storedPath), settings: settings, operations: operations)
-            model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
+            guard layout == nil else { return }
+            let model = makeModel(start: Self.startURL(storedPath: storedPath))
             if !storedPath.hasPrefix("/") {
                 // New window: starts at home at once; the preferred folder is checked off main, then replaces
                 // the start (no Back entry to home), unless the user navigated meanwhile.
@@ -97,89 +97,89 @@ struct BrowserWindow: View {
                     }
                 }
             }
-            // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
-            model.shareResolver = { [weak shareManager] url in
-                guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
-                let status = shareManager.status[hit.share.id]
-                let isConnected = status == .connected(mountPoint: hit.mountPoint)
-                // Server known to be gone: the window shows Disconnected without statting the dead path. Not for
-                // an available share: its lookup may come from the old mount path, where another volume (a USB
-                // disk with the same name) may be mounted now, which must stay browsable.
-                let isKnownDisconnected = status == .unreachable
-                return (hit.share.id, hit.share.name, hit.mountPoint, isConnected, isKnownDisconnected)
-            }
-            // A window showing Disconnected has the manager re-check that share (its status may be stale).
-            model.shareDropped = { [shareManager] id in shareManager.recheck(id) }
-            self.model = model
-            preview = PreviewController(model: model, settings: settings)
+            previews = [model.paneID: PreviewController(model: model, settings: settings)]
+            layout = PaneLayout(primary: model, makePane: { makeModel(start: $0) })
         }
     }
 
-    private func content(_ model: BrowserModel, preview: PreviewController) -> some View {
-        NavigationSplitView {
+    /// A pane's model: starts at `start`; new-file names and share lookups come from the app's stores.
+    private func makeModel(start: URL) -> BrowserModel {
+        let model = BrowserModel(start: start, settings: settings, operations: operations)
+        model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
+        // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
+        model.shareResolver = { [weak shareManager] url in
+            guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }
+            let status = shareManager.status[hit.share.id]
+            let isConnected = status == .connected(mountPoint: hit.mountPoint)
+            // Server known to be gone: the window shows Disconnected without statting the dead path. Not for
+            // an available share: its lookup may come from the old mount path, where another volume (a USB
+            // disk with the same name) may be mounted now, which must stay browsable.
+            let isKnownDisconnected = status == .unreachable
+            return (hit.share.id, hit.share.name, hit.mountPoint, isConnected, isKnownDisconnected)
+        }
+        // A window showing Disconnected has the manager re-check that share (its status may be stale).
+        model.shareDropped = { [shareManager] id in shareManager.recheck(id) }
+        return model
+    }
+
+    private func content(_ layout: PaneLayout) -> some View {
+        let model = layout.active
+        return NavigationSplitView {
             SidebarView(model: model, shareSheets: shareSheets)
                 .navigationSplitViewColumnWidth(min: 160, ideal: 200, max: 320)
         } detail: {
             VStack(spacing: 0) {
-                // The list stays the split view's first child whether or not the pane is shown, so it keeps
-                // its identity (controller, scroll position, selection) when the pane toggles.
+                // The panes stay the split view's first children whether or not the preview is shown, and are
+                // identified by their model, so each keeps its identity (controller, scroll position, selection)
+                // when the preview toggles or another pane comes or goes.
                 HSplitView {
-                    FileListView(
-                        model: model, settings: settings, clipboard: clipboard,
-                        reconnect: { [shareStore, shareManager, shareSheets] disconnected in
-                            Task {
-                                await ShareActions.reconnect(
-                                    disconnected, store: shareStore, manager: shareManager, model: model,
-                                    sheets: shareSheets)
-                            }
-                        },
-                        signIn: { [shareStore, shareSheets] disconnected in
-                            guard let share = shareStore.shares.first(where: { $0.id == disconnected.id }) else { return }
-                            Task { await ShareActions.showSignIn(share, sheets: shareSheets) }
-                        })
-                        .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
-                    if settings.settings.showPreview {
+                    ForEach(layout.panes, id: \.paneID) { pane in
+                        PaneView(
+                            model: pane, layout: layout, isActive: pane === layout.active,
+                            showsActiveMarker: layout.isDual,
+                            // The scene restores the first pane's folder.
+                            onFolderChange: { url in
+                                if pane === layout.panes.first { storedPath = url.path }
+                            })
+                            .frame(minWidth: 200, maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    if settings.settings.showPreview, let preview = previews[model.paneID] {
                         PreviewPane(controller: preview)
                             .frame(minWidth: 240, idealWidth: 360, maxWidth: .infinity, maxHeight: .infinity)
                     }
                 }
-                if model.isSearching, model.searchTruncated {
-                    Divider()
-                    Text(String(localized: "More than 10,000 results; refine your search."))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 4)
-                }
-                Divider()
-                PathBar(model: model)
+                .environment(shareSheets)
                 OperationsStrip()
             }
-            .searchable(text: searchText, placement: .toolbar, prompt: String(localized: "Search"))
+            .searchable(text: searchText(layout), placement: .toolbar, prompt: String(localized: "Search"))
             .searchFocused($searchFieldFocused)
-            // Debounced: each keystroke restarts the wait. Clearing the field ends the search at once.
-            .task(id: searchText.wrappedValue) {
-                let text = searchText.wrappedValue
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // Debounced: each keystroke restarts the wait. Clearing the field ends the search at once. Per pane:
+            // switching to a pane whose search already shows the field's text doesn't restart it.
+            .task(id: SearchRequest(pane: model.paneID, text: layout.searchText(for: model))) {
+                let text = layout.searchText(for: model)
+                let paneChanged = searchPane != model.paneID
+                searchPane = model.paneID
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.isEmpty {
                     // Not a tag view: the field is also cleared when one starts. With no search shown this still
                     // drops a search request that is checking its folder.
                     if case .tag? = model.search?.scope {} else { model.endSearch() }
+                    return
+                }
+                if paneChanged, model.search == SearchQuery(text: trimmed, scope: .folder(model.currentURL)) {
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled else { return }
                 await model.startSearch(text)
             }
-            // A navigation (or Back) ends the search, and a tag view isn't a text search: clear the field.
-            .onChange(of: model.search) { _, search in
-                if search == nil || search?.scope != .folder(model.currentURL) { searchText.wrappedValue = "" }
-            }
         }
-        // On the split view, which exists exactly while model and preview do (not on the Group's branches,
-        // whose switch from `Color.clear` would fire them around creation). Closing the window stops
-        // extraction and rendering for the preview; both calls are idempotent.
-        .onAppear { preview.resume() }
-        .onDisappear { preview.stop() }
+        // On the split view, which exists exactly while the layout does (not on the Group's branches, whose
+        // switch from `Color.clear` would fire them around creation). Only the active pane's preview runs;
+        // closing the window stops extraction and rendering for every pane's preview. Both calls are idempotent.
+        .onAppear { syncPreviews(layout) }
+        .onChange(of: model.paneID) { syncPreviews(layout) }
+        .onDisappear { previews.values.forEach { $0.stop() } }
         // The last path component at once (no disk access), the localized name once it's resolved. A tag view
         // shows the tag's name.
         .navigationTitle(title(for: model))
@@ -245,15 +245,30 @@ struct BrowserWindow: View {
             EditShareSheet(share: share)
         }
         .background(WindowReader(box: shareSheets.window))
-        .task { await model.reload() }
-        .onChange(of: model.currentURL, initial: true) { _, url in storedPath = url.path }
-        // Refresh on focus: a network folder isn't watched reliably, so it is listed again whenever its window
-        // becomes active. Local folders rely on their watcher. The check uses the last load's cached info, and
-        // a listing already in flight is kept (see `refreshOnFocus`).
-        .onChange(of: appearsActive) { _, active in
-            guard active, model.isOnNetworkVolume else { return }
-            Task { await model.refreshOnFocus() }
+    }
+
+    /// The toolbar search field shows the active pane's text; a search starts 250 ms after the last change.
+    private func searchText(_ layout: PaneLayout) -> Binding<String> {
+        Binding(
+            get: { layout.searchText(for: layout.active) },
+            set: { layout.setSearchText($0, for: layout.active) })
+    }
+
+    /// Creates the active pane's preview controller if needed, resumes it and stops every other pane's;
+    /// drops the controllers of panes that are gone.
+    private func syncPreviews(_ layout: PaneLayout) {
+        let active = layout.active
+        var previews = previews
+        let paneIDs = Set(layout.panes.map(\.paneID))
+        for (id, controller) in previews where !paneIDs.contains(id) {
+            controller.stop()
+            previews[id] = nil
         }
+        let activeController = previews[active.paneID] ?? PreviewController(model: active, settings: settings)
+        previews[active.paneID] = activeController
+        for (id, controller) in previews where id != active.paneID { controller.stop() }
+        activeController.resume()
+        if Set(previews.keys) != Set(self.previews.keys) { self.previews = previews }
     }
 
     /// The restored folder (also a folder inside an archive), or home when nothing is stored. Not checked
@@ -270,6 +285,12 @@ struct BrowserWindow: View {
         if let resolvedTitle, resolvedTitle.url == url { return resolvedTitle.name }
         return url.path == "/" ? "/" : url.lastPathComponent
     }
+}
+
+/// The search `.task`'s id: the active pane and its field text.
+private struct SearchRequest: Equatable {
+    let pane: ObjectIdentifier
+    let text: String
 }
 
 enum BrowserActions {
