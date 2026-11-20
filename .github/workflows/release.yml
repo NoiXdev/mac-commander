@@ -106,7 +106,8 @@ jobs:
         # A tag can point at any commit — never sign and ship untested code.
         # MC_KEYCHAIN_TESTS stays unset (real Keychain). If this fails, the
         # changelog job's draft release is reused when the job is re-run.
-        run: scripts/test.sh
+        # Serial for the same reason as in ci.yml: a small runner.
+        run: scripts/test.sh --no-parallel
 
       - name: Stamp the version from the tag
         # The committed Resources/Info.plist carries the development version.

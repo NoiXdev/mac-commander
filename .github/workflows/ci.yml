@@ -92,10 +92,10 @@ jobs:
         # real Keychain. The guard makes a stray repository variable or
         # job-level env fail loudly instead of running them.
         #
-        # Known flaky timing tests that a slow runner can turn red without
-        # anything being broken: BrowserModelTests.operationInCurrentFolderReloads
-        # and BrowserModelTests.changesDuringSlowLoadCoalesceIntoOneFollowUp.
-        # Re-run the job before chasing one of them.
+        # `--no-parallel`: the runner has 3 vCPUs, and ~580 tests at once
+        # starve each other's timing (a 30 ms sleep resuming seconds late).
+        # Serially the suite takes about half a minute and every test gets
+        # the machine to itself. Locally `scripts/test.sh` stays parallel.
         timeout-minutes: 15
         run: |
           set -o pipefail
@@ -103,7 +103,7 @@ jobs:
             echo "::error::MC_KEYCHAIN_TESTS is set; CI must not run the Keychain tests."
             exit 1
           fi
-          scripts/test.sh --event-stream-output-path "$RUNNER_TEMP/test-events.jsonl" \
+          scripts/test.sh --no-parallel --event-stream-output-path "$RUNNER_TEMP/test-events.jsonl" \
             2>&1 | tee "$RUNNER_TEMP/test.log"
       - name: Test verdicts from the event stream
         # Runs on red and green alike: it names every test that recorded an
