@@ -149,6 +149,7 @@ struct MarkdownHTMLTests {
         }
         let (h, elapsed) = threadCPUTime { html(s) }
         #expect(!h.isEmpty)
-        #expect(elapsed < .seconds(2))
+        // About 0.3 s on an M-series Mac; the CI runner's cores are about four times slower.
+        #expect(elapsed < .seconds(3))
     }
 }

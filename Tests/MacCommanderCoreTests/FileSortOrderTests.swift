@@ -82,6 +82,7 @@ import Testing
         let (result, elapsed) = threadCPUTime { FileSortOrder.default.sorted(items) }
         #expect(result.count == 50_000)
         #expect(result.first?.name == "file0")
-        #expect(elapsed < .seconds(1))
+        // About 0.3 s on an M-series Mac, 1.3 s on the CI runner; a quadratic sort would take minutes.
+        #expect(elapsed < .seconds(3))
     }
 }
