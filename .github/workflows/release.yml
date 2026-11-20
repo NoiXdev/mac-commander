@@ -104,9 +104,8 @@ jobs:
 
       - name: Run tests
         # A tag can point at any commit — never sign and ship untested code.
-        # MC_KEYCHAIN_TESTS stays unset (real Keychain). If one of the known
-        # flaky timing tests in BrowserModelTests fails here, re-run the
-        # failed job; the changelog job's draft release is reused.
+        # MC_KEYCHAIN_TESTS stays unset (real Keychain). If this fails, the
+        # changelog job's draft release is reused when the job is re-run.
         run: scripts/test.sh
 
       - name: Stamp the version from the tag
