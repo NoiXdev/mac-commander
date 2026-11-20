@@ -141,7 +141,8 @@ struct ArchiveIndexTests {
         let (index, elapsed) = threadCPUTime { ArchiveIndex(listing: listing, now: now) }
         #expect(index.entryCount == 20_200)
         #expect(index.entries(in: "folder7")?.count == 100)
-        #expect(elapsed < .seconds(1))
+        // About 0.3 s on an M-series Mac, 1.1 s on the CI runner; a quadratic parse would take minutes.
+        #expect(elapsed < .seconds(3))
     }
 
     @Test func containsFolder() {
