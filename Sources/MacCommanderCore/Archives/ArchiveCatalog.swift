@@ -168,16 +168,24 @@ public actor ArchiveCatalog {
         archive.standardizedFileURL.path
     }
 
-    /// Maps bsdtar's stderr after a failed listing to an `ArchiveError`.
+    /// Maps bsdtar's stderr after a failed listing to an `ArchiveError`. A failed checksum with a password counts
+    /// as an incorrect password: classic zip encryption lets about one wrong password in 256 through its check,
+    /// and the entry's CRC then fails. (A password is only known for an archive that asked for one.)
     static func error(stderr: String, hadPassword: Bool) -> ArchiveError {
         let message = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         if message.range(of: "passphrase", options: .caseInsensitive) != nil {
             return hadPassword ? .incorrectPassword : .passwordRequired
         }
+        if hadPassword && isChecksumFailure(message) { return .incorrectPassword }
         if message.contains("Unrecognized archive format") || message.contains("not supported") {
             return .unsupported(message: message)
         }
         return .unreadable(message: message)
+    }
+
+    /// Whether bsdtar reported an entry whose data failed its CRC check.
+    static func isChecksumFailure(_ stderr: String) -> Bool {
+        stderr.contains("bad CRC")
     }
 
     private static func kind(name: String, isDirectory: Bool) -> String {

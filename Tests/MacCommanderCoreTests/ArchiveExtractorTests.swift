@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import MacCommanderCore
 
@@ -39,6 +40,16 @@ private func makeFoldersWritable(_ root: URL) {
         try? fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.appendingPathComponent(path).path)
     }
 }
+
+/// `a.txt` ("secret text") in a zip with classic (ZipCrypto) encryption, password "pw". ZipCrypto checks a
+/// passphrase against one byte only, and the wrong passphrase `wrongPassphraseThatPasses` happens to pass it for
+/// this archive: bsdtar then fails with "ZIP bad CRC" instead of "Incorrect passphrase", as about one wrong
+/// passphrase in 256 does. "xyz" is rejected the usual way.
+private let zipCryptoArchive = Data(base64Encoded: """
+    UEsDBAoACQAAABkddF3sGiEiFwAAAAsAAAAFAAAAYS50eHQIanKYZuIkAqddzHCKIreEHiumsz/zZFBLBwjsGiEiFwAAAAsAAABQSwECHgMK\
+    AAkAAAAZHXRd7BohIhcAAAALAAAABQAAAAAAAAABAAAApIEAAAAAYS50eHRQSwUGAAAAAAEAAQAzAAAASgAAAAAA
+    """)!
+private let wrongPassphraseThatPasses = "wrong0"
 
 private let keepBoth: ConflictResolver = { _ in ConflictDecision(choice: .keepBoth, applyToAll: true) }
 private let failOnConflict: ConflictResolver = { conflict in
@@ -170,6 +181,71 @@ struct ArchiveExtractorTests {
         _ = try await f.center.extract(["a.txt"], from: zip, into: f.dst, resolver: failOnConflict)
         #expect(f.dstNames == ["a.txt"])
         #expect(f.contents(f.dst.appendingPathComponent("a.txt")) == "secret text")
+    }
+
+    private func writeZipCryptoArchive(_ f: ExtractFixture) throws -> URL {
+        let zip = f.tmp.url.appendingPathComponent("zipcrypto.zip")
+        try zipCryptoArchive.write(to: zip)
+        return zip
+    }
+
+    @Test func wrongPasswordPassingTheZipCryptoCheckIsIncorrect() async throws {
+        let f = try ExtractFixture()
+        let zip = try writeZipCryptoArchive(f)
+
+        await f.catalog.setPassword(wrongPassphraseThatPasses, for: zip)
+        await #expect(throws: ArchiveError.incorrectPassword) {
+            _ = try await f.center.extractAll(zip, into: f.dst, resolver: failOnConflict)
+        }
+        #expect(f.dstNames.isEmpty)
+
+        await f.catalog.setPassword("pw", for: zip)
+        _ = try await f.center.extractAll(zip, into: f.dst, resolver: failOnConflict)
+        #expect(f.contents(f.dst.appendingPathComponent("a.txt")) == "secret text")
+    }
+
+    @Test func placeholderPassingTheZipCryptoCheckStillAsksForThePassword() async throws {
+        let f = try ExtractFixture()
+        let zip = try writeZipCryptoArchive(f)
+        let path = zip.standardizedFileURL.path
+        let handedOut = Mutex<[String]>([])
+        ArchiveExtractor.placeholderPassphraseHook.withLock {
+            $0 = { archive in
+                guard archive.standardizedFileURL.path == path else { return nil }
+                return handedOut.withLock { given in
+                    given.append(given.isEmpty ? wrongPassphraseThatPasses : "xyz")
+                    return given.last
+                }
+            }
+        }
+        defer { ArchiveExtractor.placeholderPassphraseHook.withLock { $0 = nil } }
+
+        await #expect(throws: ArchiveError.passwordRequired) {
+            _ = try await f.center.extractAll(zip, into: f.dst, resolver: failOnConflict)
+        }
+        #expect(handedOut.withLock { $0 } == [wrongPassphraseThatPasses, "xyz"])
+        #expect(f.dstNames.isEmpty)
+    }
+
+    @Test func corruptUnencryptedZipStaysUnreadable() async throws {
+        let f = try ExtractFixture()
+        let src = try f.tmp.folder("plain")
+        try f.tmp.file("plain/a.txt", contents: "plain text here")
+        let zip = f.tmp.url.appendingPathComponent("plain.zip")
+        try ArchiveFixtures.run("/usr/bin/zip", ["-q", "-0", zip.path, "a.txt"], in: src) // stored, not deflated
+        // Flips the first byte of the stored data, so the entry fails its CRC check.
+        var bytes = try Data(contentsOf: zip)
+        let range = try #require(bytes.range(of: Data("plain text here".utf8)))
+        bytes[range.lowerBound] ^= 0xFF
+        try bytes.write(to: zip)
+
+        await #expect {
+            _ = try await f.center.extractAll(zip, into: f.dst, resolver: failOnConflict)
+        } throws: { error in
+            guard case ArchiveError.unreadable(let message) = error else { return false }
+            return message.contains("CRC")
+        }
+        #expect(f.dstNames.isEmpty)
     }
 
     @Test func conflictUsesResolver() async throws {

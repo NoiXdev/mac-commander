@@ -20,6 +20,15 @@ public enum ArchiveExtractor {
     /// Called for every extraction in the process, so a hook must ignore staging folders it doesn't expect.
     static let afterStagingCreatedHook = Mutex<(@Sendable (URL) -> Void)?>(nil)
 
+    /// Test hook: the placeholder passphrase for an archive (nil = a random one). Called for every extraction
+    /// in the process, so a hook must return nil for archives it doesn't expect.
+    static let placeholderPassphraseHook = Mutex<(@Sendable (URL) -> String?)?>(nil)
+
+    /// Passed when no password is known: without a passphrase bsdtar prompts "Enter passphrase:" forever.
+    private static func placeholderPassphrase(for archive: URL) -> String {
+        placeholderPassphraseHook.withLock { $0 }?(archive) ?? UUID().uuidString
+    }
+
     /// Extracts `entries` (paths inside the archive, "" = everything) into a new hidden staging folder
     /// `<destination>/.mc-partial-<UUID>` and returns the staged top-level items: for each requested entry
     /// the item at `staging/<entry>`, or for "" every top-level item of the staging folder (`__MACOSX`
@@ -44,24 +53,19 @@ public enum ArchiveExtractor {
             at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         do {
             afterStagingCreatedHook.withLock { $0 }?(staging)
-            var arguments = [
-                "-x", "-f", archive.path, "-C", staging.path, "--no-same-owner",
-                // Always pass a passphrase: without one bsdtar prompts "Enter passphrase:" forever.
-                "--passphrase", password ?? UUID().uuidString,
-            ]
-            if let requested {
-                arguments += ["--"] + requested.map { pattern(for: $0.joined(separator: "/")) }
-            } else {
-                // Everything except macOS resource-fork folders; the pattern matches them at any depth.
-                arguments += ["--exclude", "__MACOSX"]
-            }
-            let output: ProcessOutput
-            do {
-                output = try await ProcessRunner.run(bsdtar, arguments)
-            } catch is CancellationError {
-                throw CancellationError()
-            } catch {
-                throw ArchiveError.unreadable(message: error.localizedDescription)
+            var output = try await unpack(
+                archive, into: staging, passphrase: password ?? placeholderPassphrase(for: archive),
+                requested: requested)
+            // Classic zip encryption checks a passphrase against one byte only, so about one wrong passphrase in
+            // 256 passes and the entry then fails its CRC check instead. Without a password that passphrase was
+            // the placeholder: one more try with another placeholder tells a password-protected archive (which
+            // now asks for its password) from a damaged one (which fails the same way again).
+            if output.status != 0, password == nil, ArchiveCatalog.isChecksumFailure(output.stderr) {
+                removeStaging(staging)
+                try fileManager.createDirectory(
+                    at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+                output = try await unpack(
+                    archive, into: staging, passphrase: placeholderPassphrase(for: archive), requested: requested)
             }
             if output.status != 0 {
                 throw error(stderr: output.stderr, hadPassword: password != nil, requested: requested ?? [])
@@ -84,6 +88,28 @@ public enum ArchiveExtractor {
         } catch {
             removeStaging(staging)
             throw error
+        }
+    }
+
+    /// Runs bsdtar to unpack `requested` (nil = everything but `__MACOSX`) from `archive` into `staging`.
+    private static func unpack(
+        _ archive: URL, into staging: URL, passphrase: String, requested: [[String]]?
+    ) async throws -> ProcessOutput {
+        var arguments = [
+            "-x", "-f", archive.path, "-C", staging.path, "--no-same-owner", "--passphrase", passphrase,
+        ]
+        if let requested {
+            arguments += ["--"] + requested.map { pattern(for: $0.joined(separator: "/")) }
+        } else {
+            // Everything except macOS resource-fork folders; the pattern matches them at any depth.
+            arguments += ["--exclude", "__MACOSX"]
+        }
+        do {
+            return try await ProcessRunner.run(bsdtar, arguments)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw ArchiveError.unreadable(message: error.localizedDescription)
         }
     }
 
