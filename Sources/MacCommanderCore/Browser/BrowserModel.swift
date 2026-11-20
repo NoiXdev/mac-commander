@@ -130,6 +130,9 @@ public final class BrowserModel {
     @ObservationIgnored private var shareObservation: NotificationObservation?
     /// Test hook: runs after a listing finishes, before its result is checked for staleness.
     @ObservationIgnored var afterListingHook: (@MainActor (URL) async -> Void)?
+    /// Test hook: the folder watcher's debounce and maximum latency, read when a watcher is created.
+    @ObservationIgnored var watcherTiming: (debounce: Duration, maxLatency: Duration) =
+        (.milliseconds(200), .seconds(1))
     @ObservationIgnored private let searchEngine: any FileSearchEngine
     /// Consumes the shown search's updates; cancelled when the search is replaced or ended.
     @ObservationIgnored private var searchTask: Task<Void, Never>?
@@ -1103,7 +1106,9 @@ public final class BrowserModel {
     private func startWatching(_ url: URL, isArchive: Bool, generation: Int) async -> Bool {
         let watching = watcher != nil && watchedURL == url ? watchedIdentity : nil
         let archive = isArchive ? url : nil
-        let setup = await Self.prepareWatcher(url, keepingIdentity: watching) { [weak self] in
+        let setup = await Self.prepareWatcher(
+            url, keepingIdentity: watching, timing: watcherTiming
+        ) { [weak self] in
             Task { @MainActor in await self?.watchedItemDidChange(archive: archive) }
         }
         guard generation == loadGeneration else {
@@ -1127,7 +1132,8 @@ public final class BrowserModel {
 
     /// On the blocking-I/O queue: the `stat` and `open` can hang on an unresponsive server.
     private static func prepareWatcher(
-        _ url: URL, keepingIdentity watched: FolderIdentity?, onChange: @escaping @Sendable () -> Void
+        _ url: URL, keepingIdentity watched: FolderIdentity?, timing: (debounce: Duration, maxLatency: Duration),
+        onChange: @escaping @Sendable () -> Void
     ) async -> WatcherSetup {
         await PathQueries.run {
             let identity = FolderIdentity(path: url.path)
@@ -1135,7 +1141,8 @@ public final class BrowserModel {
                 return WatcherSetup(keepsCurrent: true, identity: identity, watcher: nil)
             }
             return WatcherSetup(
-                keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(url: url, onChange: onChange))
+                keepsCurrent: false, identity: identity, watcher: DirectoryWatcher(
+                    url: url, debounce: timing.debounce, maxLatency: timing.maxLatency, onChange: onChange))
         }
     }
 

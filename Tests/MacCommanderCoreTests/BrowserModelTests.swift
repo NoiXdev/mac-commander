@@ -4,9 +4,10 @@ import Testing
 
 @testable import MacCommanderCore
 
-/// Polls until `condition` holds or the deadline passes.
+/// Polls until `condition` holds or the deadline passes. The deadline is generous: it only costs time when the
+/// condition never holds, and a busy CI runner can take seconds where a Mac takes milliseconds.
 @MainActor
-private func waitUntil(timeout: TimeInterval = 2, _ condition: () -> Bool) async -> Bool {
+private func waitUntil(timeout: TimeInterval = 10, _ condition: () -> Bool) async -> Bool {
     let deadline = Date().addingTimeInterval(timeout)
     while Date() < deadline {
         if condition() { return true }
@@ -68,12 +69,33 @@ private final class Counter {
     var count = 0
 }
 
-/// Path queries that take a second each time `info` is asked, like a stat on an unresponsive server.
-private struct BlockingPathQueries: PathQueriesProvider {
+/// Path queries whose `info` blocks its thread, as a hung stat would, until the main actor answers a ping. A
+/// check that held the main actor could never be answered; it gives up after ten seconds and counts a miss.
+private final class BlockingPathQueries: PathQueriesProvider, @unchecked Sendable {
+    // @unchecked: `checks` and `misses` are only touched while holding `lock`.
+    private let lock = NSLock()
+    private var checks = 0
+    private var misses = 0
+
+    var checkCount: Int { lock.withLock { checks } }
+    var missedPings: Int { lock.withLock { misses } }
+
     @concurrent func info(_ url: URL) async -> PathInfo {
-        usleep(1_000_000)  // Blocks the thread, as a hung stat would.
+        let missed = !Self.blockUntilMainAnswers()
+        lock.withLock {
+            checks += 1
+            if missed { misses += 1 }
+        }
         return PathQueries.infoNow(url)
     }
+
+    /// Blocks the calling thread until the main queue runs a ping; false when it doesn't within ten seconds.
+    private static func blockUntilMainAnswers() -> Bool {
+        let answered = DispatchSemaphore(value: 0)
+        DispatchQueue.main.async { answered.signal() }
+        return answered.wait(timeout: .now() + 10) == .success
+    }
+
     @concurrent func archiveLocation(_ url: URL) async -> ArchiveLocation? { ArchivePath.split(url) }
     @concurrent func nearestExistingFolder(_ url: URL) async -> URL { PathUtilities.nearestExistingAncestor(of: url) }
     @concurrent func canonicalPath(_ url: URL) async -> String { await PathQueries.canonicalPath(url) }
@@ -714,13 +736,14 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         let a = try dir.file("src/a.txt")
         let center = makeCenter(trash: try dir.folder("Trash"))
         let model = BrowserModel(start: dst, settings: makeStore(), operations: center)
+        // The folder watcher stays silent for the whole test, so only the notification can reload.
+        model.watcherTiming = (debounce: .seconds(60), maxLatency: .seconds(60))
         await model.reload()
 
         _ = await center.transfer([a], into: dst, mode: .copy) { _ in
             ConflictDecision(choice: .keepBoth, applyToAll: true)
         }
-        // The folder watcher debounces for 200 ms; only the notification can be this fast.
-        #expect(await waitUntil(timeout: 0.15) { names(model) == ["a.txt"] })
+        #expect(await waitUntil { names(model) == ["a.txt"] })
     }
 
     @Test func selectAfterOperationSelectsItems() async throws {
@@ -823,27 +846,15 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
     @Test func browserModelNeverStatsOnMainActor() async throws {
         let dir = try TemporaryDirectory()
         try dir.file("a.txt")
+        let queries = BlockingPathQueries()
         let model = BrowserModel(
             start: URL(fileURLWithPath: "/"), settings: makeStore(),
-            loader: DirectoryLoader(), pathQueries: BlockingPathQueries())
+            loader: DirectoryLoader(), pathQueries: queries)
 
-        let finished = Flag()
-        let started = ContinuousClock.now
-        let navigation = Task {
-            await model.navigate(to: dir.url)
-            finished.isSet = true
-        }
-        // Ticks while the navigation waits on the blocked path checks (one second each). Other
-        // suites share the main actor, so count over the whole wait instead of exactly one second.
-        let ticks = Counter()
-        while !finished.isSet {
-            try await Task.sleep(for: .milliseconds(10))
-            ticks.count += 1
-        }
-        #expect(ContinuousClock.now - started >= .seconds(1))
-        #expect(ticks.count >= 50, "ticks: \(ticks.count)")
+        await model.navigate(to: dir.url)
 
-        await navigation.value
+        #expect(queries.checkCount > 0)
+        #expect(queries.missedPings == 0)
         #expect(samePath(model.currentURL, dir.url))
         #expect(names(model) == ["a.txt"])
     }

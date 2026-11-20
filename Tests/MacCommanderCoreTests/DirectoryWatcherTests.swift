@@ -41,16 +41,18 @@ private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) async -> 
     @Test func debouncesBursts() async throws {
         let dir = try TemporaryDirectory()
         let stamps = Stamps()
-        let watcher = try #require(DirectoryWatcher(url: dir.url, debounce: .milliseconds(200)) {
-            stamps.record()
-        })
+        // The debounce is far longer than the 30 ms pauses, so even a busy runner that stretches them stays
+        // inside one burst; the maximum latency is out of reach.
+        let watcher = try #require(DirectoryWatcher(
+            url: dir.url, debounce: .seconds(1), maxLatency: .seconds(60)
+        ) { stamps.record() })
         for i in 0..<10 {
             try dir.file("f\(i).txt")
             try await Task.sleep(for: .milliseconds(30))
         }
         let burstEnd = Date()
-        #expect(await waitUntil(timeout: 2) { stamps.all.count >= 1 })
-        try await Task.sleep(for: .milliseconds(500))
+        #expect(await waitUntil(timeout: 10) { stamps.all.count >= 1 })
+        try await Task.sleep(for: .milliseconds(1500))
         let all = stamps.all
         #expect(all.count == 1)
         #expect(all.first.map { $0 >= burstEnd.addingTimeInterval(-0.05) } == true)
@@ -87,13 +89,14 @@ private func waitUntil(timeout: TimeInterval, _ condition: () -> Bool) async -> 
     @Test func cancelDuringPendingDebounceSuppressesCallback() async throws {
         let dir = try TemporaryDirectory()
         let counter = Counter()
-        let watcher = try #require(DirectoryWatcher(url: dir.url, debounce: .milliseconds(300)) {
-            counter.increment()
-        })
+        // A debounce far longer than the pause before `cancel()`, so a busy runner can't let it run out first.
+        let watcher = try #require(DirectoryWatcher(
+            url: dir.url, debounce: .seconds(2), maxLatency: .seconds(60)
+        ) { counter.increment() })
         try dir.file("a.txt")
         try await Task.sleep(for: .milliseconds(100)) // event delivered, debounce pending
         watcher.cancel()
-        try await Task.sleep(for: .milliseconds(500))
+        try await Task.sleep(for: .milliseconds(2500))
         #expect(counter.count == 0)
     }
 
