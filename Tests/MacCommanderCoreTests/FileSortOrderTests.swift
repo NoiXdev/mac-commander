@@ -79,9 +79,7 @@ import Testing
 
     @Test func sorts50kItemsQuickly() {
         let items = (0..<50_000).map { item("file\(($0 * 7919) % 50_000)") }
-        let start = ContinuousClock.now
-        let result = FileSortOrder.default.sorted(items)
-        let elapsed = ContinuousClock.now - start
+        let (result, elapsed) = threadCPUTime { FileSortOrder.default.sorted(items) }
         #expect(result.count == 50_000)
         #expect(result.first?.name == "file0")
         #expect(elapsed < .seconds(1))

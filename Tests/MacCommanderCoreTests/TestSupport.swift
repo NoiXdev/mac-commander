@@ -1,5 +1,14 @@
 import Foundation
 
+/// CPU time the calling thread spends in `body`. Unlike wall-clock time it doesn't grow while a busy CI runner keeps
+/// the thread waiting for a core, so a speed limit on single-threaded work holds on a small machine too.
+func threadCPUTime<T>(_ body: () throws -> T) rethrows -> (result: T, time: Duration) {
+    let start = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+    let result = try body()
+    let time = Duration.nanoseconds(Int64(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - start))
+    return (result, time)
+}
+
 final class TemporaryDirectory {
     let url: URL
 

@@ -136,9 +136,8 @@ struct MarkdownHTMLTests {
 
     @Test func autolinkTrimIsLinear() {
         for ch in [")", "."] {
-            let start = Date()
-            let h = html("https://a.b" + String(repeating: ch, count: 100_000))
-            #expect(Date().timeIntervalSince(start) < 1)
+            let (h, elapsed) = threadCPUTime { html("https://a.b" + String(repeating: ch, count: 100_000)) }
+            #expect(elapsed < .seconds(1))
             #expect(h.contains("<a href=\"https://a.b\">https://a.b</a>"))
         }
     }
@@ -148,9 +147,8 @@ struct MarkdownHTMLTests {
         for i in 0..<5000 {
             s += "## Heading \(i)\nSome *text* with `code` and https://example.com/\(i) here.\n- [ ] item \(i)\n\n"
         }
-        let start = Date()
-        let h = html(s)
+        let (h, elapsed) = threadCPUTime { html(s) }
         #expect(!h.isEmpty)
-        #expect(Date().timeIntervalSince(start) < 2)
+        #expect(elapsed < .seconds(2))
     }
 }

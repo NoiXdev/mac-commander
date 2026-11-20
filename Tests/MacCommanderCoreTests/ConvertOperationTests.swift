@@ -39,19 +39,34 @@ private struct Fixture {
         return url
     }
 
-    /// A fake ffmpeg: sleeps when the input name contains "slow", else writes its last argument.
+    /// A fake ffmpeg: sleeps when the input name contains "slow" (counted in `slowStarts`), else writes its last
+    /// argument.
     func ffmpeg() throws -> URL {
         let url = tmp.url.appendingPathComponent("tools/ffmpeg")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         let body = """
             #!/bin/sh
-            case "$*" in *slow*) exec sleep 30;; esac
+            case "$*" in *slow*) echo started >> "$(dirname "$0")/slow-starts"; exec sleep 30;; esac
             eval last=\\${$#}
             echo encoded > "$last"
             """
         try (body + "\n").write(to: url, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
         return url
+    }
+
+    /// How many slow conversions the fake ffmpeg has started.
+    var slowStarts: Int {
+        let starts = tmp.url.appendingPathComponent("tools/slow-starts")
+        return ((try? String(contentsOf: starts, encoding: .utf8)) ?? "").split(separator: "\n").count
+    }
+
+    /// Polls until the fake ffmpeg has started `count` slow conversions, for up to 20 seconds.
+    func waitForSlowStarts(_ count: Int) async throws {
+        let start = Date()
+        while slowStarts < count, Date().timeIntervalSince(start) < 20 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
     }
 
     func convert(
@@ -180,12 +195,10 @@ struct ConvertOperationTests {
         let center = f.center
 
         let task = Task { await center.convert([first, slow, last], to: .mp4FFmpeg, ffmpeg: ffmpeg) { _, _ in nil } }
-        let start = Date()
-        while !f.exists(f.tmp.url.appendingPathComponent("first.mp4")), Date().timeIntervalSince(start) < 5 {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try await Task.sleep(for: .milliseconds(200))
+        // The batch runs one file after another: once the slow one has started, the first one is recorded.
+        try await f.waitForSlowStarts(1)
         let id = try #require(center.operations.first?.id)
+        let start = Date()
         center.cancel(id)
         let result = await task.value
 
@@ -206,12 +219,9 @@ struct ConvertOperationTests {
 
         let first = Task { await center.convert([one], to: .mp4FFmpeg, ffmpeg: ffmpeg) { _, _ in nil } }
         let second = Task { await center.convert([two], to: .mp4FFmpeg, ffmpeg: ffmpeg) { _, _ in nil } }
-        let start = Date()
-        while center.operations.count < 2, Date().timeIntervalSince(start) < 5 {
-            try await Task.sleep(for: .milliseconds(20))
-        }
-        try await Task.sleep(for: .milliseconds(300))
+        try await f.waitForSlowStarts(2)
         #expect(center.operations.count == 2)
+        let start = Date()
         await center.cancelAll()
         // Returns only after each operation's work has ended: the converters' temporary folders are gone.
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: f.tmp.url.path)
