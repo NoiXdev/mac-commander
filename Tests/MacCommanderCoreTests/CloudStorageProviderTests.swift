@@ -24,14 +24,34 @@ struct CloudStorageProviderTests {
         _ = try tmp.file(".DS_Store")
         _ = try tmp.file("notes.txt")
 
-        let locations = await CloudStorageProvider.locations(in: tmp.url)
+        let locations = await CloudStorageProvider.locations(in: tmp.url) { $0.lastPathComponent != "Dropbox" }
 
         #expect(locations.map(\.name) == ["Dropbox", "OneDrive – Personal", "OneDrive – Work"])
         #expect(locations.first?.url.lastPathComponent == "Dropbox")
+        #expect(locations.map(\.isConnected) == [false, true, true])
+        #expect(locations.map(\.provider) == ["Dropbox", "OneDrive", "OneDrive"])
+        #expect(locations.last?.appBundleID == "com.microsoft.OneDrive")
+    }
+
+    /// A plain folder is no File Provider account: it's what a removed account leaves behind.
+    @Test func plainFolderIsNoAccount() async throws {
+        let tmp = try TemporaryDirectory()
+        #expect(await !CloudStorageProvider.isAccountRoot(try tmp.folder("Nextcloud-old")))
+    }
+
+    @Test func statusNeedsAKnownAccountAndItsRunningApp() {
+        func location(app: String?, connected: Bool) -> CloudLocation {
+            CloudLocation(url: URL(fileURLWithPath: "/x"), name: "x", provider: "x", appBundleID: app, isConnected: connected)
+        }
+        let running: (String) -> Bool = { $0 == "running.app" }
+        #expect(location(app: "running.app", connected: true).status(isRunning: running) == .active)
+        #expect(location(app: "quit.app", connected: true).status(isRunning: running) == .appNotRunning)
+        #expect(location(app: nil, connected: true).status(isRunning: running) == .active)
+        #expect(location(app: "running.app", connected: false).status(isRunning: running) == .disconnected)
     }
 
     @Test func missingFolderListsNothing() async {
         let missing = URL(fileURLWithPath: "/nonexistent-\(UUID().uuidString)")
-        #expect(await CloudStorageProvider.locations(in: missing).isEmpty)
+        #expect(await CloudStorageProvider.locations(in: missing) { _ in true }.isEmpty)
     }
 }

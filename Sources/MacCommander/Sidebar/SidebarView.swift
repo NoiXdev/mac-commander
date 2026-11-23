@@ -14,6 +14,8 @@ struct SidebarView: View {
     private let iCloudExistsState = State(initialValue: false)
     /// The cloud accounts' folders (OneDrive, Google Drive, …), one per account.
     private let cloudState = State<[CloudLocation]>(initialValue: [])
+    /// Bundle identifiers of the running apps, for the cloud accounts' status.
+    private let runningAppsState = State<Set<String>>(initialValue: [])
     /// The sidebar's window, for the conflict dialog and alerts of drops onto rows.
     private let windowState = State(initialValue: WindowBox())
     private var volumes: [VolumeInfo] {
@@ -31,6 +33,10 @@ struct SidebarView: View {
     private var cloud: [CloudLocation] {
         get { cloudState.wrappedValue }
         nonmutating set { cloudState.wrappedValue = newValue }
+    }
+    private var runningApps: Set<String> {
+        get { runningAppsState.wrappedValue }
+        nonmutating set { runningAppsState.wrappedValue = newValue }
     }
 
     /// The local iCloud Drive folder.
@@ -94,8 +100,9 @@ struct SidebarView: View {
         }
     }
 
-    /// iCloud Drive, then one row per cloud account folder (`CloudStorageProvider`). Accounts are added in the
-    /// provider's own app (for OneDrive: Settings ▸ Account ▸ Add an Account), and show up here by themselves.
+    /// iCloud Drive, then one row per cloud account folder (`CloudStorageProvider`) with its status: active,
+    /// app not running (nothing syncs), or not connected (a folder left behind, shown dimmed). Accounts are added
+    /// in the provider's own app (for OneDrive: Settings ▸ Account ▸ Add an Account) and show up by themselves.
     private var cloudSection: some View {
         Section(String(localized: "Cloud")) {
             if iCloudExists {
@@ -104,22 +111,80 @@ struct SidebarView: View {
                     .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: Self.iCloudDrive, enabled: true))
             }
             ForEach(cloud) { location in
-                row(name: location.name, url: location.url, exists: true, symbol: "cloud")
-                    .help(location.url.lastPathComponent)
-                    .onTapGesture { Task { await model.navigate(to: location.url) } }
-                    .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: true))
+                let status = location.status { runningApps.contains($0) }
+                Label {
+                    Text(location.name).lineLimit(1)
+                } icon: {
+                    Self.cloudSymbol(status)
+                }
+                .foregroundStyle(status == .disconnected ? Color.secondary : Color.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .help(Self.cloudTooltip(location, status: status))
+                .onTapGesture { Task { await model.navigate(to: location.url) } }
+                .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: true))
+                .contextMenu {
+                    if status != .active, let app = location.appBundleID,
+                        let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app)
+                    {
+                        Button(String(localized: "Open \(location.provider)")) {
+                            NSWorkspace.shared.openApplication(at: appURL, configuration: .init())
+                        }
+                    }
+                }
             }
         }
     }
 
-    /// Lists the cloud accounts, and again whenever an account folder is added or removed.
+    @ViewBuilder
+    private static func cloudSymbol(_ status: CloudAccountStatus) -> some View {
+        switch status {
+        case .active: Image(systemName: "circle.fill").foregroundStyle(.green)
+        case .appNotRunning: Image(systemName: "circle").foregroundStyle(.secondary)
+        case .disconnected: Image(systemName: "icloud.slash").foregroundStyle(.red)
+        }
+    }
+
+    private static func cloudTooltip(_ location: CloudLocation, status: CloudAccountStatus) -> String {
+        switch status {
+        case .active:
+            String(localized: "Connected")
+        case .appNotRunning:
+            String(localized: "\(location.provider) isn't running: changes don't sync.")
+        case .disconnected:
+            String(localized: "Not connected: macOS doesn't know this folder as a \(location.provider) account. It may be left over from a removed account.")
+        }
+    }
+
+    /// Lists the cloud accounts, and again whenever an account folder is added or removed or an app starts or
+    /// quits (starting a provider's app can connect its account).
     private func observeCloud() async {
+        let workspace = NSWorkspace.shared
+        runningApps = Set(workspace.runningApplications.compactMap(\.bundleIdentifier))
         cloud = await CloudStorageProvider.locations()
         let stream = AsyncStream<Void> { continuation in
             let watcher = DirectoryWatcher(url: CloudStorageProvider.folder) { continuation.yield() }
-            continuation.onTermination = { _ in watcher?.cancel() }
+            let center = workspace.notificationCenter
+            // A provider's app registers its account a moment after it starts: checked again 5 s later.
+            let tokens = [
+                center.addObserver(forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main) { _ in
+                    continuation.yield()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { continuation.yield() }
+                },
+                center.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { _ in
+                    continuation.yield()
+                },
+            ]
+            let box = TokenBox(tokens)
+            continuation.onTermination = { _ in
+                watcher?.cancel()
+                box.tokens.forEach { center.removeObserver($0) }
+            }
         }
-        for await _ in stream { cloud = await CloudStorageProvider.locations() }
+        for await _ in stream {
+            runningApps = Set(workspace.runningApplications.compactMap(\.bundleIdentifier))
+            cloud = await CloudStorageProvider.locations()
+        }
     }
 
     private var locationsSection: some View {
