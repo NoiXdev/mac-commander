@@ -43,6 +43,7 @@ public final class ShareManager {
 
     static let recheckInterval: Duration = .seconds(60)
     static let probeTimeout: Duration = .seconds(3)
+    static let netBIOSTimeout: Duration = .seconds(10)
 
     @ObservationIgnored private let store: ShareStore
     @ObservationIgnored private let mounter: any ShareMounter
@@ -284,20 +285,26 @@ public final class ShareManager {
     /// mounted by a local app from a server only it knows (OrbStack's "OrbStack:/OrbStack" is served on
     /// 127.0.0.1 at a changing port), so there is nothing to probe; it counts as reachable and is connected
     /// exactly while it's mounted. SMB, AFP and WebDAV always probe, so a dead NAS's stale mount stays unreachable.
-    /// An SMB name no lookup finds may still be a NetBIOS name (a home NAS often is): the SMB client finds it that
-    /// way, so the probe goes to the address the NetBIOS lookup answers with.
+    /// An SMB name no lookup finds (a home NAS saved as "home-nas") is found the way the SMB client finds it.
     private static func isReachable(_ url: ShareURL, prober: any ReachabilityProber) async -> Bool {
         var host = url.host
         if await !prober.resolves(host: host) {
             switch url.scheme {
             case "nfs": return true
             case "smb":
-                guard let address = await prober.netBIOSAddress(of: host, timeout: probeTimeout) else { return false }
-                host = address
+                guard let found = await smbHost(named: host, prober: prober) else { return false }
+                host = found
             default: break
             }
         }
         return await prober.isReachable(host: host, port: url.probePort, timeout: probeTimeout)
+    }
+
+    /// A bare name over Bonjour ("home-nas.local", well under a second), else the address a NetBIOS lookup
+    /// answers with (`smbutil lookup` takes about 7 s even for a NAS that answers).
+    private static func smbHost(named name: String, prober: any ReachabilityProber) async -> String? {
+        if !name.contains("."), await prober.resolves(host: "\(name).local") { return "\(name).local" }
+        return await prober.netBIOSAddress(of: name, timeout: netBIOSTimeout)
     }
 
     private func classify(_ share: SavedShare, mounted: [MountedShare], reachable: Bool) {

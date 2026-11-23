@@ -106,7 +106,12 @@ private actor FakeProber: ReachabilityProber {
     private var netBIOS: [String: String] = [:]
     func set(_ name: String, netBIOSAddress: String?) { netBIOS[name] = netBIOSAddress }
 
-    func netBIOSAddress(of name: String, timeout: Duration) async -> String? { netBIOS[name] }
+    private(set) var netBIOSTimeouts: [Duration] = []
+
+    func netBIOSAddress(of name: String, timeout: Duration) async -> String? {
+        netBIOSTimeouts.append(timeout)
+        return netBIOS[name]
+    }
 
     func setGate(_ gate: MountGate?) { self.gate = gate }
 
@@ -288,18 +293,35 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(h.manager.status[nas.id] == .unreachable)
     }
 
-    /// A NAS known only by its NetBIOS name ("home-nas"): no DNS or Bonjour lookup finds it, but the SMB client
-    /// does, so the probe goes to the address the NetBIOS lookup answers with.
+    /// A NAS saved by its bare name ("home-nas"), which DNS doesn't know: the SMB client finds it over Bonjour as
+    /// "home-nas.local", so the probe goes there.
+    @Test func smbShareWithBareNameIsProbedOverBonjour() async throws {
+        let h = try Harness()
+        let share = try h.share("smb://home-nas/data", autoReconnect: false)
+        await h.prober.set("home-nas", resolvable: false)
+        await h.prober.set("home-nas.local", reachable: true)
+
+        await h.refresh()
+        #expect(h.manager.status[share.id] == .available(needsSignIn: false))
+        #expect(await h.manager.connect(share.id) == .connected(volume("/Volumes/data")))
+    }
+
+    /// A NAS known only by its NetBIOS name: neither DNS nor Bonjour finds it, but the SMB client does, so the
+    /// probe goes to the address the NetBIOS lookup answers with, given the lookup's own longer timeout.
     @Test func smbShareWithNetBIOSNameIsProbedAtItsAddress() async throws {
         let h = try Harness()
         let share = try h.share("smb://home-nas/data", autoReconnect: false)
         await h.prober.set("home-nas", resolvable: false)
+        await h.prober.set("home-nas.local", resolvable: false)
         await h.prober.set("home-nas", netBIOSAddress: "192.168.178.85")
         await h.prober.set("192.168.178.85", reachable: true)
 
         await h.refresh()
         #expect(h.manager.status[share.id] == .available(needsSignIn: false))
         #expect(await h.manager.connect(share.id) == .connected(volume("/Volumes/data")))
+        // `smbutil lookup` takes about 7 s to answer for a real NAS.
+        #expect(await h.prober.netBIOSTimeouts.allSatisfy { $0 >= .seconds(10) })
+        #expect(await !h.prober.netBIOSTimeouts.isEmpty)
     }
 
     @Test func checkingOnlyOnFirstLoad() async throws {
