@@ -20,15 +20,15 @@ a song or a video from the context menu.
   Tags; a sortable list with optional checkbox column; Back/Forward, path bar,
   Go to Folder; hidden files on request.
 - **Dual-pane mode** (opt-in in Settings) — two folders side by side with
-  Total Commander keys: F5 copy, F6 move, F7 new folder, F8 delete, Tab to
-  switch panes, ⌘1/⌘2, Swap Panes, Same Folder in Other Pane. Drag and drop
+  Total Commander keys: F5 copy, F6 move, F7 new folder, F8 move to Trash,
+  Tab to switch panes, ⌘1/⌘2, Swap Panes, Same Folder in Other Pane. Drag and drop
   and the context menu work between panes too.
-- **Network shares** — SMB, NFS and AFP shares in the sidebar with their
-  live status, automatic reconnect, and sign-in whose passwords live only in
+- **Network shares** — SMB, NFS, AFP and WebDAV shares in the sidebar with
+  their live status, automatic reconnect, and sign-in whose passwords live only in
   the macOS Keychain.
 - **File operations** — copy, move, duplicate, rename, trash with undo; a
   strip at the bottom shows running operations with progress and Cancel;
-  conflicts ask Keep Both / Replace / Skip.
+  conflicts ask Keep Both / Replace / Skip / Stop.
 - **Archives** — browse zip, tar, 7z, rar and more like folders, preview and
   open single entries, extract all, or compress a selection.
 - **Convert** — right-click ▸ Convert: images (JPEG, PNG, HEIC, TIFF), audio
@@ -38,8 +38,10 @@ a song or a video from the context menu.
   also MP3, FLAC and MKV/AVI/WebM → MP4. Results land next to the original,
   never overwrite anything, and ⌘Z removes them.
 - **Preview** — a preview pane with Quick Look and a live Markdown preview.
-- **Search and tags** — Spotlight-backed search with name patterns, and
-  Finder tags in the sidebar and context menu.
+- **Search and tags** — search by name in a folder and its subfolders
+  (Spotlight-backed, plain text, no wildcards), and Finder tags in the
+  sidebar and context menu, with tags you can create, rename, recolor and
+  delete.
 - **Open in Terminal** — in Terminal or iTerm, your choice in Settings.
 - **Replace “Show in Finder”** — optionally, other apps' “Show in Finder”
   opens MacCommander instead, and folders dropped on its Dock icon open in it.
@@ -63,6 +65,8 @@ a song or a video from the context menu.
 
 For full access to protected folders (Mail, Messages, other users' data),
 give MacCommander Full Disk Access when it asks — it works without it, too.
+
+The user guide is at [docs.noix.dev/maccommander](https://docs.noix.dev/maccommander/).
 
 What changed in each release is listed in [CHANGELOG.md](CHANGELOG.md),
 generated from the commits that went into it.
