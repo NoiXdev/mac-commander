@@ -83,6 +83,7 @@ enum FileContextMenu {
         menu.addItem(.separator())
         let folderURL = model.currentURL
         menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL], open: openInfo) })
+        menu.addItem(ActionMenuItem(String(localized: "Copy Folder Path")) { FileActions.copyPaths([folderURL]) })
         // During a search the current folder is hidden behind the results, but it's still where the user is.
         menu.addItem(ActionMenuItem(String(localized: "Open in Terminal")) {
             FileActions.openInTerminal([folderURL], chosen: terminalApp(), window: window)

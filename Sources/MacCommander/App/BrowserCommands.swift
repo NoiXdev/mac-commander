@@ -56,6 +56,9 @@ struct BrowserCommands: Commands {
             Button("Copy Path") { send(#selector(FileOutlineView.copyPath(_:))) }
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(model?.selection.isEmpty != false || isInArchive)
+            Button("Copy Folder Path") { if let model { FileActions.copyPaths([model.currentURL]) } }
+                .keyboardShortcut("c", modifiers: [.command, .option, .shift])
+                .disabled(model == nil || isInArchive)
             Divider()
             // Placed before the standard text-editing group, so it takes ⌘F ahead of a text field's Find.
             Button("Find…") { searchFocused?.wrappedValue = true }

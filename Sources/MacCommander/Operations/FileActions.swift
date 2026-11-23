@@ -18,10 +18,16 @@ enum FileActions {
 
     /// The POSIX paths of `items`, one per line, as plain text on the general pasteboard.
     static func copyPath(_ items: [FileItem]) {
-        guard !items.isEmpty else { return }
+        copyPaths(items.map(\.url))
+    }
+
+    /// The POSIX paths of `urls`, one per line, as plain text on the general pasteboard. Also used for the
+    /// current folder (Copy Folder Path) and a path bar folder.
+    static func copyPaths(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(items.map(\.url.path).joined(separator: "\n"), forType: .string)
+        pasteboard.setString(urls.map(\.path).joined(separator: "\n"), forType: .string)
     }
 
     /// Opens one info window per URL through `open` (SwiftUI's `openWindow`, supplied by the caller).

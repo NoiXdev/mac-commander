@@ -58,12 +58,19 @@ struct PathBar: View {
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
+                    let isVirtual = archivePath.map { url.path.hasPrefix($0 + "/") } ?? false
                     Button {
                         Task { await model.navigate(to: url) }
                     } label: {
-                        PathSegmentLabel(url: url, isVirtual: archivePath.map { url.path.hasPrefix($0 + "/") } ?? false)
+                        PathSegmentLabel(url: url, isVirtual: isVirtual)
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        // A folder inside an archive has no path on disk.
+                        if !isVirtual {
+                            Button(String(localized: "Copy Path")) { FileActions.copyPaths([url]) }
+                        }
+                    }
                     .id(index)
                 }
             }
