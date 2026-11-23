@@ -49,7 +49,7 @@ struct SidebarSettings: View {
     static func title(for section: SidebarSection) -> String {
         switch section {
         case .favorites: String(localized: "Favorites")
-        case .iCloud: String(localized: "iCloud Drive")
+        case .iCloud: String(localized: "Cloud")
         case .locations: String(localized: "Locations")
         case .network: String(localized: "Network")
         case .tags: String(localized: "Tags")

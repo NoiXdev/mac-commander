@@ -12,6 +12,8 @@ struct SidebarView: View {
     private let missingState = State<SidebarLocation?>(initialValue: nil)
     /// Whether the iCloud Drive folder exists (it doesn't when not signed in); checked off the main thread.
     private let iCloudExistsState = State(initialValue: false)
+    /// The cloud accounts' folders (OneDrive, Google Drive, …), one per account.
+    private let cloudState = State<[CloudLocation]>(initialValue: [])
     /// The sidebar's window, for the conflict dialog and alerts of drops onto rows.
     private let windowState = State(initialValue: WindowBox())
     private var volumes: [VolumeInfo] {
@@ -26,6 +28,10 @@ struct SidebarView: View {
         get { iCloudExistsState.wrappedValue }
         nonmutating set { iCloudExistsState.wrappedValue = newValue }
     }
+    private var cloud: [CloudLocation] {
+        get { cloudState.wrappedValue }
+        nonmutating set { cloudState.wrappedValue = newValue }
+    }
 
     /// The local iCloud Drive folder.
     private static let iCloudDrive = FileManager.default.homeDirectoryForCurrentUser
@@ -38,13 +44,7 @@ struct SidebarView: View {
     var body: some View {
         List {
             if isShown(.favorites) { favoritesSection }
-            if isShown(.iCloud), iCloudExists {
-                Section(String(localized: "iCloud")) {
-                    row(name: String(localized: "iCloud Drive"), url: Self.iCloudDrive, exists: true, symbol: "icloud")
-                        .onTapGesture { Task { await model.navigate(to: Self.iCloudDrive) } }
-                        .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: Self.iCloudDrive, enabled: true))
-                }
-            }
+            if isShown(.iCloud), iCloudExists || !cloud.isEmpty { cloudSection }
             if isShown(.locations) { locationsSection }
             if isShown(.network) { NetworkSection(model: model, sheets: shareSheets) }
             if isShown(.tags) { TagsSection(model: model) }
@@ -53,6 +53,7 @@ struct SidebarView: View {
         .background(WindowReader(box: windowState.wrappedValue))
         .onAppear { Task { await favorites.refreshExistence() } }
         .task { iCloudExists = await PathQueries.info(Self.iCloudDrive).isDirectory }
+        .task { await observeCloud() }
         .task {
             volumes = await VolumeProvider.localVolumes()
             await observeVolumes()
@@ -91,6 +92,34 @@ struct SidebarView: View {
                     return true
                 }
         }
+    }
+
+    /// iCloud Drive, then one row per cloud account folder (`CloudStorageProvider`). Accounts are added in the
+    /// provider's own app (for OneDrive: Settings ▸ Account ▸ Add an Account), and show up here by themselves.
+    private var cloudSection: some View {
+        Section(String(localized: "Cloud")) {
+            if iCloudExists {
+                row(name: String(localized: "iCloud Drive"), url: Self.iCloudDrive, exists: true, symbol: "icloud")
+                    .onTapGesture { Task { await model.navigate(to: Self.iCloudDrive) } }
+                    .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: Self.iCloudDrive, enabled: true))
+            }
+            ForEach(cloud) { location in
+                row(name: location.name, url: location.url, exists: true, symbol: "cloud")
+                    .help(location.url.lastPathComponent)
+                    .onTapGesture { Task { await model.navigate(to: location.url) } }
+                    .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: true))
+            }
+        }
+    }
+
+    /// Lists the cloud accounts, and again whenever an account folder is added or removed.
+    private func observeCloud() async {
+        cloud = await CloudStorageProvider.locations()
+        let stream = AsyncStream<Void> { continuation in
+            let watcher = DirectoryWatcher(url: CloudStorageProvider.folder) { continuation.yield() }
+            continuation.onTermination = { _ in watcher?.cancel() }
+        }
+        for await _ in stream { cloud = await CloudStorageProvider.locations() }
     }
 
     private var locationsSection: some View {
