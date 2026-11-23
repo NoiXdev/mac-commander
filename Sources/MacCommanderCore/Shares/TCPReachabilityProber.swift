@@ -45,6 +45,31 @@ public struct TCPReachabilityProber: ReachabilityProber {
         }
     }
 
+    /// `smbutil lookup`, raced against `timeout` (an unknown name takes it about 8 s to give up).
+    public func netBIOSAddress(of name: String, timeout: Duration) async -> String? {
+        await withTaskGroup(of: String?.self) { group in
+            group.addTask {
+                let smbutil = URL(fileURLWithPath: "/usr/bin/smbutil")
+                guard let output = try? await ProcessRunner.run(smbutil, ["lookup", name]), output.status == 0
+                else { return nil }
+                return Self.netBIOSAddress(fromLookupOutput: String(decoding: output.stdout, as: UTF8.self))
+            }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+    }
+
+    /// The address from `smbutil lookup`'s "IP address of <name>: <address>" line.
+    static func netBIOSAddress(fromLookupOutput output: String) -> String? {
+        let line = output.split(whereSeparator: \.isNewline).last { $0.hasPrefix("IP address of ") }
+        return line?.split(separator: " ").last.map(String.init)
+    }
+
     static func failsFast(_ error: NWError) -> Bool {
         switch error {
         case .posix(.ECONNREFUSED), .posix(.EHOSTUNREACH), .posix(.ENETUNREACH): return true

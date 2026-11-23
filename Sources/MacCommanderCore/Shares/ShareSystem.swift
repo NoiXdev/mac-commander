@@ -46,6 +46,9 @@ public protocol ReachabilityProber: Sendable {
     func isReachable(host: String, port: Int, timeout: Duration) async -> Bool
     /// Whether a name lookup finds `host` (an IP address always counts as found).
     func resolves(host: String) async -> Bool
+    /// The address a NetBIOS lookup finds for `name`, as the SMB client resolves a server no DNS or Bonjour
+    /// lookup knows; nil when nothing answers within `timeout`.
+    func netBIOSAddress(of name: String, timeout: Duration) async -> String?
 }
 
 /// A network volume currently mounted on this Mac, by whatever app mounted it.

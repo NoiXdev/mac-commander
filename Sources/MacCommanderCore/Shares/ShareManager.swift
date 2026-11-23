@@ -284,9 +284,20 @@ public final class ShareManager {
     /// mounted by a local app from a server only it knows (OrbStack's "OrbStack:/OrbStack" is served on
     /// 127.0.0.1 at a changing port), so there is nothing to probe; it counts as reachable and is connected
     /// exactly while it's mounted. SMB, AFP and WebDAV always probe, so a dead NAS's stale mount stays unreachable.
+    /// An SMB name no lookup finds may still be a NetBIOS name (a home NAS often is): the SMB client finds it that
+    /// way, so the probe goes to the address the NetBIOS lookup answers with.
     private static func isReachable(_ url: ShareURL, prober: any ReachabilityProber) async -> Bool {
-        if url.scheme == "nfs", await !prober.resolves(host: url.host) { return true }
-        return await prober.isReachable(host: url.host, port: url.probePort, timeout: probeTimeout)
+        var host = url.host
+        if await !prober.resolves(host: host) {
+            switch url.scheme {
+            case "nfs": return true
+            case "smb":
+                guard let address = await prober.netBIOSAddress(of: host, timeout: probeTimeout) else { return false }
+                host = address
+            default: break
+            }
+        }
+        return await prober.isReachable(host: host, port: url.probePort, timeout: probeTimeout)
     }
 
     private func classify(_ share: SavedShare, mounted: [MountedShare], reachable: Bool) {

@@ -72,6 +72,13 @@ import Testing
         #expect(await !TCPReachabilityProber().resolves(host: "maccommander-test.invalid"))
     }
 
+    /// `smbutil lookup` prints the server's address on its last line.
+    @Test func netBIOSLookupOutputIsParsed() {
+        let output = "Got response from 192.168.178.85\nIP address of home-nas: 192.168.178.85\n"
+        #expect(TCPReachabilityProber.netBIOSAddress(fromLookupOutput: output) == "192.168.178.85")
+        #expect(TCPReachabilityProber.netBIOSAddress(fromLookupOutput: "") == nil)
+    }
+
     @Test func volumeListerKeepsOnlyNetworkShares() throws {
         let shares = SystemVolumeLister.shares(from: [
             ("apfs", "/dev/disk3s1s1", "/"),
