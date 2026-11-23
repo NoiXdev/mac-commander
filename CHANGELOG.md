@@ -1,3 +1,17 @@
+## [0.1.1](https://github.com/NoiXdev/mac-commander/compare/v0.1.0...v0.1.1) (2026-11-23)
+
+### Features
+
+* copy the current folder's path ([48e20d0](https://github.com/NoiXdev/mac-commander/commit/48e20d044535a2449af927d2bdc356a72db46e2c))
+* list cloud accounts (OneDrive, Google Drive, …) in the sidebar ([fa7d979](https://github.com/NoiXdev/mac-commander/commit/fa7d979c27350e18e54bdbecd1a9fa1f56f18798))
+* manage tags: create, rename, recolor and delete ([c89da19](https://github.com/NoiXdev/mac-commander/commit/c89da198b571b2ace34e34a7d7e3acf374361b09))
+* show whether each cloud account is connected and syncing ([b420738](https://github.com/NoiXdev/mac-commander/commit/b4207381c25e94f009bdb41349d659b2102791af))
+
+### Bug Fixes
+
+* find bare SMB names over Bonjour first, give NetBIOS time to answer ([56e78e8](https://github.com/NoiXdev/mac-commander/commit/56e78e8ccd2e33ab497d17c9fabad6cd7125f6e0))
+* reach SMB servers known only by their NetBIOS name ([33de85f](https://github.com/NoiXdev/mac-commander/commit/33de85f3d768a1a4cd442ed0259505938442d5d4))
+
 ## [0.1.0](https://github.com/NoiXdev/mac-commander/compare/1125fa70b6f454eb5dc3969c9a320c579d8243ac...v0.1.0) (2026-11-20)
 
 ### Features
