@@ -124,4 +124,18 @@ struct PreferencesTests {
         #expect(prefs.globalShortcut == nil)
         #expect(prefs.newFileName == "x.txt")
     }
+
+    @Test func knownTagsRoundTripAndSkipBadEntries() throws {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = PreferencesStore(defaults: defaults)
+        store.preferences.knownTags = [FileTag(name: "Work", color: .blue)]
+        let again = PreferencesStore(defaults: defaults)
+        #expect(again.preferences.knownTags.map(\.name) == ["Work"])
+        #expect(again.preferences.knownTags.map(\.color) == [.blue])
+
+        let json = #"{"knownTags": [{"name": "A", "rawColor": 3}, 7, {"name": "B"}]}"#
+        let decoded = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+        #expect(decoded.knownTags.map(\.name) == ["A"])
+    }
 }

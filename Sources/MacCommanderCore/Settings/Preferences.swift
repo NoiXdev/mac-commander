@@ -21,6 +21,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var dualPaneEnabled = false
     /// System-wide hotkey that brings MacCommander forward; nil means none.
     public var globalShortcut: GlobalShortcut?
+    /// Tags set or created in-app, with their colors (Spotlight knows tag names only). See `TagCatalog`.
+    public var knownTags: [FileTag] = []
 
     public init(
         newFileName: String = Preferences.defaultNewFileName, newWindowFolderPath: String? = nil,
@@ -37,7 +39,7 @@ public struct Preferences: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case newFileName, newWindowFolderPath, hiddenSidebarSections, hiddenTags, didShowFullDiskAccessHint
-        case dualPaneEnabled, terminalApp, globalShortcut
+        case dualPaneEnabled, terminalApp, globalShortcut, knownTags
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -76,6 +78,18 @@ public struct Preferences: Codable, Equatable, Sendable {
             }
         }
         hiddenTags = tags
+        // Unreadable entries are dropped, the rest kept.
+        var known: [FileTag] = []
+        if var raw = try? c.nestedUnkeyedContainer(forKey: .knownTags) {
+            while !raw.isAtEnd {
+                if let tag = try? raw.decode(FileTag.self) {
+                    known.append(tag)
+                } else {
+                    _ = try? raw.decode(AnyDecodable.self)
+                }
+            }
+        }
+        knownTags = known
     }
 
     private struct AnyDecodable: Decodable {

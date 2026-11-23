@@ -27,4 +27,32 @@ struct TagCatalogTests {
         #expect(catalog.tags.contains(FileTag(name: "project", color: .none)))
         #expect(catalog.tags.first { $0.name == "Project" }?.color == .green)
     }
+
+    /// A renamed or deleted tag stays hidden while Spotlight's index still reports it, and comes back once
+    /// Spotlight has dropped it and finds it again.
+    @Test func forgottenTagWaitsForSpotlight() {
+        let catalog = TagCatalog()
+        catalog.updateInUse(["Old", "Keep"])
+        catalog.forget(FileTag(name: "old", color: .none))
+        #expect(catalog.tags.map(\.name) == ["Keep"])
+
+        catalog.updateInUse(["Old", "Keep"])
+        #expect(catalog.tags.map(\.name) == ["Keep"])
+
+        catalog.updateInUse(["Keep"])
+        catalog.updateInUse(["Old", "Keep"])
+        #expect(catalog.tags.map(\.name) == ["Keep", "Old"])
+    }
+
+    @Test func knownTagsAreReportedForSaving() {
+        let catalog = TagCatalog()
+        var saved: [[FileTag]] = []
+        catalog.onKnownChange = { saved.append($0) }
+        catalog.start(standard: [red], known: [FileTag(name: "Work", color: .blue)])
+        #expect(catalog.tags.first { $0.name == "Work" }?.color == .blue)
+
+        catalog.noteUsed(FileTag(name: "Home", color: .green))
+        catalog.forget(FileTag(name: "work", color: .none))
+        #expect(saved.map { $0.map(\.name) } == [["Work", "Home"], ["Home"]])
+    }
 }

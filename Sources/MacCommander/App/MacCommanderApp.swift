@@ -93,7 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await ArchivePreviewCache.shared.purge() }
         shares.start()
         FullDiskAccessHint.enqueueIfNeeded(preferences: preferences)
-        TagCatalog.shared.start(standard: TagMenu.standardTags())
+        // Custom tag colors and tags created in-app survive restarts (Spotlight knows tag names only).
+        let preferences = preferences
+        TagCatalog.shared.onKnownChange = { preferences.preferences.knownTags = $0 }
+        TagCatalog.shared.start(standard: TagMenu.standardTags(), known: preferences.preferences.knownTags)
         // The Convert menu is built from the cached result and never waits for the check.
         Task { _ = await FFmpegLocator.shared.status() }
     }

@@ -37,6 +37,21 @@ import Testing
         #expect(parsed.map(\.color) == [.none, .red])
     }
 
+    @Test func renameKeepsPositionAndMergesDuplicates() async throws {
+        let tmp = try TemporaryDirectory()
+        let url = try tmp.file("a.txt")
+        let old = FileTag(name: "Work", color: .blue)
+        let new = FileTag(name: "Job", color: .green)
+        try TagStore.writeNow([FileTag(name: "Red", color: .red), old, FileTag(name: "x", color: .none)], to: url)
+        try await TagStore.setTags(.rename(old, to: new), on: [url])
+        #expect(try rawStrings(url) == ["Red\n6", "Job\n2", "x\n0"])
+
+        // A file with both keeps one entry, where the earlier of the two was.
+        try TagStore.writeNow([FileTag(name: "job", color: .none), FileTag(name: "Red", color: .red), old], to: url)
+        try await TagStore.setTags(.rename(old, to: new), on: [url])
+        #expect(try rawStrings(url) == ["Job\n2", "Red\n6"])
+    }
+
     @Test func readWriteRoundTrip() throws {
         let dir = try TemporaryDirectory()
         let url = try dir.file("a.txt")

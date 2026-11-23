@@ -2,6 +2,8 @@ import Foundation
 
 public enum TagChange: Sendable {
     case add(FileTag), remove(FileTag), replace([FileTag])
+    /// Puts the second tag where the first one was (a new name or color); a file that has both keeps one.
+    case rename(FileTag, to: FileTag)
 }
 
 /// Reads and writes Finder tags, stored only in the `_kMDItemUserTags` extended attribute
@@ -128,6 +130,16 @@ public enum TagStore {
                     updated = current.filter { $0 != tag }
                 case .replace(let tags):
                     updated = tags
+                case .rename(let old, let new):
+                    updated = current.reduce(into: []) { result, tag in
+                        let mapped = tag == old ? new : tag
+                        if let index = result.firstIndex(of: mapped) {
+                            // The file had both: one entry stays, with the new name and color.
+                            if tag == old { result[index] = new }
+                        } else {
+                            result.append(mapped)
+                        }
+                    }
                 }
                 if updated.count == current.count, zip(updated, current).allSatisfy({ $0.name == $1.name && $0.rawColor == $1.rawColor }) {
                     continue
