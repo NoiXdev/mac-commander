@@ -1,3 +1,32 @@
+## [0.2.0](https://github.com/NoiXdev/mac-commander/compare/v0.1.1...v0.2.0) (2026-11-24)
+
+### Features
+
+* add the settings sections ([faf27c5](https://github.com/NoiXdev/mac-commander/commit/faf27c5a7dc4c151facee02041ff0f036cb8b04f))
+* Check for Updates menu item, settings and update alerts ([9836469](https://github.com/NoiXdev/mac-commander/commit/9836469c233b14dd5a68154425efbe2613329a3d))
+* check GitHub releases for a newer version ([6131a98](https://github.com/NoiXdev/mac-commander/commit/6131a9869ec160d598bb167781bf9d97a1ecb38b))
+* choose the app's language in Settings ([9cccce6](https://github.com/NoiXdev/mac-commander/commit/9cccce6673a6700e5f7a64034bd9f640a9f0487c))
+* look up strings in English, German, Polish and French tables ([2c43ae8](https://github.com/NoiXdev/mac-commander/commit/2c43ae8a2791949746dd897543644d31db0f4dab))
+* name new folders, copies and archives in the app's language ([e754ebb](https://github.com/NoiXdev/mac-commander/commit/e754ebb485a316e05b189fb3f39341d4d8e1c31a))
+* open files with the app their extension's rule names ([a0d8daf](https://github.com/NoiXdev/mac-commander/commit/a0d8dafc28656d33dab0c4db9d3bc394734eb16e))
+* Open With section in Settings ([187f954](https://github.com/NoiXdev/mac-commander/commit/187f9540655e371831010d184166dc2356ed31df))
+* Row size setting for Compact, Default and Large file lists ([1acffca](https://github.com/NoiXdev/mac-commander/commit/1acffca9d14988de098ea93cd3b608447beb3c2c))
+* settings with a sidebar in a resizable window that keeps its size ([e709465](https://github.com/NoiXdev/mac-commander/commit/e7094651fd76b2f39665101e2f69dc6651332e13))
+* store a row size for the file list ([347481c](https://github.com/NoiXdev/mac-commander/commit/347481c38a2c97b1f5fa72e50e6ffa6ada9f3a6e))
+* store per-extension Open With rules ([0c56e40](https://github.com/NoiXdev/mac-commander/commit/0c56e40a166afeb08cbcc26d07154b54bc489c64))
+* tabs with New Tab, Open in New Tab and Command-double-click ([5386e26](https://github.com/NoiXdev/mac-commander/commit/5386e263538309829f023e59ed6788a205c4551b))
+* tell which items open in a new tab as a folder ([4304c59](https://github.com/NoiXdev/mac-commander/commit/4304c5993bcabb8b528e0a71a8d23d66ae9db15a))
+* translate file operations, archives, Get Info and the preview ([7711cfe](https://github.com/NoiXdev/mac-commander/commit/7711cfe825d902c075a8c5ef1b47676b8a046983))
+* translate Settings, the sidebar, tags and network shares ([8c1032a](https://github.com/NoiXdev/mac-commander/commit/8c1032a3936fb37307c384e6f790f06e9b8b2445))
+* translate the file-operation, archive, convert and share messages ([917f854](https://github.com/NoiXdev/mac-commander/commit/917f85467e6bdf50fa8021247f9210cefab6ff9d))
+* translate the menus, the browser and the file list ([d5997cb](https://github.com/NoiXdev/mac-commander/commit/d5997cb1f59b631d6c2c3f887f6272841a07f25d))
+* use Open With rules for double-click, archive entries and the Open With menu ([293f530](https://github.com/NoiXdev/mac-commander/commit/293f5300a8d9aeeb5b72bce76e9568332d081425))
+
+### Bug Fixes
+
+* relaunch only after a confirmed quit and name Polish copies as Finder does ([7de25d9](https://github.com/NoiXdev/mac-commander/commit/7de25d93a5446fbbe293ac74694a9324dc92a4c8))
+* show long extensions in full in the Open With rules list ([2c5e864](https://github.com/NoiXdev/mac-commander/commit/2c5e864e9336978f7014de0d79487574887126ab))
+
 ## [0.1.1](https://github.com/NoiXdev/mac-commander/compare/v0.1.0...v0.1.1) (2026-11-23)
 
 ### Features
