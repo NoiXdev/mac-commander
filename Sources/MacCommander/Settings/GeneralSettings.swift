@@ -14,8 +14,10 @@ struct GeneralSettings: View {
         bundleIdentifier: Bundle.main.bundleIdentifier ?? "dev.noix.MacCommander", store: CFGlobalDefaultsStore())
 
     private static let bundleIdentifier = Bundle.main.bundleIdentifier
-    /// Mirrors the stored choice for the picker; the stored value itself is the only source of truth.
-    private let languageState = State(initialValue: AppLanguage.system)
+    /// Mirrors the stored choice for the picker; the stored value itself is the only source of truth. Starts from
+    /// it, so the first frame already shows the choice; `.system` without a bundle identifier, where no picker shows.
+    private let languageState = State(
+        initialValue: GeneralSettings.bundleIdentifier.map { AppLanguageSetting(domain: $0).current } ?? .system)
 
     var body: some View {
         Form {

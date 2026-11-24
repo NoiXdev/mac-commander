@@ -562,5 +562,29 @@ private func quarantine(_ url: URL) -> String? {
         let decoded = try #require(try NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data))
         #expect(decoded.localizedDescription == error.localizedDescription)
         #expect(decoded.localizedDescription.hasPrefix("“a.zip” couldn’t be extracted: "))
+        let underlying = try #require(decoded.userInfo[NSUnderlyingErrorKey] as? NSError)
+        #expect(underlying.code == CocoaError.fileWriteFileExists.rawValue)
+    }
+
+    /// The cause stays attached for anyone who looks past the sentence (logs, the debugger).
+    @Test(.english) func keepsTheCauseAsTheUnderlyingError() throws {
+        let cause = ArchiveError.unreadable(message: "Truncated input file (needed 512 bytes)")
+        let error = ArchiveExtractor.promiseError(name: "report.txt", cause)
+        let underlying = try #require(error.userInfo[NSUnderlyingErrorKey] as? NSError)
+        #expect(underlying.localizedDescription == cause.localizedDescription)
+        #expect(underlying.domain == (cause as NSError).domain)
+        #expect(underlying.code == (cause as NSError).code)
+    }
+
+    /// A Swift error bridges to a private NSError subclass that secure coding may refuse; the underlying error
+    /// is a plain NSError, so the whole error still survives the trip.
+    @Test(.english) func aSwiftCauseSurvivesSecureCoding() throws {
+        let error = ArchiveExtractor.promiseError(
+            name: "b.zip", ArchiveError.unsupported(message: "Unrecognized archive format"))
+        let data = try NSKeyedArchiver.archivedData(withRootObject: error, requiringSecureCoding: true)
+        let decoded = try #require(try NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data))
+        #expect(decoded.localizedDescription == error.localizedDescription)
+        let underlying = try #require(decoded.userInfo[NSUnderlyingErrorKey] as? NSError)
+        #expect(underlying.localizedDescription == "Unrecognized archive format")
     }
 }

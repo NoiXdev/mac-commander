@@ -110,7 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// (`.terminateLater`) for the cancelled operations to end (their tools terminated, temporary folders
     /// removed), the preview cache purge and pending writes of the share list (`ShareStore.flush`), all off
     /// the main thread, but at most `quitTimeout`: the cache's actor may be busy with work on a slow volume.
-    /// Then it goes on to `applicationWillTerminate` as usual.
+    /// Then it goes on to `applicationWillTerminate` as usual. A relaunch (`AppRelauncher`) starts its reopen
+    /// helper once the quit is decided, and is dropped if the user doesn't quit.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if !operations.operations.isEmpty {
             let alert = NSAlert()
@@ -118,8 +119,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.messageText = L10n.string("app.quit.title", "Cancel running operations and quit?")
             alert.addButton(withTitle: L10n.string("app.quit.quit", "Quit"))
             alert.addButton(withTitle: L10n.string("app.quit.dontQuit", "Don't Quit"))
-            guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
+            guard alert.runModal() == .alertFirstButtonReturn else {
+                AppRelauncher.quitCancelled()
+                return .terminateCancel
+            }
         }
+        // The quit is decided here, before anything is torn down, so a relaunch that can't start can still call it off.
+        guard AppRelauncher.quitCommitted() else { return .terminateCancel }
         shares.stop()
         didReplyToTerminate = false
         let store = shares.store

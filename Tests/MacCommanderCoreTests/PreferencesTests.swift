@@ -48,10 +48,30 @@ import Testing
     }
 
     @Test func invalidNewFileNameFallsBack() {
-        for bad in ["", "  ", "a/b", "a:b", ".", ".."] {
+        for bad in ["a/b", "a:b", ".", ".."] {
             #expect(Preferences(newFileName: bad).effectiveNewFileName == "untitled.txt")
         }
         #expect(Preferences(newFileName: "notes.md").effectiveNewFileName == "notes.md")
+    }
+
+    /// "" is not a bad value but "no custom name": the built-in name of the current language.
+    @Test func emptyNewFileNameIsTheBuiltInName() {
+        let prefs = Preferences(newFileName: "")
+        #expect(prefs.effectiveNewFileName == "untitled.txt")
+        L10n.$localeOverride.withValue("de") {
+            #expect(prefs.effectiveNewFileName == "Neue Datei.txt")
+        }
+    }
+
+    /// A name of only spaces, tabs or line breaks can't be a file name, so it falls back to the built-in name.
+    @Test func whitespaceOnlyNewFileNameFallsBackToTheBuiltInName() {
+        for blank in [" ", "   ", "\t", " \n "] {
+            let prefs = Preferences(newFileName: blank)
+            #expect(prefs.effectiveNewFileName == "untitled.txt")
+            L10n.$localeOverride.withValue("pl") {
+                #expect(prefs.effectiveNewFileName == "bez nazwy.txt")
+            }
+        }
     }
 
     @Test func oldDefaultFileNameDecodesAsBuiltIn() {

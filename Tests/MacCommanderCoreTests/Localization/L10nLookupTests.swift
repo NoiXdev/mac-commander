@@ -22,6 +22,22 @@ import Testing
         #expect(L10n.plural("test.files", count: 3, one: "%lld file", other: "%lld files") == "3 files")
     }
 
+    /// Two values a review caught: the German genitive "des Finders" and the French definite "Les éléments".
+    @Test func grammarFixesInGermanAndFrench() {
+        L10n.$localeOverride.withValue("de") {
+            #expect(
+                L10n.string("tags.error.standardTag", "Finder's color tags can't be renamed, recolored or deleted.")
+                    == "Die Farb-Tags des Finders können nicht umbenannt, umgefärbt oder gelöscht werden.")
+        }
+        L10n.$localeOverride.withValue("fr") {
+            #expect(
+                L10n.string(
+                    "operation.compress.differentFolders",
+                    "Items can only be compressed together when they are in the same folder.")
+                    == "Les éléments ne peuvent être compressés ensemble que s’ils se trouvent dans le même dossier.")
+        }
+    }
+
     @Test(.english) func englishTraitSetsTheOverride() {
         #expect(L10n.localeOverride == "en")
     }

@@ -119,7 +119,7 @@
 "operation.undo.moveOne" = "Déplacement de « %@ »";
 "operation.convert.cancelled" = "Annulé";
 "operation.compress.nothing" = "Il n’y a rien à compresser.";
-"operation.compress.differentFolders" = "Des éléments ne peuvent être compressés ensemble que s’ils se trouvent dans le même dossier.";
+"operation.compress.differentFolders" = "Les éléments ne peuvent être compressés ensemble que s’ils se trouvent dans le même dossier.";
 "operation.compress.itemFailed" = "Impossible de compresser « %1$@ » : %2$@";
 "operation.compress.dittoFailed" = "Impossible de créer l’archive (ditto s’est terminé avec le statut %lld).";
 "operation.transfer.replaceContainsSource" = "Impossible de remplacer « %@ », car il contient l’élément en cours de transfert.";
@@ -129,7 +129,7 @@
 "name.archive" = "Archive";
 "name.newFolder" = "dossier sans titre";
 "name.newFile" = "sans titre.txt";
-"name.copySuffix" = "copie";
+"name.copy" = "%@ copie";
 
 /* Convert */
 "convert.target.jpeg" = "Image JPEG";
@@ -303,6 +303,8 @@
 "app.quit.title" = "Annuler les opérations en cours et quitter ?";
 "app.quit.quit" = "Quitter";
 "app.quit.dontQuit" = "Ne pas quitter";
+"app.relaunch.failed.title" = "Impossible de relancer MacCommander.";
+"app.relaunch.failed.message" = "Quittez MacCommander, puis ouvrez-le à nouveau pour appliquer la nouvelle langue.";
 "app.fullDiskAccess.title" = "Accorder l’accès complet au disque à MacCommander ?";
 "app.fullDiskAccess.message" = "MacCommander fonctionne sans, mais macOS demandera l’autorisation dossier par dossier, et certains emplacements (comme les données de Mail ou de Safari) resteront masqués. Vous pouvez accorder l’accès dans Réglages Système › Confidentialité et sécurité › Accès complet au disque.";
 "app.fullDiskAccess.openSettings" = "Ouvrir Réglages Système";

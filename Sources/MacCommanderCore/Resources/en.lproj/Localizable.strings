@@ -129,7 +129,7 @@
 "name.archive" = "Archive";
 "name.newFolder" = "untitled folder";
 "name.newFile" = "untitled.txt";
-"name.copySuffix" = "copy";
+"name.copy" = "%@ copy";
 
 /* Convert */
 "convert.target.jpeg" = "JPEG Image";
@@ -303,6 +303,8 @@
 "app.quit.title" = "Cancel running operations and quit?";
 "app.quit.quit" = "Quit";
 "app.quit.dontQuit" = "Don't Quit";
+"app.relaunch.failed.title" = "MacCommander couldn’t be relaunched.";
+"app.relaunch.failed.message" = "Quit MacCommander and open it again for the new language to take effect.";
 "app.fullDiskAccess.title" = "Give MacCommander Full Disk Access?";
 "app.fullDiskAccess.message" = "MacCommander works without it, but macOS will ask for permission folder by folder, and some locations (like Mail or Safari data) stay hidden. You can grant access in System Settings › Privacy & Security › Full Disk Access.";
 "app.fullDiskAccess.openSettings" = "Open System Settings";

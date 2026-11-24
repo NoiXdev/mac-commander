@@ -58,6 +58,86 @@ import Foundation
         }
     }
 
+    /// Polish Finder joins the word with a hyphen and no space ("raport-kopia.txt"), then numbers with a space.
+    @Test func polishCopyNameUsesAHyphen() throws {
+        let tmp = try TemporaryDirectory()
+        try tmp.file("raport.txt")
+        L10n.$localeOverride.withValue("pl") {
+            #expect(NameGenerator.copyName(for: "raport.txt", isDirectory: false, in: tmp.url) == "raport-kopia.txt")
+        }
+        try tmp.file("raport-kopia.txt")
+        L10n.$localeOverride.withValue("pl") {
+            #expect(NameGenerator.copyName(for: "raport.txt", isDirectory: false, in: tmp.url) == "raport-kopia 2.txt")
+        }
+    }
+
+    @Test func polishCopyContinuesAFinderMadeCopy() throws {
+        let tmp = try TemporaryDirectory()
+        L10n.$localeOverride.withValue("pl") {
+            #expect(
+                NameGenerator.copyName(for: "raport-kopia.txt", isDirectory: false, in: tmp.url) == "raport-kopia 2.txt")
+            #expect(
+                NameGenerator.copyName(for: "raport-kopia 4.txt", isDirectory: false, in: tmp.url)
+                    == "raport-kopia 5.txt")
+        }
+    }
+
+    @Test func polishCopyContinuesAnEnglishCopy() throws {
+        let tmp = try TemporaryDirectory()
+        L10n.$localeOverride.withValue("pl") {
+            #expect(NameGenerator.copyName(for: "report copy.txt", isDirectory: false, in: tmp.url) == "report-kopia 2.txt")
+            #expect(
+                NameGenerator.copyName(for: "report copy 3.txt", isDirectory: false, in: tmp.url) == "report-kopia 4.txt")
+        }
+    }
+
+    @Test func polishCopyOfAFolderKeepsItsDots() throws {
+        let tmp = try TemporaryDirectory()
+        try tmp.folder("moje.dane")
+        L10n.$localeOverride.withValue("pl") {
+            #expect(NameGenerator.copyName(for: "moje.dane", isDirectory: true, in: tmp.url) == "moje.dane-kopia")
+        }
+        try tmp.folder("moje.dane-kopia")
+        L10n.$localeOverride.withValue("pl") {
+            #expect(NameGenerator.copyName(for: "moje.dane", isDirectory: true, in: tmp.url) == "moje.dane-kopia 2")
+            #expect(NameGenerator.copyName(for: "moje.dane-kopia", isDirectory: true, in: tmp.url) == "moje.dane-kopia 2")
+        }
+    }
+
+    @Test func frenchCopyName() throws {
+        let tmp = try TemporaryDirectory()
+        L10n.$localeOverride.withValue("fr") {
+            #expect(NameGenerator.copyName(for: "rapport.txt", isDirectory: false, in: tmp.url) == "rapport copie.txt")
+            #expect(NameGenerator.copyName(for: "rapport copie.txt", isDirectory: false, in: tmp.url) == "rapport copie 2.txt")
+        }
+    }
+
+    /// The pattern's text around `%@` is matched literally: `(`, `+` and `.` are not regex syntax.
+    @Test func copyPatternIsMatchedLiterally() throws {
+        let tmp = try TemporaryDirectory()
+        let pattern = "%@ (copy+.)"
+        #expect(
+            NameGenerator.copyName(for: "a.txt", isDirectory: false, in: tmp.url, copyPattern: pattern)
+                == "a (copy+.).txt")
+        #expect(
+            NameGenerator.copyName(for: "a (copy+.).txt", isDirectory: false, in: tmp.url, copyPattern: pattern)
+                == "a (copy+.) 2.txt")
+        // Would match the unescaped regex ` (copy+.)`, which reads as " copy", more "y"s, then any character.
+        #expect(
+            NameGenerator.copyName(for: "a copyyX.txt", isDirectory: false, in: tmp.url, copyPattern: pattern)
+                == "a copyyX (copy+.).txt")
+    }
+
+    @Test func copyPatternMayHaveAPrefix() throws {
+        let tmp = try TemporaryDirectory()
+        let pattern = "Copy of %@"
+        #expect(
+            NameGenerator.copyName(for: "a.txt", isDirectory: false, in: tmp.url, copyPattern: pattern) == "Copy of a.txt")
+        #expect(
+            NameGenerator.copyName(for: "Copy of a.txt", isDirectory: false, in: tmp.url, copyPattern: pattern)
+                == "Copy of a 2.txt")
+    }
+
     @Test func keepBothNames() throws {
         let tmp = try TemporaryDirectory()
         try tmp.file("report.txt")

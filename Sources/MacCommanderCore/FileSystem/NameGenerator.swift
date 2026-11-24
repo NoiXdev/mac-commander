@@ -8,33 +8,76 @@ public enum NameGenerator {
         firstFreeName(base: base, pathExtension: pathExtension, startingAt: 1, in: directory, fileManager: fileManager)
     }
 
+    /// Finder's English duplicate pattern, recognised in every language so a copy made before a language switch
+    /// still numbers on.
+    public static let englishCopyPattern = "%@ copy"
+
     /// Finder-style duplicate name: `name copy.ext`, `name copy 2.ext`, … Always a copy name, even if `name` is free.
     /// Duplicating a copy continues its numbering (`report copy.txt` → `report copy 2.txt`) instead of stacking.
-    /// `copyWord` is written into the new name. Both it and the English "copy" count as a copy when continuing.
+    /// `copyPattern` puts the copy word around the base name, `%@` standing for the base: "%@ copy", or
+    /// "%@-kopia" in Polish. A number then follows with a space, as in Finder. Both it and the English pattern
+    /// count as a copy when continuing.
     public static func copyName(
         for name: String, isDirectory: Bool, in directory: URL,
-        copyWord: String = L10n.string("name.copySuffix", "copy"), fileManager: FileManager = .default
+        copyPattern: String = L10n.string("name.copy", "%@ copy"), fileManager: FileManager = .default
     ) -> String {
         let (stem, ext) = split(name, isDirectory: isDirectory)
+        // A pattern without `%@` can't hold a name: Finder's English one is used instead.
+        let english = CopyPattern(englishCopyPattern)!
+        let pattern = CopyPattern(copyPattern) ?? english
+        let patterns = pattern.format == english.format ? [pattern] : [pattern, english]
         var base = stem
         var start = 1
-        let words = copyWord == "copy" ? ["copy"] : [copyWord, "copy"]
-        let alternatives = words.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
-        if let range = stem.range(of: " (?:\(alternatives))( [0-9]+)?$", options: .regularExpression) {
-            let matched = stem[range].dropFirst()
-            let word = words.first { matched.hasPrefix($0) } ?? copyWord
-            let suffix = matched.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
+        if let match = patterns.lazy.compactMap({ $0.match(stem) }).first {
             // A number at or beyond Int.max can't be continued: the stem then counts as a plain name.
-            if suffix.isEmpty {
-                base = String(stem[..<range.lowerBound])
+            if let number = match.number {
+                if let n = Int(number), n < Int.max {
+                    base = match.base
+                    start = max(n + 1, 2)
+                }
+            } else {
+                base = match.base
                 start = 2
-            } else if let n = Int(suffix), n < Int.max {
-                base = String(stem[..<range.lowerBound])
-                start = max(n + 1, 2)
             }
         }
         return firstFreeName(
-            base: base + " " + copyWord, pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
+            base: pattern.apply(base), pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
+    }
+
+    /// A duplicate pattern split at its `%@` (or `%1$@`) into the literal text before and after the base name.
+    private struct CopyPattern {
+        let format: String
+        let prefix: String
+        let suffix: String
+        private let regex: NSRegularExpression
+
+        init?(_ format: String) {
+            guard let placeholder = format.range(of: "%1$@") ?? format.range(of: "%@") else { return nil }
+            self.format = format
+            prefix = format[..<placeholder.lowerBound].replacingOccurrences(of: "%%", with: "%")
+            suffix = format[placeholder.upperBound...].replacingOccurrences(of: "%%", with: "%")
+            // The text around the base is escaped, so a word with `.`, `+` or `(` in it matches only itself.
+            let before = NSRegularExpression.escapedPattern(for: prefix)
+            let after = NSRegularExpression.escapedPattern(for: suffix)
+            // A name may hold a line break, which `.` has to match too.
+            guard
+                let regex = try? NSRegularExpression(
+                    pattern: "^\(before)(.*)\(after)(?: ([0-9]+))?$", options: .dotMatchesLineSeparators)
+            else { return nil }
+            self.regex = regex
+        }
+
+        func apply(_ base: String) -> String { prefix + base + suffix }
+
+        /// The base and the number, if `stem` is a copy name made with this pattern.
+        func match(_ stem: String) -> (base: String, number: String?)? {
+            let range = NSRange(stem.startIndex..., in: stem)
+            guard let result = regex.firstMatch(in: stem, range: range),
+                let base = Range(result.range(at: 1), in: stem)
+            else { return nil }
+            let number = Range(result.range(at: 2), in: stem).map { String(stem[$0]) }
+            return (String(stem[base]), number)
+        }
     }
 
     /// Finder "Keep Both" name: `name` itself when free, otherwise `name 2.ext`, `name 3.ext`, …

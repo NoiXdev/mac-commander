@@ -129,7 +129,7 @@
 "name.archive" = "Archiv";
 "name.newFolder" = "Neuer Ordner";
 "name.newFile" = "Neue Datei.txt";
-"name.copySuffix" = "Kopie";
+"name.copy" = "%@ Kopie";
 
 /* Convert */
 "convert.target.jpeg" = "JPEG-Bild";
@@ -168,7 +168,7 @@
 "preview.error.notRegularFile" = "„%@“ ist keine reguläre Datei.";
 
 /* Tags */
-"tags.error.standardTag" = "Die Farb-Tags des Finder können nicht umbenannt, umgefärbt oder gelöscht werden.";
+"tags.error.standardTag" = "Die Farb-Tags des Finders können nicht umbenannt, umgefärbt oder gelöscht werden.";
 
 /* Network shares */
 "shares.name.default" = "%1$@ auf %2$@";
@@ -303,6 +303,8 @@
 "app.quit.title" = "Laufende Vorgänge abbrechen und beenden?";
 "app.quit.quit" = "Beenden";
 "app.quit.dontQuit" = "Nicht beenden";
+"app.relaunch.failed.title" = "MacCommander konnte nicht neu gestartet werden.";
+"app.relaunch.failed.message" = "Beende MacCommander und öffne es erneut, damit die neue Sprache wirksam wird.";
 "app.fullDiskAccess.title" = "MacCommander Festplattenvollzugriff geben?";
 "app.fullDiskAccess.message" = "MacCommander funktioniert auch ohne, aber macOS fragt dann Ordner für Ordner nach der Erlaubnis, und manche Orte (etwa die Daten von Mail oder Safari) bleiben verborgen. Du kannst den Zugriff unter Systemeinstellungen › Datenschutz & Sicherheit › Festplattenvollzugriff erteilen.";
 "app.fullDiskAccess.openSettings" = "Systemeinstellungen öffnen";

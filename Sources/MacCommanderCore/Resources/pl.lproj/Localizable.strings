@@ -129,7 +129,7 @@
 "name.archive" = "Archiwum";
 "name.newFolder" = "folder bez nazwy";
 "name.newFile" = "bez nazwy.txt";
-"name.copySuffix" = "kopia";
+"name.copy" = "%@-kopia";
 
 /* Convert */
 "convert.target.jpeg" = "Obraz JPEG";
@@ -303,6 +303,8 @@
 "app.quit.title" = "Anulować trwające operacje i zakończyć?";
 "app.quit.quit" = "Zakończ";
 "app.quit.dontQuit" = "Nie kończ";
+"app.relaunch.failed.title" = "Nie można ponownie uruchomić aplikacji MacCommander.";
+"app.relaunch.failed.message" = "Zakończ aplikację MacCommander i otwórz ją ponownie, aby zastosować nowy język.";
 "app.fullDiskAccess.title" = "Przyznać aplikacji MacCommander pełny dostęp do dysku?";
 "app.fullDiskAccess.message" = "MacCommander działa bez niego, ale macOS będzie prosić o pozwolenie osobno dla każdego folderu, a niektóre miejsca (np. dane Mail lub Safari) pozostaną ukryte. Dostęp możesz przyznać w Ustawieniach systemowych › Prywatność i ochrona › Pełny dostęp do dysku.";
 "app.fullDiskAccess.openSettings" = "Otwórz Ustawienia systemowe";

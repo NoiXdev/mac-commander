@@ -93,9 +93,9 @@ Chosen by the user: **B, named keys as in macSCP.**
 
 - `untitled folder` and the default for new files follow the language: "Neuer Ordner" and "Neue Datei.txt" in German, with Finder's wording in each language. A name the user typed in Settings stays as typed. Only the built-in default changes. How "no custom name" is stored is the builder's call. One option is to store `nil` instead of `untitled.txt` and migrate the old value.
 - *(My call, after the builder check.)* The other names the app generates follow Finder too:
-  - The duplicate suffix " copy" (`NameGenerator.copyName`): "Bericht Kopie.txt" in German.
+  - The duplicate pattern "%@ copy" (`NameGenerator.copyName`), with the separator Finder uses in each language: "Bericht Kopie.txt" in German, "raport-kopia.txt" in Polish.
   - `Archive.zip` for a multi-item compress: "Archiv.zip".
-  - `NameGenerator` takes the word from its caller. When counting on, it recognises both the current language's word and the English " copy", so "report copy.txt" made before a language switch still numbers on.
+  - `NameGenerator` takes the pattern from its caller. When counting on, it recognises both the current language's pattern and the English " copy", so "report copy.txt" made before a language switch still numbers on.
 
 ### Terminology
 

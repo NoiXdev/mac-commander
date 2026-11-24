@@ -267,10 +267,15 @@ extension ArchiveExtractor {
     /// The error a failed file promise of the entry `name` completes with. The receiver (Finder) shows only its
     /// description, and the cause is often bsdtar's own untranslated text, so the cause goes inside a sentence
     /// naming the entry. The description is a plain user-info string, so it survives the trip to the receiver.
+    /// The cause goes under `NSUnderlyingErrorKey` as a plain `NSError` with its description written out: a bridged
+    /// Swift error computes its description on demand, which secure coding drops.
     public static func promiseError(name: String, _ error: any Error) -> NSError {
         let text = L10n.format("archive.promise.failed", "“%1$@” couldn’t be extracted: %2$@", name, error.localizedDescription)
+        let cause = error as NSError
+        let underlying = NSError(
+            domain: cause.domain, code: cause.code, userInfo: [NSLocalizedDescriptionKey: error.localizedDescription])
         return NSError(
             domain: NSCocoaErrorDomain, code: CocoaError.fileWriteUnknown.rawValue,
-            userInfo: [NSLocalizedDescriptionKey: text])
+            userInfo: [NSLocalizedDescriptionKey: text, NSUnderlyingErrorKey: underlying])
     }
 }
