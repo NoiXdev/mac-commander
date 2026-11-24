@@ -13,8 +13,31 @@ struct GeneralSettings: View {
     private let fileViewer = FileViewerSetting(
         bundleIdentifier: Bundle.main.bundleIdentifier ?? "dev.noix.MacCommander", store: CFGlobalDefaultsStore())
 
+    private static let bundleIdentifier = Bundle.main.bundleIdentifier
+    /// Mirrors the stored choice for the picker; the stored value itself is the only source of truth.
+    private let languageState = State(initialValue: AppLanguage.system)
+
     var body: some View {
         Form {
+            if let setting = languageSetting {
+                Section {
+                    Picker(selection: languageBinding(setting)) {
+                        ForEach(AppLanguage.allCases, id: \.self) { language in
+                            Text(language.nativeName).tag(language)
+                        }
+                    } label: {
+                        L10n.text("settings.general.language.header", "Language")
+                    }
+                    if languageState.wrappedValue != AppRelauncher.launchLanguage {
+                        Button(action: AppRelauncher.relaunch) {
+                            L10n.text("settings.general.language.relaunch", "Relaunch MacCommander")
+                        }
+                    }
+                    L10n.text("settings.general.language.footer", "Takes effect after a relaunch.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
             Section {
                 LabeledContent(String(localized: "New windows open:")) {
                     HStack {
@@ -58,7 +81,24 @@ struct GeneralSettings: View {
         }
         .formStyle(.grouped)
         .background(WindowReader(box: windowState.wrappedValue))
-        .onAppear { fileViewerState.wrappedValue = fileViewer.isEnabled }
+        .onAppear {
+            fileViewerState.wrappedValue = fileViewer.isEnabled
+            if let setting = languageSetting { languageState.wrappedValue = setting.current }
+        }
+    }
+
+    /// Nil without a bundle identifier (a bare `swift run`), where there is no app domain to hold the choice.
+    private var languageSetting: AppLanguageSetting? {
+        Self.bundleIdentifier.map { AppLanguageSetting(domain: $0) }
+    }
+
+    private func languageBinding(_ setting: AppLanguageSetting) -> Binding<AppLanguage> {
+        Binding(
+            get: { languageState.wrappedValue },
+            set: { language in
+                setting.current = language
+                languageState.wrappedValue = setting.current
+            })
     }
 
     /// Writes the global value, then shows what is actually stored.

@@ -7,5 +7,11 @@
 "settings.section.tags" = "Tags";
 "settings.section.network" = "Réseau";
 
+/* Settings > General > Language */
+"settings.general.language.header" = "Langue";
+"settings.general.language.system" = "Système";
+"settings.general.language.footer" = "Prend effet après un redémarrage.";
+"settings.general.language.relaunch" = "Relancer MacCommander";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ se trouve dans %2$@.";

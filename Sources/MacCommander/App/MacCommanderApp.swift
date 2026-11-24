@@ -14,6 +14,10 @@ struct MacCommanderApp: App {
     private var operations: FileOperationCenter { appDelegate.operations }
     private let clipboard = FileClipboard()
 
+    init() {
+        _ = AppRelauncher.launchLanguage  // capture the launch language before any view or setting changes it
+    }
+
     var body: some Scene {
         // Opened by id through `OpenRequestRouter`. External open events (reveals, folders) go to the app
         // delegate only: the router makes their windows, so SwiftUI mustn't add one of its own.
