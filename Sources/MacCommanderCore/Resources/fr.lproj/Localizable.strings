@@ -208,6 +208,7 @@
 "sidebar.section.network" = "Réseau";
 "sidebar.section.tags" = "Tags";
 "sidebar.favorites.removeFromSidebar" = "Supprimer de la barre latérale";
+"sidebar.menu.openInNewTab" = "Ouvrir dans un nouvel onglet";
 "sidebar.favorites.missing" = "« %@ » est introuvable. Le supprimer des favoris ?";
 "sidebar.favorites.missing.remove" = "Supprimer";
 "sidebar.favorites.missing.cancel" = "Annuler";
@@ -285,6 +286,7 @@
 "shares.signIn.rejected" = "Le nom d’utilisateur ou le mot de passe est incorrect.";
 
 /* Menu bar */
+"menu.file.newTab" = "Nouvel onglet";
 "menu.file.open" = "Ouvrir";
 "menu.file.newFolder" = "Nouveau dossier";
 "menu.file.newEmptyFile" = "Nouveau fichier vide";
@@ -377,6 +379,7 @@
 
 /* File list: context menu */
 "fileList.menu.open" = "Ouvrir";
+"fileList.menu.openInNewTab" = "Ouvrir dans un nouvel onglet";
 "fileList.menu.quickLookOne" = "Coup d’œil sur « %@ »";
 "fileList.menu.rename" = "Renommer";
 "fileList.menu.duplicate" = "Dupliquer";

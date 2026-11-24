@@ -208,6 +208,7 @@
 "sidebar.section.network" = "Netzwerk";
 "sidebar.section.tags" = "Tags";
 "sidebar.favorites.removeFromSidebar" = "Aus der Seitenleiste entfernen";
+"sidebar.menu.openInNewTab" = "In neuem Tab öffnen";
 "sidebar.favorites.missing" = "„%@“ wurde nicht gefunden. Aus den Favoriten entfernen?";
 "sidebar.favorites.missing.remove" = "Entfernen";
 "sidebar.favorites.missing.cancel" = "Abbrechen";
@@ -285,6 +286,7 @@
 "shares.signIn.rejected" = "Benutzername oder Passwort ist falsch.";
 
 /* Menu bar */
+"menu.file.newTab" = "Neuer Tab";
 "menu.file.open" = "Öffnen";
 "menu.file.newFolder" = "Neuer Ordner";
 "menu.file.newEmptyFile" = "Neue leere Datei";
@@ -377,6 +379,7 @@
 
 /* File list: context menu */
 "fileList.menu.open" = "Öffnen";
+"fileList.menu.openInNewTab" = "In neuem Tab öffnen";
 "fileList.menu.quickLookOne" = "Schnellansicht von „%@“";
 "fileList.menu.rename" = "Umbenennen";
 "fileList.menu.duplicate" = "Duplizieren";

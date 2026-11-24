@@ -98,7 +98,8 @@ enum FileContextMenu {
     static func forItems(
         _ items: [FileItem], all: [FileItem], model: BrowserModel, settings: ViewSettingsStore,
         clipboard: FileClipboard, window: NSWindow?, openInfo: @escaping (URL) -> Void,
-        terminalApp: @escaping () -> TerminalApp?, paneCommands: PaneCommands? = nil, archiveQuickLook: @escaping @MainActor () -> Void
+        terminalApp: @escaping () -> TerminalApp?, paneCommands: PaneCommands? = nil,
+        openInNewTab: @escaping ([URL]) -> Void, archiveQuickLook: @escaping @MainActor () -> Void
     ) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -110,6 +111,21 @@ enum FileContextMenu {
             let toOpen = all.count == 1 ? all : all.filter { !$0.isDirectory }
             Task { @MainActor in await FileActions.open(toOpen, model: model, window: window) }
         })
+        // Folders only, never inside an archive (that branch returns below). The menu is built synchronously, so
+        // it can't ask `folderForNewTab` (a symlink check touches disk): it shows when a selected item is a folder
+        // (or a symlink to one; `mayOpenAsFolder`, one stat per symlink) and the click filters with `folderForNewTab`. Files, apps
+        // and archives never show it.
+        if model.archiveLocation == nil, all.contains(where: BrowserModel.mayOpenAsFolder) {
+            menu.addItem(ActionMenuItem(L10n.string("fileList.menu.openInNewTab", "Open in New Tab")) {
+                Task { @MainActor in
+                    var folders: [URL] = []
+                    for item in all {
+                        if let folder = await model.folderForNewTab(item) { folders.append(folder) }
+                    }
+                    if !folders.isEmpty { openInNewTab(folders) }
+                }
+            })
+        }
         let quickLookTitle =
             all.count == 1
             ? L10n.format("fileList.menu.quickLookOne", "Quick Look “%@”", all[0].name)

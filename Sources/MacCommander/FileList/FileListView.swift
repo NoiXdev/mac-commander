@@ -34,6 +34,7 @@ struct FileListView: NSViewControllerRepresentable {
     var isActive = true
     @Environment(\.openWindow) private var openWindow
     @Environment(PreferencesStore.self) private var preferences
+    @Environment(OpenRequestRouter.self) private var router
 
     func makeNSViewController(context: Context) -> FileListController {
         let controller = FileListController(
@@ -42,6 +43,11 @@ struct FileListView: NSViewControllerRepresentable {
         controller.reconnect = reconnect
         controller.signIn = signIn
         controller.terminalApp = { [preferences] in preferences.preferences.terminalApp }
+        controller.openInNewTab = { [router, weak controller] urls in
+            // The list's own window is the anchor: a right-click doesn't bring a background window forward.
+            router.openNewTab(
+                urls.map { OpenRequest(folder: $0, selection: []) }, joining: controller?.outlineView.window)
+        }
         controller.onActivate = onActivate
         controller.onSwitchPane = onSwitchPane
         controller.paneCommands = paneCommands

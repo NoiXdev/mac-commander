@@ -7,6 +7,8 @@ struct BrowserCommands: Commands {
     let preferences: PreferencesStore
     /// The app's one update check, shared with Settings and the launch check.
     let updates: UpdateCheckModel
+    /// Opens new tabs (File ▸ New Tab).
+    let router: OpenRequestRouter
     /// The focused window's active pane.
     @FocusedValue(\.browserModel) private var model
     @FocusedValue(\.paneLayout) private var layout
@@ -24,6 +26,9 @@ struct BrowserCommands: Commands {
         }
         // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
         CommandGroup(after: .newItem) {
+            // Directly under New Window: a tab in the frontmost browser window, at the same folder as ⌘N.
+            Button(L10n.string("menu.file.newTab", "New Tab")) { router.openNewTab() }
+                .keyboardShortcut("t")
             Button(L10n.string("menu.file.open", "Open")) { openSelection() }
                 .keyboardShortcut("o")
                 .disabled(model?.selection.isEmpty != false)

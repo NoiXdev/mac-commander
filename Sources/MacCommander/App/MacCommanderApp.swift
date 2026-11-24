@@ -34,7 +34,8 @@ struct MacCommanderApp: App {
         }
         .handlesExternalEvents(matching: [])
         .commands {
-            BrowserCommands(settings: settings, preferences: preferences, updates: appDelegate.updates)
+            BrowserCommands(
+                settings: settings, preferences: preferences, updates: appDelegate.updates, router: appDelegate.router)
         }
 
         // One window per item; opening the same URL again focuses the existing window.

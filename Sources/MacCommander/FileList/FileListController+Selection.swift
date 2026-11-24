@@ -92,7 +92,15 @@ extension FileListController {
         guard showsCurrentFolder, row >= 0, let node = node(atRow: row) else { return }
         let item = node.item
         let window = outlineView.window
-        Task { await FileActions.open([item], model: model, window: window) }
+        // ⌘-double-click on a folder opens it in a new tab; for anything else it is a plain double-click.
+        let isCommand = NSApp.currentEvent?.modifierFlags.contains(.command) == true
+        Task {
+            if isCommand, let folder = await model.folderForNewTab(item) {
+                openInNewTab([folder])
+            } else {
+                await FileActions.open([item], model: model, window: window)
+            }
+        }
     }
 
     /// ⌘↓ and File ▸ Open (⌘O): a single item opens (folders navigate); with several, only the

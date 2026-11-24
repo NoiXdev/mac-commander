@@ -88,6 +88,7 @@ extension FileListController {
         return FileContextMenu.forItems(
             items.topLevel, all: items.all, model: model, settings: settings, clipboard: clipboard,
             window: outlineView.window, openInfo: openInfo, terminalApp: terminalApp, paneCommands: paneCommands,
+            openInNewTab: openInNewTab,
             archiveQuickLook: { [weak self] in self?.showArchiveQuickLook() })
     }
 }

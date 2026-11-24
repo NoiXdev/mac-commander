@@ -8,6 +8,7 @@ struct SidebarView: View {
     let shareSheets: ShareSheets
     @Environment(FavoritesStore.self) private var favorites
     @Environment(PreferencesStore.self) private var preferences
+    @Environment(OpenRequestRouter.self) private var router
     private let volumesState = State<[VolumeInfo]>(initialValue: [])
     private let missingState = State<SidebarLocation?>(initialValue: nil)
     /// Whether the iCloud Drive folder exists (it doesn't when not signed in); checked off the main thread.
@@ -82,6 +83,7 @@ struct SidebarView: View {
                     .onTapGesture { select(location) }
                     .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: location.exists))
                     .contextMenu {
+                        if location.exists { openInNewTabButton(location.url) }
                         Button(L10n.string("sidebar.favorites.removeFromSidebar", "Remove from Sidebar")) { favorites.remove(location.url) }
                     }
             }
@@ -109,6 +111,7 @@ struct SidebarView: View {
                 row(name: L10n.string("sidebar.cloud.iCloudDrive", "iCloud Drive"), url: Self.iCloudDrive, exists: true, symbol: "icloud")
                     .onTapGesture { Task { await model.navigate(to: Self.iCloudDrive) } }
                     .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: Self.iCloudDrive, enabled: true))
+                    .contextMenu { openInNewTabButton(Self.iCloudDrive) }
             }
             ForEach(cloud) { location in
                 let status = location.status { runningApps.contains($0) }
@@ -124,6 +127,7 @@ struct SidebarView: View {
                 .onTapGesture { Task { await model.navigate(to: location.url) } }
                 .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: true))
                 .contextMenu {
+                    openInNewTabButton(location.url)
                     if status != .active, let app = location.appBundleID,
                         let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app)
                     {
@@ -133,6 +137,12 @@ struct SidebarView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func openInNewTabButton(_ url: URL) -> some View {
+        Button(L10n.string("sidebar.menu.openInNewTab", "Open in New Tab")) {
+            router.openNewTab([OpenRequest(folder: url, selection: [])], joining: windowState.wrappedValue.window)
         }
     }
 

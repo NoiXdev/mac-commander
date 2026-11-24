@@ -101,6 +101,52 @@ final class OpenRequestRouter {
         }
     }
 
+    /// New tabs in the tab group of `source` (the window a context menu or sidebar belongs to, which may be in the
+    /// background) or, without a usable one, the frontmost browser window: one at the "new window" folder for no requests,
+    /// else one per request, in order, the last one frontmost. Each tab is a full browser window. With no browser
+    /// window to join (none open, or all minimized), plain windows open instead.
+    ///
+    /// Joins explicitly (`addTabbedWindow`), so it doesn't depend on the "Prefer tabs" system setting. SwiftUI's
+    /// `openWindow` creates and shows the window synchronously, so it is found right after the call and joined
+    /// before its view appears, which also keeps the windows taking their requests in tab order (both measured
+    /// with a probe app on macOS 27). A window the system already tabbed into the group ("Prefer tabs: Always")
+    /// stays where it is.
+    func openNewTab(_ requests: [OpenRequest] = [], joining source: NSWindow? = nil) {
+        guard let anchor = tabAnchor(preferring: source), openWindow != nil else {
+            if requests.isEmpty { openNewWindow() } else { enqueue(requests) }
+            return
+        }
+        let tabs: [OpenRequest?] = requests.isEmpty ? [nil] : requests
+        for request in tabs {
+            let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+            if let request { enqueue([request]) } else { openNewWindow() }
+            // Same tabbing identifier: a window of the browser `WindowGroup`, not one opened as a side effect.
+            guard
+                let window = NSApp.windows.first(where: {
+                    !before.contains(ObjectIdentifier($0)) && $0.tabbingIdentifier == anchor.tabbingIdentifier
+                })
+            else { continue }
+            if anchor.tabbedWindows?.contains(window) != true {
+                (anchor.tabbedWindows?.last ?? anchor).addTabbedWindow(window, ordered: .above)
+            }
+            window.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    /// The window a new tab joins: the frontmost browser window that is on screen, so never Settings or an Info
+    /// window, even when one of them is in front.
+    private func tabAnchor(preferring source: NSWindow?) -> NSWindow? {
+        if let source, !source.isMiniaturized, browserWindows.contains(where: { $0 === source }) { return source }
+        return tabAnchor
+    }
+
+    private var tabAnchor: NSWindow? {
+        let browsers = Set(browserWindows.map(ObjectIdentifier.init))
+        return NSApp.orderedWindows.first {
+            browsers.contains(ObjectIdentifier($0)) && $0.isVisible && !$0.isMiniaturized
+        }
+    }
+
     /// Called at the end of launching. If SwiftUI shows no window (it may not when launched to open items),
     /// opens one after `launchWindowGrace`, so pending requests aren't stuck.
     func launchFinished() {

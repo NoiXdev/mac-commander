@@ -14,6 +14,9 @@ final class FileListController: NSViewController {
     var openInfo: (URL) -> Void
     /// The terminal chosen in Settings, for "Open in Terminal" (supplied by `FileListView`).
     var terminalApp: () -> TerminalApp? = { nil }
+    /// Opens folders in new tabs of the window, one each, in order (`OpenRequestRouter.openNewTab`, supplied by
+    /// `FileListView`).
+    var openInNewTab: ([URL]) -> Void = { _ in }
     /// "Reconnect" for a dropped network share (supplied by `FileListView`); nil hides the button.
     var reconnect: ((DisconnectedShare) -> Void)? {
         didSet { if isViewLoaded, case .shareDisconnected? = model.loadError { applyLoadError() } }
