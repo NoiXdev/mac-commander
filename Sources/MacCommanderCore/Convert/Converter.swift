@@ -100,7 +100,7 @@ public enum Converter {
         let invocations = ConvertCommand.invocations(
             source: source, target: target, output: output, ffmpeg: ffmpeg, codecs: codecs)
         guard !invocations.isEmpty else {
-            throw ConvertError.toolFailed(String(localized: "This conversion needs ffmpeg (brew install ffmpeg)."))
+            throw ConvertError.toolFailed(L10n.string("convert.error.needsFFmpeg", "This conversion needs ffmpeg (brew install ffmpeg)."))
         }
         var failure = ConvertError.toolFailed("")
         for invocation in invocations {
@@ -158,7 +158,7 @@ public enum Converter {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         let line = lastLine ? lines.last : lines.first
-        return .toolFailed(line ?? String(localized: "\(tool) failed (status \(result.status))"))
+        return .toolFailed(line ?? L10n.format("convert.error.toolFailed", "%1$@ failed (status %2$lld)", tool, Int(result.status)))
     }
 
     /// Extracts the whole archive into staging inside `temp`, then packs the staged top-level items.

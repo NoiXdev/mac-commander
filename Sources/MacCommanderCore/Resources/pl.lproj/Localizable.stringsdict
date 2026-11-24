@@ -22,5 +22,265 @@
             <string>%lld pliku</string>
         </dict>
     </dict>
+    <key>browser.transfer.copy</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Kopiuj 1 rzecz do:</string>
+            <key>few</key>
+            <string>Kopiuj %lld rzeczy do:</string>
+            <key>many</key>
+            <string>Kopiuj %lld rzeczy do:</string>
+            <key>other</key>
+            <string>Kopiuj %lld rzeczy do:</string>
+        </dict>
+    </dict>
+    <key>browser.transfer.move</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Przenieś 1 rzecz do:</string>
+            <key>few</key>
+            <string>Przenieś %lld rzeczy do:</string>
+            <key>many</key>
+            <string>Przenieś %lld rzeczy do:</string>
+            <key>other</key>
+            <string>Przenieś %lld rzeczy do:</string>
+        </dict>
+    </dict>
+    <key>browser.transfer.extract</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Rozpakuj 1 rzecz do:</string>
+            <key>few</key>
+            <string>Rozpakuj %lld rzeczy do:</string>
+            <key>many</key>
+            <string>Rozpakuj %lld rzeczy do:</string>
+            <key>other</key>
+            <string>Rozpakuj %lld rzeczy do:</string>
+        </dict>
+    </dict>
+    <key>operation.copy.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Kopiowanie 1 rzeczy do „%2$@”</string>
+            <key>few</key>
+            <string>Kopiowanie %1$lld rzeczy do „%2$@”</string>
+            <key>many</key>
+            <string>Kopiowanie %1$lld rzeczy do „%2$@”</string>
+            <key>other</key>
+            <string>Kopiowanie %1$lld rzeczy do „%2$@”</string>
+        </dict>
+    </dict>
+    <key>operation.move.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Przenoszenie 1 rzeczy do „%2$@”</string>
+            <key>few</key>
+            <string>Przenoszenie %1$lld rzeczy do „%2$@”</string>
+            <key>many</key>
+            <string>Przenoszenie %1$lld rzeczy do „%2$@”</string>
+            <key>other</key>
+            <string>Przenoszenie %1$lld rzeczy do „%2$@”</string>
+        </dict>
+    </dict>
+    <key>operation.duplicate.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Duplikowanie 1 rzeczy</string>
+            <key>few</key>
+            <string>Duplikowanie %lld rzeczy</string>
+            <key>many</key>
+            <string>Duplikowanie %lld rzeczy</string>
+            <key>other</key>
+            <string>Duplikowanie %lld rzeczy</string>
+        </dict>
+    </dict>
+    <key>operation.trash.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Przenoszenie 1 rzeczy do Kosza</string>
+            <key>few</key>
+            <string>Przenoszenie %lld rzeczy do Kosza</string>
+            <key>many</key>
+            <string>Przenoszenie %lld rzeczy do Kosza</string>
+            <key>other</key>
+            <string>Przenoszenie %lld rzeczy do Kosza</string>
+        </dict>
+    </dict>
+    <key>operation.compress.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Kompresowanie 1 rzeczy</string>
+            <key>few</key>
+            <string>Kompresowanie %lld rzeczy</string>
+            <key>many</key>
+            <string>Kompresowanie %lld rzeczy</string>
+            <key>other</key>
+            <string>Kompresowanie %lld rzeczy</string>
+        </dict>
+    </dict>
+    <key>operation.convert.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Konwertowanie 1 rzeczy…</string>
+            <key>few</key>
+            <string>Konwertowanie %lld rzeczy…</string>
+            <key>many</key>
+            <string>Konwertowanie %lld rzeczy…</string>
+            <key>other</key>
+            <string>Konwertowanie %lld rzeczy…</string>
+        </dict>
+    </dict>
+    <key>operation.extract.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Rozpakowywanie 1 rzeczy</string>
+            <key>few</key>
+            <string>Rozpakowywanie %lld rzeczy</string>
+            <key>many</key>
+            <string>Rozpakowywanie %lld rzeczy</string>
+            <key>other</key>
+            <string>Rozpakowywanie %lld rzeczy</string>
+        </dict>
+    </dict>
+    <key>operation.undo.copy</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Kopiowanie 1 rzeczy</string>
+            <key>few</key>
+            <string>Kopiowanie %lld rzeczy</string>
+            <key>many</key>
+            <string>Kopiowanie %lld rzeczy</string>
+            <key>other</key>
+            <string>Kopiowanie %lld rzeczy</string>
+        </dict>
+    </dict>
+    <key>operation.undo.move</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Przenoszenie 1 rzeczy</string>
+            <key>few</key>
+            <string>Przenoszenie %lld rzeczy</string>
+            <key>many</key>
+            <string>Przenoszenie %lld rzeczy</string>
+            <key>other</key>
+            <string>Przenoszenie %lld rzeczy</string>
+        </dict>
+    </dict>
+    <key>tags.error.filesNotChanged</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 plik nie mógł zostać zmieniony.</string>
+            <key>few</key>
+            <string>%lld pliki nie mogły zostać zmienione.</string>
+            <key>many</key>
+            <string>%lld plików nie mogło zostać zmienionych.</string>
+            <key>other</key>
+            <string>%lld pliku nie mogło zostać zmienione.</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

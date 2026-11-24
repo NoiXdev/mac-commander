@@ -18,5 +18,213 @@
             <string>%lld Dateien</string>
         </dict>
     </dict>
+    <key>browser.transfer.copy</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt kopieren nach:</string>
+            <key>other</key>
+            <string>%lld Objekte kopieren nach:</string>
+        </dict>
+    </dict>
+    <key>browser.transfer.move</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt bewegen nach:</string>
+            <key>other</key>
+            <string>%lld Objekte bewegen nach:</string>
+        </dict>
+    </dict>
+    <key>browser.transfer.extract</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt entpacken nach:</string>
+            <key>other</key>
+            <string>%lld Objekte entpacken nach:</string>
+        </dict>
+    </dict>
+    <key>operation.copy.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird nach „%2$@“ kopiert</string>
+            <key>other</key>
+            <string>%1$lld Objekte werden nach „%2$@“ kopiert</string>
+        </dict>
+    </dict>
+    <key>operation.move.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird nach „%2$@“ bewegt</string>
+            <key>other</key>
+            <string>%1$lld Objekte werden nach „%2$@“ bewegt</string>
+        </dict>
+    </dict>
+    <key>operation.duplicate.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird dupliziert</string>
+            <key>other</key>
+            <string>%lld Objekte werden dupliziert</string>
+        </dict>
+    </dict>
+    <key>operation.trash.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird in den Papierkorb gelegt</string>
+            <key>other</key>
+            <string>%lld Objekte werden in den Papierkorb gelegt</string>
+        </dict>
+    </dict>
+    <key>operation.compress.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird komprimiert</string>
+            <key>other</key>
+            <string>%lld Objekte werden komprimiert</string>
+        </dict>
+    </dict>
+    <key>operation.convert.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird konvertiert …</string>
+            <key>other</key>
+            <string>%lld Objekte werden konvertiert …</string>
+        </dict>
+    </dict>
+    <key>operation.extract.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt wird entpackt</string>
+            <key>other</key>
+            <string>%lld Objekte werden entpackt</string>
+        </dict>
+    </dict>
+    <key>operation.undo.copy</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Kopieren von 1 Objekt</string>
+            <key>other</key>
+            <string>Kopieren von %lld Objekten</string>
+        </dict>
+    </dict>
+    <key>operation.undo.move</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Bewegen von 1 Objekt</string>
+            <key>other</key>
+            <string>Bewegen von %lld Objekten</string>
+        </dict>
+    </dict>
+    <key>tags.error.filesNotChanged</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Datei konnte nicht geändert werden.</string>
+            <key>other</key>
+            <string>%lld Dateien konnten nicht geändert werden.</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

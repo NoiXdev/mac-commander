@@ -134,7 +134,7 @@ public final class FileOperationCenter {
             undo.push(
                 FileUndoRecord(
                     action: .transferred(.copy, result.completed, replaced: result.replaced),
-                    title: String(localized: "Duplicate")))
+                    title: L10n.string("operation.undo.duplicate", "Duplicate")))
         }
         postFoldersDidChange(groups.map(\.parent))
         return result
@@ -146,7 +146,7 @@ public final class FileOperationCenter {
             await Trasher.trash(items, using: trash)
         }
         if !result.trashed.isEmpty {
-            undo.push(FileUndoRecord(action: .trashed(result.trashed), title: String(localized: "Move to Trash")))
+            undo.push(FileUndoRecord(action: .trashed(result.trashed), title: L10n.string("operation.undo.trash", "Move to Trash")))
         }
         postFoldersDidChange(result.trashed.map { $0.original.deletingLastPathComponent() })
         return result
@@ -162,7 +162,7 @@ public final class FileOperationCenter {
             }
         }
         if case .success(let zip) = result {
-            undo.push(FileUndoRecord(action: .created([zip]), title: String(localized: "Compress")))
+            undo.push(FileUndoRecord(action: .created([zip]), title: L10n.string("operation.undo.compress", "Compress")))
         }
         postFoldersDidChange(items.map { $0.deletingLastPathComponent() })
         return try result.get()
@@ -185,7 +185,7 @@ public final class FileOperationCenter {
                 items, to: target, ffmpeg: ffmpeg, catalog: catalog, askPassword: askPassword, progress: progress)
         }
         if !result.outputs.isEmpty {
-            undo.push(FileUndoRecord(action: .created(result.outputs), title: String(localized: "Convert")))
+            undo.push(FileUndoRecord(action: .created(result.outputs), title: L10n.string("operation.undo.convert", "Convert")))
         }
         postFoldersDidChange(items.map { $0.deletingLastPathComponent() })
         return result
@@ -238,7 +238,7 @@ public final class FileOperationCenter {
                     where (error == .passwordRequired || error == .incorrectPassword) && !Task.isCancelled
                 {
                     guard let given = await askPassword(source, password != nil) else {
-                        failures.append(ConvertFailure(source: source, message: String(localized: "Cancelled")))
+                        failures.append(ConvertFailure(source: source, message: L10n.string("operation.convert.cancelled", "Cancelled")))
                         break
                     }
                     password = given
@@ -341,7 +341,7 @@ public final class FileOperationCenter {
             undo.push(
                 FileUndoRecord(
                     action: .transferred(.copy, result.completed, replaced: result.replaced),
-                    title: String(localized: "Extract")))
+                    title: L10n.string("operation.undo.extract", "Extract")))
         }
         postFoldersDidChange([destination])
         let result = try outcome.get()
@@ -365,7 +365,7 @@ public final class FileOperationCenter {
 
     /// Records a rename done elsewhere (BrowserModel); the caller refreshes its own folder.
     public func recordRename(from: URL, to: URL) {
-        undo.push(FileUndoRecord(action: .rename(from: from, to: to), title: String(localized: "Rename")))
+        undo.push(FileUndoRecord(action: .rename(from: from, to: to), title: L10n.string("operation.undo.rename", "Rename")))
     }
 
     /// Records a new folder or file made elsewhere (BrowserModel).
@@ -373,7 +373,8 @@ public final class FileOperationCenter {
         undo.push(
             FileUndoRecord(
                 action: .created([url]),
-                title: isFolder ? String(localized: "New Folder") : String(localized: "New File")))
+                title: isFolder
+                    ? L10n.string("operation.undo.newFolder", "New Folder") : L10n.string("operation.undo.newFile", "New File")))
     }
 
     /// Undoes the newest record and posts `foldersDidChange` for the folders it touched, whether the undo
@@ -506,55 +507,62 @@ public final class FileOperationCenter {
         let folder = destination.lastPathComponent
         if sources.count == 1, let name = sources.first?.lastPathComponent {
             return mode == .copy
-                ? String(localized: "Copying “\(name)” to “\(folder)”")
-                : String(localized: "Moving “\(name)” to “\(folder)”")
+                ? L10n.format("operation.copy.titleOne", "Copying “%1$@” to “%2$@”", name, folder)
+                : L10n.format("operation.move.titleOne", "Moving “%1$@” to “%2$@”", name, folder)
         }
-        return mode == .copy
-            ? String(localized: "Copying \(sources.count) items to “\(folder)”")
-            : String(localized: "Moving \(sources.count) items to “\(folder)”")
+        return transferTitle(count: sources.count, into: folder, mode: mode)
+    }
+
+    /// The title for `count` items, whatever their names.
+    static func transferTitle(count: Int, into folder: String, mode: TransferMode) -> String {
+        mode == .copy
+            ? L10n.plural("operation.copy.title", count: count, one: "Copying 1 item to “%2$@”", other: "Copying %1$lld items to “%2$@”", folder)
+            : L10n.plural("operation.move.title", count: count, one: "Moving 1 item to “%2$@”", other: "Moving %1$lld items to “%2$@”", folder)
     }
 
     private static func duplicateTitle(_ items: [URL]) -> String {
         if items.count == 1, let name = items.first?.lastPathComponent {
-            return String(localized: "Duplicating “\(name)”")
+            return L10n.format("operation.duplicate.titleOne", "Duplicating “%@”", name)
         }
-        return String(localized: "Duplicating \(items.count) items")
+        return L10n.plural("operation.duplicate.title", count: items.count, one: "Duplicating 1 item", other: "Duplicating %lld items")
     }
 
     private static func trashTitle(_ items: [URL]) -> String {
         if items.count == 1, let name = items.first?.lastPathComponent {
-            return String(localized: "Moving “\(name)” to the Trash")
+            return L10n.format("operation.trash.titleOne", "Moving “%@” to the Trash", name)
         }
-        return String(localized: "Moving \(items.count) items to the Trash")
+        return L10n.plural("operation.trash.title", count: items.count, one: "Moving 1 item to the Trash", other: "Moving %lld items to the Trash")
     }
 
     private static func compressTitle(_ items: [URL]) -> String {
         if items.count == 1, let name = items.first?.lastPathComponent {
-            return String(localized: "Compressing “\(name)”")
+            return L10n.format("operation.compress.titleOne", "Compressing “%@”", name)
         }
-        return String(localized: "Compressing \(items.count) items")
+        return L10n.plural("operation.compress.title", count: items.count, one: "Compressing 1 item", other: "Compressing %lld items")
     }
 
     private static func convertTitle(_ items: [URL]) -> String {
         if items.count == 1, let name = items.first?.lastPathComponent {
-            return String(localized: "Converting “\(name)”…")
+            return L10n.format("operation.convert.titleOne", "Converting “%@”…", name)
         }
-        return String(localized: "Converting \(items.count) items…")
+        return L10n.plural("operation.convert.title", count: items.count, one: "Converting 1 item…", other: "Converting %lld items…")
     }
 
     private static func extractTitle(_ names: [String]) -> String {
         if names.count == 1, let name = names.first {
-            return String(localized: "Extracting “\(name)”")
+            return L10n.format("operation.extract.titleOne", "Extracting “%@”", name)
         }
-        return String(localized: "Extracting \(names.count) items")
+        return L10n.plural("operation.extract.title", count: names.count, one: "Extracting 1 item", other: "Extracting %lld items")
     }
 
     private static func undoTitle(mode: TransferMode, completed: [TransferredItem]) -> String {
         if completed.count == 1, let name = completed.first?.source.lastPathComponent {
-            return mode == .copy ? String(localized: "Copy of “\(name)”") : String(localized: "Move of “\(name)”")
+            return mode == .copy
+                ? L10n.format("operation.undo.copyOne", "Copy of “%@”", name)
+                : L10n.format("operation.undo.moveOne", "Move of “%@”", name)
         }
         return mode == .copy
-            ? String(localized: "Copy of \(completed.count) Items")
-            : String(localized: "Move of \(completed.count) Items")
+            ? L10n.plural("operation.undo.copy", count: completed.count, one: "Copy of 1 Item", other: "Copy of %lld Items")
+            : L10n.plural("operation.undo.move", count: completed.count, one: "Move of 1 Item", other: "Move of %lld Items")
     }
 }

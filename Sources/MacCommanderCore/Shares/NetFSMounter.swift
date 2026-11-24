@@ -27,7 +27,7 @@ public struct NetFSMounter: ShareMounter {
         case 0: return
         case EBUSY:
             let name = mountPoint.lastPathComponent
-            throw .failed(String(localized: "“\(name)” is in use."))
+            throw .failed(L10n.format("shares.error.inUse", "“%@” is in use.", name))
         default:
             throw Self.mapMountError(status)
         }
@@ -53,10 +53,16 @@ public struct NetFSMounter: ShareMounter {
             return .alreadyMounted
         default:
             guard status < 0 else { return .failed(String(cString: strerror(status))) }
-            if let name = negativeErrorNames[status] { return .failed("Error \(status) (\(name))") }
-            return .failed("Error \(status)")
+            // The code goes in as text: a number placeholder would group its digits ("-6,600").
+            if let name = negativeErrorNames[status] {
+                return .failed(L10n.format("shares.error.codeNamed", "Error %1$@ (%2$@)", String(status), name))
+            }
+            return .failed(L10n.format("shares.error.code", "Error %@", String(status)))
         }
     }
+
+    /// NetFS reported success but no mount point.
+    static var noMountPoint: MountError { .failed(L10n.string("shares.error.noMountPoint", "No mount point")) }
 
     private static let negativeErrorNames: [Int32: String] = [
         -6600: "kNetAuthErrorInternal",
@@ -105,7 +111,7 @@ private final class MountRequest: @unchecked Sendable {
             } else if let paths = mountpoints as? [String], let first = paths.first {
                 finish(.success(URL(fileURLWithPath: first, isDirectory: true)))
             } else {
-                finish(.failure(.failed("No mount point")))
+                finish(.failure(NetFSMounter.noMountPoint))
             }
         }
         if status != 0 {

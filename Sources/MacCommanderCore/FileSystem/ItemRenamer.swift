@@ -9,11 +9,11 @@ public enum RenameError: Error, Equatable {
     public var message: String {
         switch self {
         case .emptyName:
-            return String(localized: "The name cannot be empty.")
+            return L10n.string("fileList.rename.emptyName", "The name cannot be empty.")
         case .invalidCharacter:
-            return String(localized: "The name cannot contain “/” or “:”.")
+            return L10n.string("fileList.rename.invalidCharacter", "The name cannot contain “/” or “:”.")
         case .nameTaken(let name):
-            return String(localized: "The name “\(name)” is already taken. Please choose a different name.")
+            return L10n.format("fileList.rename.nameTaken", "The name “%@” is already taken. Please choose a different name.", name)
         case .underlying(let text):
             return text
         }

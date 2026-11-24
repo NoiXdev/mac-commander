@@ -168,7 +168,7 @@ private func samePath(_ lhs: URL, _ rhs: URL) -> Bool {
         #expect(names(model) == ["bad.zip"])
     }
 
-    @Test func browseContentsUnreadableShowsError() async throws {
+    @Test(.english) func browseContentsUnreadableShowsError() async throws {
         let temp = try TemporaryDirectory()
         let doc = try temp.file("x.docx", contents: "not a zip\n")
         let recorder = OpenRecorder()

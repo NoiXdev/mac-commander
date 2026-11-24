@@ -96,9 +96,9 @@ public enum ConvertCatalog {
         let hint: String
         switch ffmpeg {
         case .broken:
-            hint = String(localized: "ffmpeg is installed but doesn't start (brew reinstall ffmpeg)")
+            hint = L10n.string("convert.ffmpeg.broken", "ffmpeg is installed but doesn't start (brew reinstall ffmpeg)")
         default:
-            hint = String(localized: "More formats need ffmpeg (brew install ffmpeg)")
+            hint = L10n.string("convert.ffmpeg.missing", "More formats need ffmpeg (brew install ffmpeg)")
         }
         return ConvertMenu(targets: shown, ffmpegHint: hint)
     }

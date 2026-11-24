@@ -708,7 +708,7 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         return FileOperationCenter(undo: FileUndoStack(trash: trash), trash: trash)
     }
 
-    @Test func renameAndCreateAreUndoable() async throws {
+    @Test(.english) func renameAndCreateAreUndoable() async throws {
         let dir = try TemporaryDirectory()
         let trashFolder = try dir.folder("Trash")
         let work = try dir.folder("work")

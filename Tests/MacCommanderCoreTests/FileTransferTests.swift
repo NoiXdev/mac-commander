@@ -300,7 +300,7 @@ private func exists(_ url: URL) -> Bool { (try? FileManager.default.attributesOf
 
     /// A same-volume move renames exclusively: an item that appears at the target after Replace trashed the
     /// old one is never overwritten, and the move fails with the "appeared" message, as a copy does.
-    @Test func sameVolumeMoveNeverReplacesItemAppearingAtTarget() async throws {
+    @Test(.english) func sameVolumeMoveNeverReplacesItemAppearingAtTarget() async throws {
         let f = try Fixture()
         let source = try f.tmp.file("src/a", contents: "new")
         try f.tmp.file("dst/a", contents: "old")

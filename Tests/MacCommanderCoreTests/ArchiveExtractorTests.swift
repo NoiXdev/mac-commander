@@ -58,7 +58,7 @@ private let failOnConflict: ConflictResolver = { conflict in
 }
 
 @MainActor
-struct ArchiveExtractorTests {
+@Suite(.english) struct ArchiveExtractorTests {
     private let imagesZip: [String: String] = ["img/a.png": "A", "img/b.png": "B", "c.txt": "C"]
 
     @Test func patternEscapesGlobCharacters() {

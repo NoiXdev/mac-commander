@@ -91,7 +91,14 @@ import Testing
         #expect(try #require(ShareURL("https://h:8443/s")).probePort == 8443)
     }
 
-    @Test func displayNames() throws {
+    @Test func displayNameIsTranslated() throws {
+        let url = try #require(ShareURL("smb://nas/Media/x"))
+        L10n.$localeOverride.withValue("de") {
+            #expect(url.displayName == "Media auf nas")
+        }
+    }
+
+    @Test(.english) func displayNames() throws {
         #expect(try #require(ShareURL("smb://nas/Media/x")).displayName == "Media on nas")
         #expect(try #require(ShareURL("https://h/a/dav")).displayName == "h/dav")
         #expect(try #require(ShareURL("https://h")).displayName == "h")

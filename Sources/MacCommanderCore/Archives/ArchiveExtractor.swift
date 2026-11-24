@@ -44,7 +44,7 @@ public enum ArchiveExtractor {
         try Task.checkCancellation()
         // No patterns would mean "everything".
         guard !entries.isEmpty else {
-            throw ArchiveError.unreadable(message: String(localized: "There is nothing to extract."))
+            throw ArchiveError.unreadable(message: L10n.string("archive.error.nothingToExtract", "There is nothing to extract."))
         }
         let requested = try normalized(entries)
         let fileManager = FileManager()
@@ -81,7 +81,7 @@ public enum ArchiveExtractor {
                 items = try fileManager.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)
                     .sorted { $0.lastPathComponent < $1.lastPathComponent }
                 if items.isEmpty {
-                    throw ArchiveError.unreadable(message: String(localized: "The archive is empty."))
+                    throw ArchiveError.unreadable(message: L10n.string("archive.error.empty", "The archive is empty."))
                 }
             }
             return (staging, items)
@@ -259,6 +259,6 @@ public enum ArchiveExtractor {
 
     private static func notInArchive(_ entry: String) -> ArchiveError {
         let name = entry.split(separator: "/").last.map(String.init) ?? entry
-        return .unreadable(message: String(localized: "“\(name)” isn’t in the archive."))
+        return .unreadable(message: L10n.format("archive.error.itemMissing", "“%@” isn’t in the archive.", name))
     }
 }

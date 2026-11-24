@@ -22,6 +22,10 @@ import Testing
         #expect(L10n.plural("test.files", count: 3, one: "%lld file", other: "%lld files") == "3 files")
     }
 
+    @Test(.english) func englishTraitSetsTheOverride() {
+        #expect(L10n.localeOverride == "en")
+    }
+
     @Test func polishPluralForms() {
         L10n.$localeOverride.withValue("pl") {
             for (count, text) in [(1, "1 plik"), (2, "2 pliki"), (5, "5 plików"), (22, "22 pliki")] {
@@ -34,5 +38,16 @@ import Testing
         L10n.$localeOverride.withValue("de") {
             #expect(L10n.format("test.location", "%1$@ is in %2$@.", "Bericht", "Dokumente") == "In Dokumente liegt Bericht.")
         }
+    }
+}
+
+/// `.english` on a suite reaches each of its tests.
+@Suite(.english) struct EnglishSuiteTraitTests {
+    @Test func suiteTraitSetsTheOverride() {
+        #expect(L10n.localeOverride == "en")
+    }
+
+    @Test(arguments: [1, 2]) func suiteTraitReachesEveryTestCase(_ value: Int) {
+        #expect(L10n.localeOverride == "en")
     }
 }

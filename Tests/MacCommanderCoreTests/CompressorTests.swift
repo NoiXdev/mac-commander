@@ -3,7 +3,7 @@ import Testing
 @testable import MacCommanderCore
 
 struct CompressorTests {
-    @Test func compressSingleAndMultiple() async throws {
+    @Test(.english) func compressSingleAndMultiple() async throws {
         let tmp = try TemporaryDirectory()
         let a = try tmp.file("a.txt", contents: "A")
         let b = try tmp.file("b.txt", contents: "B")

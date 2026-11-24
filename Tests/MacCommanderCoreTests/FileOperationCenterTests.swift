@@ -84,7 +84,17 @@ private func path(_ url: URL) -> String { url.standardizedFileURL.path }
 private let keepBoth: ConflictResolver = { _ in ConflictDecision(choice: .keepBoth, applyToAll: false) }
 
 @MainActor
-struct FileOperationCenterTests {
+@Suite(.english) struct FileOperationCenterTests {
+    @Test func titleUsesTheSingularForOneItem() {
+        #expect(FileOperationCenter.transferTitle(count: 1, into: "X", mode: .copy) == "Copying 1 item to “X”")
+        #expect(FileOperationCenter.transferTitle(count: 1, into: "X", mode: .move) == "Moving 1 item to “X”")
+        #expect(FileOperationCenter.transferTitle(count: 3, into: "X", mode: .copy) == "Copying 3 items to “X”")
+        L10n.$localeOverride.withValue("pl") {
+            #expect(FileOperationCenter.transferTitle(count: 1, into: "X", mode: .copy) == "Kopiowanie 1 rzeczy do „X”")
+            #expect(FileOperationCenter.transferTitle(count: 5, into: "X", mode: .copy) == "Kopiowanie 5 rzeczy do „X”")
+        }
+    }
+
     @Test func transferPushesUndoAndPostsFolders() async throws {
         let f = try Fixture()
         let a = try f.tmp.file("src/a.txt", contents: "A")

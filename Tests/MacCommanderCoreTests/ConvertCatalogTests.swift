@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MacCommanderCore
 
-struct ConvertCatalogTests {
+@Suite(.english) struct ConvertCatalogTests {
     private static let installHint = "More formats need ffmpeg (brew install ffmpeg)"
     private static let reinstallHint = "ffmpeg is installed but doesn't start (brew reinstall ffmpeg)"
     private static let available = FFmpegStatus.available(URL(fileURLWithPath: "/opt/homebrew/bin/ffmpeg"))

@@ -65,7 +65,7 @@ public struct MarkdownPreviewRenderer: PreviewRenderer {
             let values = try file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard values.isRegularFile == true else {
                 throw PreviewError.unreadable(
-                    String(localized: "“\(file.lastPathComponent)” is not a regular file."))
+                    L10n.format("preview.error.notRegularFile", "“%@” is not a regular file.", file.lastPathComponent))
             }
             size = Int64(values.fileSize ?? 0)
             if failIfTooLarge && size > maxBytes { throw PreviewError.tooLarge(bytes: size) }

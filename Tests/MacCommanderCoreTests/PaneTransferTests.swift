@@ -4,7 +4,7 @@ import Testing
 @testable import MacCommanderCore
 
 @MainActor
-struct PaneTransferTests {
+@Suite(.english) struct PaneTransferTests {
     private let defaults = TemporaryDefaults()
     private let home = URL(fileURLWithPath: "/Users/me", isDirectory: true)
 
@@ -124,5 +124,18 @@ struct PaneTransferTests {
         layout.active.selection = [a.appendingPathComponent("f1.txt")]
         #expect(layout.requestTransfer(move: false))
         #expect(layout.pendingTransfer != nil)
+    }
+
+    @Test func promptUsesThePolishPlural() {
+        func title(_ count: Int) -> String {
+            let sources = (1...count).map { URL(fileURLWithPath: "/tmp/f\($0).txt") }
+            return PaneTransferRequest(kind: .copy, sources: sources, destination: home).title
+        }
+        L10n.$localeOverride.withValue("pl") {
+            #expect(title(5) == "Kopiuj 5 rzeczy do:")
+            #expect(title(2) == "Kopiuj 2 rzeczy do:")
+            #expect(title(22) == "Kopiuj 22 rzeczy do:")
+            #expect(title(12) == "Kopiuj 12 rzeczy do:")
+        }
     }
 }

@@ -113,7 +113,7 @@ public actor ArchivePreviewCache {
             let staged = missing.map { staging.appendingPathComponent($0, isDirectory: false) }
             if staged.contains(where: Self.isSymlink) {
                 ArchiveExtractor.removeStaging(staging)
-                throw .unreadable(message: String(localized: "It’s a link."))
+                throw .unreadable(message: L10n.string("archive.error.link", "It’s a link."))
             }
             for (entry, file) in zip(missing, staged) {
                 Self.makeReadOnly(file)
@@ -125,7 +125,7 @@ public actor ArchivePreviewCache {
         return try wanted.map { entry throws(ArchiveError) in
             guard let file = version.files[entry] else {
                 let name = entry.split(separator: "/").last.map(String.init) ?? entry
-                throw .unreadable(message: String(localized: "“\(name)” isn’t in the archive."))
+                throw .unreadable(message: L10n.format("archive.error.itemMissing", "“%@” isn’t in the archive.", name))
             }
             return file
         }

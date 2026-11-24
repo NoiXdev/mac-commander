@@ -686,7 +686,7 @@ private func volume(_ path: String) -> URL { URL(fileURLWithPath: path) }
         #expect(await h.mounter.mounts.isEmpty)
     }
 
-    @Test func alreadyMountedErrorAdoptsTheVolumeOrFails() async throws {
+    @Test(.english) func alreadyMountedErrorAdoptsTheVolumeOrFails() async throws {
         let h = try Harness()
         let share = try h.share("smb://nas/A", autoReconnect: false)
         await h.prober.set("nas", reachable: true)

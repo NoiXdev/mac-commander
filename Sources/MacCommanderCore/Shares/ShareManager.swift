@@ -416,7 +416,7 @@ public final class ShareManager {
     /// Unmounts the share (forced when its server is unreachable), then re-classifies it.
     public func disconnect(_ id: UUID) async throws(MountError) {
         guard let mountPoint = mountPoints[id] else {
-            throw .failed(String(localized: "The share isn’t connected."))
+            throw .failed(L10n.string("shares.error.notConnected", "The share isn’t connected."))
         }
         let force = status[id] == .unreachable
         try await mounter.unmount(mountPoint, force: force)
@@ -465,7 +465,7 @@ public final class ShareManager {
         let task = Task { () -> ConnectOutcome in
             defer { self.inFlight[id] = nil }
             guard let share = self.share(id) else {
-                return .failed(String(localized: "The share no longer exists."))
+                return .failed(L10n.string("shares.error.noLongerExists", "The share no longer exists."))
             }
             return await body(self, share)
         }
@@ -543,11 +543,11 @@ public final class ShareManager {
                 markUnreachable(share.id)
                 return .unreachable
             case .cancelled:
-                return .failed(String(localized: "The connection was cancelled."))
+                return .failed(L10n.string("shares.error.connectionCancelled", "The connection was cancelled."))
             case .alreadyMounted:
                 // Mounted already (by Finder, or by us under another address): use that volume.
                 if let mountPoint = await adoptExistingMount(share) { return .connected(mountPoint) }
-                return .failed(String(localized: "Already connected."))
+                return .failed(L10n.string("shares.error.alreadyConnected", "Already connected."))
             case .failed(let message):
                 return .failed(message)
             }

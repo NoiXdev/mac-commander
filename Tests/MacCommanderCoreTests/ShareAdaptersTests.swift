@@ -5,7 +5,15 @@ import Testing
 @testable import MacCommanderCore
 
 @Suite struct ShareAdaptersTests {
-    @Test func mapsMountErrors() {
+    @Test func ownErrorTextIsTranslated() {
+        L10n.$localeOverride.withValue("de") {
+            #expect(NetFSMounter.noMountPoint == .failed("Kein Mount-Punkt"))
+            #expect(NetFSMounter.mapMountError(-6600) == .failed("Fehler -6600 (kNetAuthErrorInternal)"))
+            #expect(NetFSMounter.mapMountError(-5000) == .failed("Fehler -5000"))
+        }
+    }
+
+    @Test(.english) func mapsMountErrors() {
         for status: Int32 in [80, 13, -5045, -5046, -5999, -6004] {
             #expect(NetFSMounter.mapMountError(status) == .authenticationFailed, "\(status)")
         }

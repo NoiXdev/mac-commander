@@ -1281,7 +1281,7 @@ public final class BrowserModel {
         case .passwordRequired: .archivePasswordRequired(archive)
         case .incorrectPassword: .archiveIncorrectPassword(archive)
         case .unsupported(let message), .unreadable(let message): .archiveUnreadable(archive, message)
-        case .cancelled: .archiveUnreadable(archive, String(localized: "The listing was cancelled."))
+        case .cancelled: .archiveUnreadable(archive, L10n.string("archive.error.listingCancelled", "The listing was cancelled."))
         }
     }
 

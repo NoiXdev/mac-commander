@@ -29,12 +29,12 @@ public struct PaneTransferRequest: Identifiable, Equatable, Sendable {
     public var title: String {
         let single = sources.count == 1 ? sources[0].lastPathComponent : nil
         switch (kind, single) {
-        case (.copy, let name?): return String(localized: "Copy “\(name)” to:")
-        case (.copy, nil): return String(localized: "Copy \(sources.count) items to:")
-        case (.move, let name?): return String(localized: "Move “\(name)” to:")
-        case (.move, nil): return String(localized: "Move \(sources.count) items to:")
-        case (.extract, let name?): return String(localized: "Extract “\(name)” to:")
-        case (.extract, nil): return String(localized: "Extract \(sources.count) items to:")
+        case (.copy, let name?): return L10n.format("browser.transfer.copyOne", "Copy “%@” to:", name)
+        case (.copy, nil): return L10n.plural("browser.transfer.copy", count: sources.count, one: "Copy 1 item to:", other: "Copy %lld items to:")
+        case (.move, let name?): return L10n.format("browser.transfer.moveOne", "Move “%@” to:", name)
+        case (.move, nil): return L10n.plural("browser.transfer.move", count: sources.count, one: "Move 1 item to:", other: "Move %lld items to:")
+        case (.extract, let name?): return L10n.format("browser.transfer.extractOne", "Extract “%@” to:", name)
+        case (.extract, nil): return L10n.plural("browser.transfer.extract", count: sources.count, one: "Extract 1 item to:", other: "Extract %lld items to:")
         }
     }
 }

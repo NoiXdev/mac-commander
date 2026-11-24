@@ -62,7 +62,7 @@ import Testing
         #expect(ShareStore(fileURL: file).shares.count == 1)
     }
 
-    @Test func lenientFields() throws {
+    @Test(.english) func lenientFields() throws {
         let dir = try TemporaryDirectory()
         let json = """
             {"version":1,"shares":[

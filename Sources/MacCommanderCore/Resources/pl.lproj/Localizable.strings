@@ -13,5 +13,127 @@
 "settings.general.language.footer" = "Zacznie obowiązywać po ponownym uruchomieniu.";
 "settings.general.language.relaunch" = "Uruchom ponownie MacCommander";
 
+/* File list: folder load errors */
+"fileList.error.noPermission" = "Nie masz uprawnień do wyświetlania zawartości „%@”.";
+"fileList.error.notFound" = "Nie można znaleźć folderu „%@”.";
+"fileList.error.notAFolder" = "„%@” nie jest folderem.";
+"fileList.error.folderUnreadable" = "Nie można otworzyć folderu „%1$@”: %2$@";
+"fileList.error.archivePasswordRequired" = "„%@” jest zaszyfrowane. Wprowadź hasło, aby zobaczyć zawartość.";
+"fileList.error.archiveIncorrectPassword" = "Hasło do „%@” jest nieprawidłowe.";
+"fileList.error.archiveUnreadable" = "Nie można otworzyć „%1$@”: %2$@";
+"fileList.error.shareDisconnected" = "„%@” nie jest już połączone.";
+
+/* File list: rename */
+"fileList.rename.emptyName" = "Nazwa nie może być pusta.";
+"fileList.rename.invalidCharacter" = "Nazwa nie może zawierać znaków „/” ani „:”.";
+"fileList.rename.nameTaken" = "Nazwa „%@” jest już zajęta. Wybierz inną nazwę.";
+
+/* File list: column titles */
+"fileList.column.name" = "Nazwa";
+"fileList.column.dateModified" = "Data modyfikacji";
+"fileList.column.dateCreated" = "Data utworzenia";
+"fileList.column.dateAdded" = "Data dodania";
+"fileList.column.size" = "Rozmiar";
+"fileList.column.kind" = "Rodzaj";
+"fileList.column.tags" = "Tagi";
+"fileList.column.location" = "Położenie";
+
+/* Copy/move/extract between the panes */
+"browser.transfer.copyOne" = "Kopiuj „%@” do:";
+"browser.transfer.moveOne" = "Przenieś „%@” do:";
+"browser.transfer.extractOne" = "Rozpakuj „%@” do:";
+
+/* Archives */
+"archive.error.passwordRequired" = "Archiwum jest zaszyfrowane. Wprowadź hasło, aby je rozpakować.";
+"archive.error.incorrectPassword" = "Wprowadzone hasło jest nieprawidłowe.";
+"archive.error.cancelled" = "Operacja została anulowana.";
+"archive.error.folderMissing" = "Folderu „%@” nie ma w archiwum.";
+"archive.error.itemMissing" = "Rzeczy „%@” nie ma w archiwum.";
+"archive.error.link" = "To jest dowiązanie.";
+"archive.error.nothingToExtract" = "Nie ma nic do rozpakowania.";
+"archive.error.empty" = "Archiwum jest puste.";
+"archive.error.listingCancelled" = "Wczytywanie zawartości zostało anulowane.";
+"archive.kind.folder" = "Folder";
+"archive.kind.document" = "Dokument";
+
+/* File operations */
+"operation.copy.titleOne" = "Kopiowanie „%1$@” do „%2$@”";
+"operation.move.titleOne" = "Przenoszenie „%1$@” do „%2$@”";
+"operation.duplicate.titleOne" = "Duplikowanie „%@”";
+"operation.trash.titleOne" = "Przenoszenie „%@” do Kosza";
+"operation.compress.titleOne" = "Kompresowanie „%@”";
+"operation.convert.titleOne" = "Konwertowanie „%@”…";
+"operation.extract.titleOne" = "Rozpakowywanie „%@”";
+"operation.undo.duplicate" = "Duplikuj";
+"operation.undo.trash" = "Przenieś do Kosza";
+"operation.undo.compress" = "Kompresuj";
+"operation.undo.convert" = "Konwertuj";
+"operation.undo.extract" = "Rozpakuj";
+"operation.undo.rename" = "Zmień nazwę";
+"operation.undo.newFolder" = "Nowy folder";
+"operation.undo.newFile" = "Nowy plik";
+"operation.undo.copyOne" = "Kopiowanie „%@”";
+"operation.undo.moveOne" = "Przenoszenie „%@”";
+"operation.convert.cancelled" = "Anulowano";
+"operation.compress.nothing" = "Nie ma nic do skompresowania.";
+"operation.compress.differentFolders" = "Rzeczy można skompresować razem tylko wtedy, gdy znajdują się w tym samym folderze.";
+"operation.compress.itemFailed" = "Nie można skompresować „%1$@”: %2$@";
+"operation.compress.dittoFailed" = "Nie można utworzyć archiwum (ditto zakończył działanie ze statusem %lld).";
+"operation.transfer.replaceContainsSource" = "Nie można zastąpić „%@”, ponieważ zawiera przenoszoną rzecz.";
+"operation.transfer.appeared" = "Podczas przenoszenia w miejscu docelowym pojawiła się rzecz o nazwie „%@”. Pozostawiono ją bez zmian.";
+
+/* Generated names */
+"name.archive" = "Archiwum";
+
+/* Convert */
+"convert.target.jpeg" = "Obraz JPEG";
+"convert.target.png" = "Obraz PNG";
+"convert.target.heic" = "Obraz HEIC";
+"convert.target.tiff" = "Obraz TIFF";
+"convert.target.m4a" = "Dźwięk M4A (AAC)";
+"convert.target.wav" = "Dźwięk WAV";
+"convert.target.aiff" = "Dźwięk AIFF";
+"convert.target.mp3" = "Dźwięk MP3";
+"convert.target.flac" = "Dźwięk FLAC";
+"convert.target.mp4H264" = "Wideo MP4 (H.264)";
+"convert.target.movHEVC" = "Wideo MOV (HEVC)";
+"convert.target.mp4FFmpeg" = "Wideo MP4";
+"convert.target.docx" = "Dokument Word (DOCX)";
+"convert.target.rtf" = "Tekst sformatowany (RTF)";
+"convert.target.txt" = "Zwykły tekst (TXT)";
+"convert.target.html" = "Strona internetowa (HTML)";
+"convert.target.pdf" = "PDF (prosty układ)";
+"convert.target.zip" = "Archiwum ZIP";
+"convert.target.tarGz" = "Archiwum TAR.GZ";
+"convert.target.sevenZip" = "Archiwum 7-Zip";
+"convert.target.iso" = "Obraz dysku (ISO)";
+"convert.ffmpeg.broken" = "ffmpeg jest zainstalowany, ale się nie uruchamia (brew reinstall ffmpeg)";
+"convert.ffmpeg.missing" = "Więcej formatów wymaga ffmpeg (brew install ffmpeg)";
+"convert.error.needsFFmpeg" = "Ta konwersja wymaga ffmpeg (brew install ffmpeg).";
+"convert.error.toolFailed" = "%1$@ zakończył działanie z błędem (status %2$lld)";
+"convert.cue.noDataTrack" = "Arkusz CUE nie zawiera ścieżki danych.";
+"convert.cue.multipleDataFiles" = "Ścieżka danych obejmuje kilka plików BIN.";
+"convert.cue.missingBin" = "Brak „%@”.";
+"convert.cue.sizeMismatch" = "Rozmiar pliku BIN nie pasuje do rozmiaru sektora.";
+"convert.cue.unreadable" = "Nie można odczytać „%@”.";
+"convert.cue.notCueSheet" = "Obok „%@” musi znajdować się jego arkusz CUE (.cue).";
+
+/* Preview */
+"preview.error.notRegularFile" = "„%@” nie jest zwykłym plikiem.";
+
+/* Tags */
+"tags.error.standardTag" = "Kolorowych tagów Findera nie można zmieniać, przekolorowywać ani usuwać.";
+
+/* Network shares */
+"shares.name.default" = "%1$@ na %2$@";
+"shares.error.inUse" = "„%@” jest w użyciu.";
+"shares.error.code" = "Błąd %@";
+"shares.error.codeNamed" = "Błąd %1$@ (%2$@)";
+"shares.error.noMountPoint" = "Brak punktu montowania";
+"shares.error.notConnected" = "Udział nie jest połączony.";
+"shares.error.noLongerExists" = "Udział już nie istnieje.";
+"shares.error.connectionCancelled" = "Połączenie zostało anulowane.";
+"shares.error.alreadyConnected" = "Już połączono.";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ znajduje się w %2$@.";

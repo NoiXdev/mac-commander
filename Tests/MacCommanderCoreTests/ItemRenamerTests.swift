@@ -29,7 +29,7 @@ import Foundation
         #expect(throws: RenameError.invalidCharacter) { try ItemRenamer.rename(a, to: "x:y") }
     }
 
-    @Test func renameRejectsExisting() throws {
+    @Test(.english) func renameRejectsExisting() throws {
         let dir = try TemporaryDirectory()
         let a = try dir.file("a.txt")
         try dir.file("b.txt")

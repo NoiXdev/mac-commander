@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MacCommanderCore
 
-struct ArchiveCatalogTests {
+@Suite(.english) struct ArchiveCatalogTests {
     private static let tree: [String: String] = [
         "a.txt": "aaa",
         "sub/b.md": "bb",

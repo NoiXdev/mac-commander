@@ -93,7 +93,7 @@ public struct ShareURL: Hashable, Sendable, Codable {
         case "http", "https":
             return components.last.map { "\(host)/\($0)" } ?? host
         default:
-            return "\(shareName) on \(host)"
+            return L10n.format("shares.name.default", "%1$@ on %2$@", shareName, host)
         }
     }
 

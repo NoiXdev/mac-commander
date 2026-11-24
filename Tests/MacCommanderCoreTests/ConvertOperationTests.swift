@@ -78,7 +78,7 @@ private struct Fixture {
 }
 
 @MainActor
-struct ConvertOperationTests {
+@Suite(.english) struct ConvertOperationTests {
     @Test func convertsBatchAndRegistersUndo() async throws {
         let f = try Fixture()
         let a = try f.png("a.png")

@@ -175,7 +175,7 @@ public enum FileTransfer {
                     // Trashing a folder that contains the source would take the source with it.
                     if isEntryContaining(existing, source) {
                         return fail(
-                            String(localized: "“\(name)” can’t be replaced because it contains the item being transferred."))
+                            L10n.format("operation.transfer.replaceContainsSource", "“%@” can’t be replaced because it contains the item being transferred.", name))
                     }
                     do {
                         let trashed = try trash(existing)
@@ -343,8 +343,8 @@ public enum FileTransfer {
     }
 
     private static func appearedMessage(_ target: URL) -> String {
-        String(
-            localized: "An item named “\(target.lastPathComponent)” appeared in the destination during the transfer. It was left unchanged.")
+        L10n.format(
+            "operation.transfer.appeared", "An item named “%@” appeared in the destination during the transfer. It was left unchanged.", target.lastPathComponent)
     }
 
     /// Renames `item` to `target` only if nothing exists at `target`; never replaces.

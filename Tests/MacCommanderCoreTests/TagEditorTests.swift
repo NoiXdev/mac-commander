@@ -41,6 +41,13 @@ struct TagEditorTests {
         TagStore.readNow(url).map { "\($0.name)/\($0.color)" }
     }
 
+    @Test(.english) func filesNotChangedUsesTheSingularForOneFile() {
+        let one = TagEditError.filesNotChanged([URL(fileURLWithPath: "/tmp/a")])
+        let two = TagEditError.filesNotChanged([URL(fileURLWithPath: "/tmp/a"), URL(fileURLWithPath: "/tmp/b")])
+        #expect(one.errorDescription == "1 file couldn't be changed.")
+        #expect(two.errorDescription == "2 files couldn't be changed.")
+    }
+
     @Test func renameChangesEveryFileAndTheCatalog() async throws {
         let a = try tagged("a.txt", [red, work])
         let b = try tagged("b.txt", [work])

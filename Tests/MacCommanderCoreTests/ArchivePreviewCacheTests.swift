@@ -3,7 +3,7 @@ import Testing
 @testable import MacCommanderCore
 
 /// Each test uses its own cache root inside a temporary folder; the shared cache is never touched.
-struct ArchivePreviewCacheTests {
+@Suite(.english) struct ArchivePreviewCacheTests {
     private let files: [String: String] = ["img/a.png": "A", "img/b.png": "B", "c.txt": "C"]
 
     private func contents(_ urls: [URL]) -> [String?] {

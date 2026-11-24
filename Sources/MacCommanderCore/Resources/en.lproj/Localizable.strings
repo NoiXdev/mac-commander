@@ -13,5 +13,127 @@
 "settings.general.language.footer" = "Takes effect after a relaunch.";
 "settings.general.language.relaunch" = "Relaunch MacCommander";
 
+/* File list: folder load errors */
+"fileList.error.noPermission" = "You don't have permission to see the contents of “%@”.";
+"fileList.error.notFound" = "The folder “%@” can't be found.";
+"fileList.error.notAFolder" = "“%@” is not a folder.";
+"fileList.error.folderUnreadable" = "The folder “%1$@” can’t be opened: %2$@";
+"fileList.error.archivePasswordRequired" = "“%@” is encrypted. Enter its password to see its contents.";
+"fileList.error.archiveIncorrectPassword" = "The password for “%@” is incorrect.";
+"fileList.error.archiveUnreadable" = "“%1$@” can’t be opened: %2$@";
+"fileList.error.shareDisconnected" = "“%@” is no longer connected.";
+
+/* File list: rename */
+"fileList.rename.emptyName" = "The name cannot be empty.";
+"fileList.rename.invalidCharacter" = "The name cannot contain “/” or “:”.";
+"fileList.rename.nameTaken" = "The name “%@” is already taken. Please choose a different name.";
+
+/* File list: column titles */
+"fileList.column.name" = "Name";
+"fileList.column.dateModified" = "Date Modified";
+"fileList.column.dateCreated" = "Date Created";
+"fileList.column.dateAdded" = "Date Added";
+"fileList.column.size" = "Size";
+"fileList.column.kind" = "Kind";
+"fileList.column.tags" = "Tags";
+"fileList.column.location" = "Location";
+
+/* Copy/move/extract between the panes */
+"browser.transfer.copyOne" = "Copy “%@” to:";
+"browser.transfer.moveOne" = "Move “%@” to:";
+"browser.transfer.extractOne" = "Extract “%@” to:";
+
+/* Archives */
+"archive.error.passwordRequired" = "The archive is encrypted. Enter its password to extract it.";
+"archive.error.incorrectPassword" = "The password you entered is incorrect.";
+"archive.error.cancelled" = "The operation was cancelled.";
+"archive.error.folderMissing" = "The folder “%@” isn’t in the archive.";
+"archive.error.itemMissing" = "“%@” isn’t in the archive.";
+"archive.error.link" = "It’s a link.";
+"archive.error.nothingToExtract" = "There is nothing to extract.";
+"archive.error.empty" = "The archive is empty.";
+"archive.error.listingCancelled" = "The listing was cancelled.";
+"archive.kind.folder" = "Folder";
+"archive.kind.document" = "Document";
+
+/* File operations */
+"operation.copy.titleOne" = "Copying “%1$@” to “%2$@”";
+"operation.move.titleOne" = "Moving “%1$@” to “%2$@”";
+"operation.duplicate.titleOne" = "Duplicating “%@”";
+"operation.trash.titleOne" = "Moving “%@” to the Trash";
+"operation.compress.titleOne" = "Compressing “%@”";
+"operation.convert.titleOne" = "Converting “%@”…";
+"operation.extract.titleOne" = "Extracting “%@”";
+"operation.undo.duplicate" = "Duplicate";
+"operation.undo.trash" = "Move to Trash";
+"operation.undo.compress" = "Compress";
+"operation.undo.convert" = "Convert";
+"operation.undo.extract" = "Extract";
+"operation.undo.rename" = "Rename";
+"operation.undo.newFolder" = "New Folder";
+"operation.undo.newFile" = "New File";
+"operation.undo.copyOne" = "Copy of “%@”";
+"operation.undo.moveOne" = "Move of “%@”";
+"operation.convert.cancelled" = "Cancelled";
+"operation.compress.nothing" = "There is nothing to compress.";
+"operation.compress.differentFolders" = "Items can only be compressed together when they are in the same folder.";
+"operation.compress.itemFailed" = "“%1$@” couldn’t be compressed: %2$@";
+"operation.compress.dittoFailed" = "The archive couldn’t be created (ditto exited with status %lld).";
+"operation.transfer.replaceContainsSource" = "“%@” can’t be replaced because it contains the item being transferred.";
+"operation.transfer.appeared" = "An item named “%@” appeared in the destination during the transfer. It was left unchanged.";
+
+/* Generated names */
+"name.archive" = "Archive";
+
+/* Convert */
+"convert.target.jpeg" = "JPEG Image";
+"convert.target.png" = "PNG Image";
+"convert.target.heic" = "HEIC Image";
+"convert.target.tiff" = "TIFF Image";
+"convert.target.m4a" = "M4A Audio (AAC)";
+"convert.target.wav" = "WAV Audio";
+"convert.target.aiff" = "AIFF Audio";
+"convert.target.mp3" = "MP3 Audio";
+"convert.target.flac" = "FLAC Audio";
+"convert.target.mp4H264" = "MP4 Video (H.264)";
+"convert.target.movHEVC" = "MOV Video (HEVC)";
+"convert.target.mp4FFmpeg" = "MP4 Video";
+"convert.target.docx" = "Word Document (DOCX)";
+"convert.target.rtf" = "Rich Text (RTF)";
+"convert.target.txt" = "Plain Text (TXT)";
+"convert.target.html" = "Web Page (HTML)";
+"convert.target.pdf" = "PDF (simple layout)";
+"convert.target.zip" = "ZIP Archive";
+"convert.target.tarGz" = "TAR.GZ Archive";
+"convert.target.sevenZip" = "7-Zip Archive";
+"convert.target.iso" = "Disc Image (ISO)";
+"convert.ffmpeg.broken" = "ffmpeg is installed but doesn't start (brew reinstall ffmpeg)";
+"convert.ffmpeg.missing" = "More formats need ffmpeg (brew install ffmpeg)";
+"convert.error.needsFFmpeg" = "This conversion needs ffmpeg (brew install ffmpeg).";
+"convert.error.toolFailed" = "%1$@ failed (status %2$lld)";
+"convert.cue.noDataTrack" = "The CUE sheet has no data track.";
+"convert.cue.multipleDataFiles" = "The data track spans several BIN files.";
+"convert.cue.missingBin" = "“%@” is missing.";
+"convert.cue.sizeMismatch" = "The BIN file’s size doesn’t match its sector size.";
+"convert.cue.unreadable" = "“%@” couldn’t be read.";
+"convert.cue.notCueSheet" = "“%@” needs its CUE sheet (.cue) beside it.";
+
+/* Preview */
+"preview.error.notRegularFile" = "“%@” is not a regular file.";
+
+/* Tags */
+"tags.error.standardTag" = "Finder's color tags can't be renamed, recolored or deleted.";
+
+/* Network shares */
+"shares.name.default" = "%1$@ on %2$@";
+"shares.error.inUse" = "“%@” is in use.";
+"shares.error.code" = "Error %@";
+"shares.error.codeNamed" = "Error %1$@ (%2$@)";
+"shares.error.noMountPoint" = "No mount point";
+"shares.error.notConnected" = "The share isn’t connected.";
+"shares.error.noLongerExists" = "The share no longer exists.";
+"shares.error.connectionCancelled" = "The connection was cancelled.";
+"shares.error.alreadyConnected" = "Already connected.";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ is in %2$@.";

@@ -9,12 +9,12 @@ public enum DiscImageError: Error, Equatable, Sendable {
 extension DiscImageError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .noDataTrack: String(localized: "The CUE sheet has no data track.")
-        case .multipleDataFiles: String(localized: "The data track spans several BIN files.")
-        case .missingBin(let name): String(localized: "“\(name)” is missing.")
-        case .sizeMismatch: String(localized: "The BIN file’s size doesn’t match its sector size.")
-        case .unreadable(let name): String(localized: "“\(name)” couldn’t be read.")
-        case .notCueSheet(let name): String(localized: "“\(name)” needs its CUE sheet (.cue) beside it.")
+        case .noDataTrack: L10n.string("convert.cue.noDataTrack", "The CUE sheet has no data track.")
+        case .multipleDataFiles: L10n.string("convert.cue.multipleDataFiles", "The data track spans several BIN files.")
+        case .missingBin(let name): L10n.format("convert.cue.missingBin", "“%@” is missing.", name)
+        case .sizeMismatch: L10n.string("convert.cue.sizeMismatch", "The BIN file’s size doesn’t match its sector size.")
+        case .unreadable(let name): L10n.format("convert.cue.unreadable", "“%@” couldn’t be read.", name)
+        case .notCueSheet(let name): L10n.format("convert.cue.notCueSheet", "“%@” needs its CUE sheet (.cue) beside it.", name)
         }
     }
 }

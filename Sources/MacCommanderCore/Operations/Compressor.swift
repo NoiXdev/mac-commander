@@ -14,7 +14,7 @@ public enum Compressor {
         guard let first = items.first else {
             throw CocoaError(
                 .fileWriteUnknown,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "There is nothing to compress.")])
+                userInfo: [NSLocalizedDescriptionKey: L10n.string("operation.compress.nothing", "There is nothing to compress.")])
         }
         let parent = first.deletingLastPathComponent()
         let parentPath = parent.standardizedFileURL.path
@@ -22,8 +22,8 @@ public enum Compressor {
             throw CocoaError(
                 .fileWriteUnknown,
                 userInfo: [
-                    NSLocalizedDescriptionKey: String(
-                        localized: "Items can only be compressed together when they are in the same folder.")
+                    NSLocalizedDescriptionKey: L10n.string(
+                        "operation.compress.differentFolders", "Items can only be compressed together when they are in the same folder.")
                 ])
         }
         let fileManager = FileManager()
@@ -38,7 +38,7 @@ public enum Compressor {
             base = first.lastPathComponent
             try await runDitto(["-c", "-k", "--sequesterRsrc", "--keepParent", first.path, staging.path])
         } else {
-            base = String(localized: "Archive")
+            base = L10n.string("name.archive", "Archive")
             let folder = try makeCloneFolder(near: parent, fileManager: fileManager)
             defer { try? fileManager.removeItem(at: folder.removing) }
             for item in items {
@@ -98,8 +98,9 @@ public enum Compressor {
                 .fileWriteUnknown,
                 userInfo: [
                     NSFilePathErrorKey: item.path,
-                    NSLocalizedDescriptionKey: String(
-                        localized: "“\(item.lastPathComponent)” couldn’t be compressed: \(String(cString: strerror(code)))"),
+                    NSLocalizedDescriptionKey: L10n.format(
+                        "operation.compress.itemFailed", "“%1$@” couldn’t be compressed: %2$@", item.lastPathComponent,
+                        String(cString: strerror(code))),
                 ])
         }
     }
@@ -116,7 +117,7 @@ public enum Compressor {
                 .fileWriteUnknown,
                 userInfo: [
                     NSLocalizedDescriptionKey: message.isEmpty
-                        ? String(localized: "The archive couldn’t be created (ditto exited with status \(result.status)).")
+                        ? L10n.format("operation.compress.dittoFailed", "The archive couldn’t be created (ditto exited with status %lld).", Int(result.status))
                         : message
                 ])
         }

@@ -62,9 +62,9 @@ public enum TagEditError: LocalizedError, Equatable {
     public var errorDescription: String? {
         switch self {
         case .filesNotChanged(let urls):
-            String(localized: "\(urls.count) files couldn't be changed.")
+            L10n.plural("tags.error.filesNotChanged", count: urls.count, one: "1 file couldn't be changed.", other: "%lld files couldn't be changed.")
         case .standardTag:
-            String(localized: "Finder's color tags can't be renamed, recolored or deleted.")
+            L10n.string("tags.error.standardTag", "Finder's color tags can't be renamed, recolored or deleted.")
         }
     }
 

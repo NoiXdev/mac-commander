@@ -16,21 +16,21 @@ public enum DirectoryLoadError: Error, Equatable, Sendable {
     public var message: String {
         switch self {
         case .permissionDenied(let url):
-            String(localized: "You don't have permission to see the contents of “\(url.lastPathComponent)”.")
+            L10n.format("fileList.error.noPermission", "You don't have permission to see the contents of “%@”.", url.lastPathComponent)
         case .notFound(let url):
-            String(localized: "The folder “\(url.lastPathComponent)” can't be found.")
+            L10n.format("fileList.error.notFound", "The folder “%@” can't be found.", url.lastPathComponent)
         case .notADirectory(let url):
-            String(localized: "“\(url.lastPathComponent)” is not a folder.")
+            L10n.format("fileList.error.notAFolder", "“%@” is not a folder.", url.lastPathComponent)
         case .other(let url, let detail):
-            String(localized: "The folder “\(url.lastPathComponent)” can’t be opened: \(detail)")
+            L10n.format("fileList.error.folderUnreadable", "The folder “%1$@” can’t be opened: %2$@", url.lastPathComponent, detail)
         case .archivePasswordRequired(let url):
-            String(localized: "“\(url.lastPathComponent)” is encrypted. Enter its password to see its contents.")
+            L10n.format("fileList.error.archivePasswordRequired", "“%@” is encrypted. Enter its password to see its contents.", url.lastPathComponent)
         case .archiveIncorrectPassword(let url):
-            String(localized: "The password for “\(url.lastPathComponent)” is incorrect.")
+            L10n.format("fileList.error.archiveIncorrectPassword", "The password for “%@” is incorrect.", url.lastPathComponent)
         case .archiveUnreadable(let url, let detail):
-            String(localized: "“\(url.lastPathComponent)” can’t be opened: \(detail)")
+            L10n.format("fileList.error.archiveUnreadable", "“%1$@” can’t be opened: %2$@", url.lastPathComponent, detail)
         case .shareDisconnected(let name):
-            String(localized: "“\(name)” is no longer connected.")
+            L10n.format("fileList.error.shareDisconnected", "“%@” is no longer connected.", name)
         }
     }
 }

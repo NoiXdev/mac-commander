@@ -16,9 +16,9 @@ public enum ArchiveError: Error, Equatable, Sendable {
 extension ArchiveError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .passwordRequired: String(localized: "The archive is encrypted. Enter its password to extract it.")
-        case .incorrectPassword: String(localized: "The password you entered is incorrect.")
-        case .cancelled: String(localized: "The operation was cancelled.")
+        case .passwordRequired: L10n.string("archive.error.passwordRequired", "The archive is encrypted. Enter its password to extract it.")
+        case .incorrectPassword: L10n.string("archive.error.incorrectPassword", "The password you entered is incorrect.")
+        case .cancelled: L10n.string("archive.error.cancelled", "The operation was cancelled.")
         case .unsupported(let message), .unreadable(let message): message
         }
     }
@@ -124,7 +124,7 @@ public actor ArchiveCatalog {
     ) async throws(ArchiveError) -> [FileItem] {
         let index = try await index(of: archive)
         guard let entries = index.entries(in: folder) else {
-            throw .unreadable(message: String(localized: "The folder “\(folder)” isn’t in the archive."))
+            throw .unreadable(message: L10n.format("archive.error.folderMissing", "The folder “%@” isn’t in the archive.", folder))
         }
         return entries.compactMap { entry in
             let components = entry.path.split(separator: "/").map(String.init)
@@ -189,11 +189,11 @@ public actor ArchiveCatalog {
     }
 
     private static func kind(name: String, isDirectory: Bool) -> String {
-        if isDirectory { return String(localized: "Folder") }
+        if isDirectory { return L10n.string("archive.kind.folder", "Folder") }
         let ext = (name as NSString).pathExtension
         if !ext.isEmpty, let description = UTType(filenameExtension: ext)?.localizedDescription {
             return description
         }
-        return String(localized: "Document")
+        return L10n.string("archive.kind.document", "Document")
     }
 }

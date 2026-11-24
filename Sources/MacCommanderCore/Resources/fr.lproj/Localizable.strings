@@ -13,5 +13,127 @@
 "settings.general.language.footer" = "Prend effet après un redémarrage.";
 "settings.general.language.relaunch" = "Relancer MacCommander";
 
+/* File list: folder load errors */
+"fileList.error.noPermission" = "Vous n’avez pas l’autorisation de voir le contenu de « %@ ».";
+"fileList.error.notFound" = "Le dossier « %@ » est introuvable.";
+"fileList.error.notAFolder" = "« %@ » n’est pas un dossier.";
+"fileList.error.folderUnreadable" = "Impossible d’ouvrir le dossier « %1$@ » : %2$@";
+"fileList.error.archivePasswordRequired" = "« %@ » est chiffré. Saisissez son mot de passe pour voir son contenu.";
+"fileList.error.archiveIncorrectPassword" = "Le mot de passe de « %@ » est incorrect.";
+"fileList.error.archiveUnreadable" = "Impossible d’ouvrir « %1$@ » : %2$@";
+"fileList.error.shareDisconnected" = "« %@ » n’est plus connecté.";
+
+/* File list: rename */
+"fileList.rename.emptyName" = "Le nom ne peut pas être vide.";
+"fileList.rename.invalidCharacter" = "Le nom ne peut contenir ni « / » ni « : ».";
+"fileList.rename.nameTaken" = "Le nom « %@ » est déjà utilisé. Veuillez choisir un autre nom.";
+
+/* File list: column titles */
+"fileList.column.name" = "Nom";
+"fileList.column.dateModified" = "Date de modification";
+"fileList.column.dateCreated" = "Date de création";
+"fileList.column.dateAdded" = "Date d’ajout";
+"fileList.column.size" = "Taille";
+"fileList.column.kind" = "Type";
+"fileList.column.tags" = "Tags";
+"fileList.column.location" = "Emplacement";
+
+/* Copy/move/extract between the panes */
+"browser.transfer.copyOne" = "Copier « %@ » vers :";
+"browser.transfer.moveOne" = "Déplacer « %@ » vers :";
+"browser.transfer.extractOne" = "Extraire « %@ » vers :";
+
+/* Archives */
+"archive.error.passwordRequired" = "L’archive est chiffrée. Saisissez son mot de passe pour l’extraire.";
+"archive.error.incorrectPassword" = "Le mot de passe saisi est incorrect.";
+"archive.error.cancelled" = "L’opération a été annulée.";
+"archive.error.folderMissing" = "Le dossier « %@ » ne se trouve pas dans l’archive.";
+"archive.error.itemMissing" = "« %@ » ne se trouve pas dans l’archive.";
+"archive.error.link" = "C’est un lien.";
+"archive.error.nothingToExtract" = "Il n’y a rien à extraire.";
+"archive.error.empty" = "L’archive est vide.";
+"archive.error.listingCancelled" = "La lecture du contenu a été annulée.";
+"archive.kind.folder" = "Dossier";
+"archive.kind.document" = "Document";
+
+/* File operations */
+"operation.copy.titleOne" = "Copie de « %1$@ » vers « %2$@ »";
+"operation.move.titleOne" = "Déplacement de « %1$@ » vers « %2$@ »";
+"operation.duplicate.titleOne" = "Duplication de « %@ »";
+"operation.trash.titleOne" = "Placement de « %@ » dans la corbeille";
+"operation.compress.titleOne" = "Compression de « %@ »";
+"operation.convert.titleOne" = "Conversion de « %@ »…";
+"operation.extract.titleOne" = "Extraction de « %@ »";
+"operation.undo.duplicate" = "Dupliquer";
+"operation.undo.trash" = "Placer dans la corbeille";
+"operation.undo.compress" = "Compresser";
+"operation.undo.convert" = "Convertir";
+"operation.undo.extract" = "Extraire";
+"operation.undo.rename" = "Renommer";
+"operation.undo.newFolder" = "Nouveau dossier";
+"operation.undo.newFile" = "Nouveau fichier";
+"operation.undo.copyOne" = "Copie de « %@ »";
+"operation.undo.moveOne" = "Déplacement de « %@ »";
+"operation.convert.cancelled" = "Annulé";
+"operation.compress.nothing" = "Il n’y a rien à compresser.";
+"operation.compress.differentFolders" = "Des éléments ne peuvent être compressés ensemble que s’ils se trouvent dans le même dossier.";
+"operation.compress.itemFailed" = "Impossible de compresser « %1$@ » : %2$@";
+"operation.compress.dittoFailed" = "Impossible de créer l’archive (ditto s’est terminé avec le statut %lld).";
+"operation.transfer.replaceContainsSource" = "Impossible de remplacer « %@ », car il contient l’élément en cours de transfert.";
+"operation.transfer.appeared" = "Un élément nommé « %@ » est apparu dans la destination pendant le transfert. Il n’a pas été modifié.";
+
+/* Generated names */
+"name.archive" = "Archive";
+
+/* Convert */
+"convert.target.jpeg" = "Image JPEG";
+"convert.target.png" = "Image PNG";
+"convert.target.heic" = "Image HEIC";
+"convert.target.tiff" = "Image TIFF";
+"convert.target.m4a" = "Audio M4A (AAC)";
+"convert.target.wav" = "Audio WAV";
+"convert.target.aiff" = "Audio AIFF";
+"convert.target.mp3" = "Audio MP3";
+"convert.target.flac" = "Audio FLAC";
+"convert.target.mp4H264" = "Vidéo MP4 (H.264)";
+"convert.target.movHEVC" = "Vidéo MOV (HEVC)";
+"convert.target.mp4FFmpeg" = "Vidéo MP4";
+"convert.target.docx" = "Document Word (DOCX)";
+"convert.target.rtf" = "Texte enrichi (RTF)";
+"convert.target.txt" = "Texte brut (TXT)";
+"convert.target.html" = "Page web (HTML)";
+"convert.target.pdf" = "PDF (mise en page simple)";
+"convert.target.zip" = "Archive ZIP";
+"convert.target.tarGz" = "Archive TAR.GZ";
+"convert.target.sevenZip" = "Archive 7-Zip";
+"convert.target.iso" = "Image disque (ISO)";
+"convert.ffmpeg.broken" = "ffmpeg est installé mais ne démarre pas (brew reinstall ffmpeg)";
+"convert.ffmpeg.missing" = "D’autres formats nécessitent ffmpeg (brew install ffmpeg)";
+"convert.error.needsFFmpeg" = "Cette conversion nécessite ffmpeg (brew install ffmpeg).";
+"convert.error.toolFailed" = "Échec de %1$@ (statut %2$lld)";
+"convert.cue.noDataTrack" = "La feuille CUE n’a pas de piste de données.";
+"convert.cue.multipleDataFiles" = "La piste de données s’étend sur plusieurs fichiers BIN.";
+"convert.cue.missingBin" = "« %@ » est introuvable.";
+"convert.cue.sizeMismatch" = "La taille du fichier BIN ne correspond pas à sa taille de secteur.";
+"convert.cue.unreadable" = "Impossible de lire « %@ ».";
+"convert.cue.notCueSheet" = "« %@ » a besoin de sa feuille CUE (.cue) à côté de lui.";
+
+/* Preview */
+"preview.error.notRegularFile" = "« %@ » n’est pas un fichier ordinaire.";
+
+/* Tags */
+"tags.error.standardTag" = "Les tags de couleur du Finder ne peuvent être ni renommés, ni recolorés, ni supprimés.";
+
+/* Network shares */
+"shares.name.default" = "%1$@ sur %2$@";
+"shares.error.inUse" = "« %@ » est en cours d’utilisation.";
+"shares.error.code" = "Erreur %@";
+"shares.error.codeNamed" = "Erreur %1$@ (%2$@)";
+"shares.error.noMountPoint" = "Aucun point de montage";
+"shares.error.notConnected" = "Le partage n’est pas connecté.";
+"shares.error.noLongerExists" = "Le partage n’existe plus.";
+"shares.error.connectionCancelled" = "La connexion a été annulée.";
+"shares.error.alreadyConnected" = "Déjà connecté.";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ se trouve dans %2$@.";
