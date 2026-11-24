@@ -25,6 +25,8 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var globalShortcut: GlobalShortcut?
     /// Tags set or created in-app, with their colors (Spotlight knows tag names only). See `TagCatalog`.
     public var knownTags: [FileTag] = []
+    /// Per-extension apps for opening files inside MacCommander; the system's own association stays untouched.
+    public var openWithRules = OpenWithRules()
 
     public init(
         newFileName: String = "", newWindowFolderPath: String? = nil,
@@ -42,6 +44,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case newFileName, newWindowFolderPath, hiddenSidebarSections, hiddenTags, didShowFullDiskAccessHint
         case dualPaneEnabled, terminalApp, globalShortcut, knownTags
+        case openWithRules
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -94,6 +97,7 @@ public struct Preferences: Codable, Equatable, Sendable {
             }
         }
         knownTags = known
+        openWithRules = (try? c.decodeIfPresent(OpenWithRules.self, forKey: .openWithRules)) ?? d.openWithRules
     }
 
     private struct AnyDecodable: Decodable {

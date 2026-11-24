@@ -177,4 +177,23 @@ import Testing
         let decoded = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
         #expect(decoded.knownTags.map(\.name) == ["A"])
     }
+
+    @Test func openWithRulesDefaultToEmpty() throws {
+        let prefs = try JSONDecoder().decode(Preferences.self, from: Data("{}".utf8))
+        #expect(prefs.openWithRules == OpenWithRules())
+    }
+
+    @Test func unreadableRuleIsDroppedOthersKept() throws {
+        let json = #"""
+            {"openWithRules": {
+                "md": {"bundleIdentifier": "x.Typora", "appPath": "/Applications/Typora.app", "appName": "Typora"},
+                "txt": {"appPath": 5, "appName": "Bad"},
+                "a.b": {"appPath": "/A.app", "appName": "A"}
+            }}
+            """#
+        let prefs = try JSONDecoder().decode(Preferences.self, from: Data(json.utf8))
+        #expect(prefs.openWithRules.extensions == ["md"])
+        let junk = try JSONDecoder().decode(Preferences.self, from: Data(#"{"openWithRules": 3}"#.utf8))
+        #expect(junk.openWithRules == OpenWithRules())
+    }
 }
