@@ -109,7 +109,7 @@ enum LocalizationFiles {
     private static var anyCallPattern: Regex<Substring> { #/L10n\.(?:string|format|text|plural)\(/# }
 
     /// Blanks out `//` comment lines, keeping the line count, so an example in a doc comment isn't a call site.
-    private static func withoutCommentLines(_ source: String) -> String {
+    static func withoutCommentLines(_ source: String) -> String {
         source.split(separator: "\n", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces).hasPrefix("//") ? "" : $0 }
             .joined(separator: "\n")
