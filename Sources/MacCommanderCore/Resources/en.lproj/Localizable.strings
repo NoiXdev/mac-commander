@@ -16,6 +16,10 @@
 "settings.general.newFileName.invalid" = "Not a valid file name; “%@” is used.";
 
 /* Settings > View */
+"settings.view.rowSize" = "Row size";
+"settings.view.rowSize.compact" = "Compact";
+"settings.view.rowSize.regular" = "Default";
+"settings.view.rowSize.large" = "Large";
 "settings.view.showCheckboxColumn" = "Show checkbox column";
 "settings.view.showHiddenFiles" = "Show hidden files";
 "settings.view.dualPane" = "Enable dual-pane mode";

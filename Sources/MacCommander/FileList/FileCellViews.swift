@@ -29,6 +29,10 @@ final class FileNameCellView: NSTableCellView {
     /// The cloud symbol's width and the gap before it: zero while there is no status to show.
     private var cloudWidth: NSLayoutConstraint?
     private var cloudGap: NSLayoutConstraint?
+    private var iconWidth: NSLayoutConstraint?
+    private var iconHeight: NSLayoutConstraint?
+    /// The icon's edge length in points (see `RowSize.iconSize`).
+    private(set) var iconSize: CGFloat = 16
 
     init() {
         super.init(frame: .zero)
@@ -61,11 +65,13 @@ final class FileNameCellView: NSTableCellView {
         dotsAtEnd.priority = NSLayoutConstraint.Priority(rawValue: NSLayoutConstraint.Priority.defaultLow.rawValue - 1)
         let cloudGap = cloudView.leadingAnchor.constraint(equalTo: tagDots.trailingAnchor, constant: 0)
         let cloudWidth = cloudView.widthAnchor.constraint(equalToConstant: 0)
+        let iconWidth = icon.widthAnchor.constraint(equalToConstant: iconSize)
+        let iconHeight = icon.heightAnchor.constraint(equalToConstant: iconSize)
         NSLayoutConstraint.activate([
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 2),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 16),
-            icon.heightAnchor.constraint(equalToConstant: 16),
+            iconWidth,
+            iconHeight,
             label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 5),
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -2),
             label.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -81,7 +87,17 @@ final class FileNameCellView: NSTableCellView {
         dotsGap = gap
         self.cloudGap = cloudGap
         self.cloudWidth = cloudWidth
+        self.iconWidth = iconWidth
+        self.iconHeight = iconHeight
         editingTrailing = label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -2)
+    }
+
+    /// Sizes the icon to `size` points square. The icon stays vertically centered in the row.
+    func setIconSize(_ size: CGFloat) {
+        guard size != iconSize else { return }
+        iconSize = size
+        iconWidth?.constant = size
+        iconHeight?.constant = size
     }
 
     /// Shows the colored tags after the name (at most three).
@@ -236,52 +252,63 @@ enum FileListFormat {
     }
 }
 
-/// 16 pt file icons. A type icon (cached per extension, from the UTType: no disk access) is shown at once;
-/// the file's own icon (`NSWorkspace.icon(forFile:)`, which touches the disk and can stall on a network
-/// volume) is loaded later, off the main actor, for visible rows only.
+/// File icons at the list's icon size (16 or 32 pt). A type icon (cached per size and extension, from the
+/// UTType: no disk access) is shown at once; the file's own icon (`NSWorkspace.icon(forFile:)`, which touches
+/// the disk and can stall on a network volume) is loaded later, off the main actor, for visible rows only.
+/// Icons are cached per size, so switching the row size back and forth keeps what was loaded.
 @MainActor
 final class FileIconProvider {
-    nonisolated private static let iconSize = NSSize(width: 16, height: 16)
-    private let fileIcons = NSCache<NSURL, NSImage>()
-    private var typeIcons: [String: NSImage] = [:]
-
-    init() {
-        fileIcons.countLimit = 5000
+    private struct TypeKey: Hashable {
+        let size: CGFloat
+        let key: String
     }
 
-    func cachedFileIcon(for url: URL) -> NSImage? {
-        fileIcons.object(forKey: url as NSURL)
+    private var fileIcons: [CGFloat: NSCache<NSURL, NSImage>] = [:]
+    private var typeIcons: [TypeKey: NSImage] = [:]
+
+    private func fileIconCache(size: CGFloat) -> NSCache<NSURL, NSImage> {
+        if let cache = fileIcons[size] { return cache }
+        let cache = NSCache<NSURL, NSImage>()
+        cache.countLimit = 5000
+        fileIcons[size] = cache
+        return cache
     }
 
-    func placeholder(for item: FileItem) -> NSImage {
+    func cachedFileIcon(for url: URL, size: CGFloat) -> NSImage? {
+        fileIcons[size]?.object(forKey: url as NSURL)
+    }
+
+    func placeholder(for item: FileItem, size: CGFloat) -> NSImage {
         let key = item.isDirectory ? "/folder" : item.url.pathExtension.lowercased()
-        if let icon = typeIcons[key] { return icon }
+        let typeKey = TypeKey(size: size, key: key)
+        if let icon = typeIcons[typeKey] { return icon }
         let type: UTType = item.isDirectory ? .folder : (UTType(filenameExtension: key) ?? .data)
         // Copy before resizing: NSWorkspace may hand out shared image instances.
         let icon = NSWorkspace.shared.icon(for: type).copy() as? NSImage ?? NSImage()
-        icon.size = Self.iconSize
-        typeIcons[key] = icon
+        icon.size = NSSize(width: size, height: size)
+        typeIcons[typeKey] = icon
         return icon
     }
 
-    /// Loads the files' own icons off the main actor and caches them.
-    func loadFileIcons(for urls: [URL]) async -> [URL: NSImage] {
-        let loaded = await Self.fileIcons(for: urls)
-        for (url, icon) in loaded { fileIcons.setObject(icon, forKey: url as NSURL) }
+    /// Loads the files' own icons at `size` off the main actor and caches them for that size.
+    func loadFileIcons(for urls: [URL], size: CGFloat) async -> [URL: NSImage] {
+        let loaded = await Self.fileIcons(for: urls, size: size)
+        let cache = fileIconCache(size: size)
+        for (url, icon) in loaded { cache.setObject(icon, forKey: url as NSURL) }
         return loaded
     }
 
     /// On the blocking-I/O queue (`PathQueries.run`), not the cooperative pool: a hung lookup holds a thread.
-    private static func fileIcons(for urls: [URL]) async -> [URL: NSImage] {
-        await PathQueries.run { fileIconsNow(for: urls) }
+    private static func fileIcons(for urls: [URL], size: CGFloat) async -> [URL: NSImage] {
+        await PathQueries.run { fileIconsNow(for: urls, size: size) }
     }
 
-    nonisolated private static func fileIconsNow(for urls: [URL]) -> [URL: NSImage] {
+    nonisolated private static func fileIconsNow(for urls: [URL], size: CGFloat) -> [URL: NSImage] {
         var icons: [URL: NSImage] = [:]
         for url in urls {
             // Copy before resizing: NSWorkspace may hand out shared image instances.
             let icon = NSWorkspace.shared.icon(forFile: url.path).copy() as? NSImage ?? NSImage()
-            icon.size = iconSize
+            icon.size = NSSize(width: size, height: size)
             icons[url] = icon
         }
         return icons

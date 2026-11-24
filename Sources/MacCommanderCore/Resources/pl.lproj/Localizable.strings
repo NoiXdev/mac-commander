@@ -16,6 +16,10 @@
 "settings.general.newFileName.invalid" = "Nieprawidłowa nazwa pliku; używana jest „%@”.";
 
 /* Settings > View */
+"settings.view.rowSize" = "Wysokość wierszy";
+"settings.view.rowSize.compact" = "Kompaktowa";
+"settings.view.rowSize.regular" = "Standardowa";
+"settings.view.rowSize.large" = "Duża";
 "settings.view.showCheckboxColumn" = "Pokaż kolumnę pól wyboru";
 "settings.view.showHiddenFiles" = "Pokaż ukryte pliki";
 "settings.view.dualPane" = "Włącz tryb dwóch paneli";

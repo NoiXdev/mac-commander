@@ -22,19 +22,40 @@ extension FileListController {
         let urls = visibleNameCells().filter { !$0.cell.hasFileIcon }.prefix(32).map(\.url)
         guard !urls.isEmpty else { return }
         iconBatchFolder = folder
+        let size = iconSize
         Task { @MainActor [weak self] in
             guard let self else { return }
-            let loaded = await icons.loadFileIcons(for: urls)
+            let loaded = await icons.loadFileIcons(for: urls, size: size)
             if iconBatchFolder == folder { iconBatchFolder = nil }
-            // Rows may have scrolled or been reused meanwhile: apply by URL to what is visible now.
+            // Rows may have scrolled or been reused meanwhile: apply by URL to what is visible now. Cells
+            // resized since (row size changed) don't take the batch; it stays cached for its own size.
             if !isInArchive {
-                for (cell, url) in visibleNameCells() where !cell.hasFileIcon {
+                for (cell, url) in visibleNameCells() where !cell.hasFileIcon && cell.iconSize == size {
                     guard let icon = loaded[url] else { continue }
                     cell.imageView?.image = icon
                     cell.hasFileIcon = true
                 }
             }
             // The next pass picks up whatever is still without its icon, and stops when nothing is.
+            scheduleIconPass()
+        }
+    }
+
+    /// Sizes the cell's icon to the current row size and shows the node's icon at that size: its own icon if
+    /// cached, otherwise the type placeholder until the next icon pass loads it.
+    func showIcon(of node: FileNode, in cell: FileNameCellView) {
+        let size = iconSize
+        cell.setIconSize(size)
+        if isInArchive {
+            // Entries inside an archive don't exist on disk: the type icon is all there is.
+            cell.imageView?.image = icons.placeholder(for: node.item, size: size)
+            cell.hasFileIcon = true
+        } else if let icon = icons.cachedFileIcon(for: node.url, size: size) {
+            cell.imageView?.image = icon
+            cell.hasFileIcon = true
+        } else {
+            cell.imageView?.image = icons.placeholder(for: node.item, size: size)
+            cell.hasFileIcon = false
             scheduleIconPass()
         }
     }
@@ -212,18 +233,7 @@ extension FileListController: NSOutlineViewDelegate {
             cell.textField?.stringValue = node.item.name
             cell.showTags(node.item.tags)
             cell.showCloudStatus(node.item.cloudStatus)
-            if isInArchive {
-                // Entries inside an archive don't exist on disk: the type icon is all there is.
-                cell.imageView?.image = icons.placeholder(for: node.item)
-                cell.hasFileIcon = true
-            } else if let icon = icons.cachedFileIcon(for: node.url) {
-                cell.imageView?.image = icon
-                cell.hasFileIcon = true
-            } else {
-                cell.imageView?.image = icons.placeholder(for: node.item)
-                cell.hasFileIcon = false
-                scheduleIconPass()
-            }
+            showIcon(of: node, in: cell)
             cell.alphaValue = alpha
             return cell
         }

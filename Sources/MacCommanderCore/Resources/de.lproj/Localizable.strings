@@ -16,6 +16,10 @@
 "settings.general.newFileName.invalid" = "Kein gültiger Dateiname; „%@“ wird verwendet.";
 
 /* Settings > View */
+"settings.view.rowSize" = "Zeilenhöhe";
+"settings.view.rowSize.compact" = "Kompakt";
+"settings.view.rowSize.regular" = "Standard";
+"settings.view.rowSize.large" = "Groß";
 "settings.view.showCheckboxColumn" = "Spalte mit Markierungsfeldern anzeigen";
 "settings.view.showHiddenFiles" = "Versteckte Dateien anzeigen";
 "settings.view.dualPane" = "Modus mit zwei Bereichen aktivieren";

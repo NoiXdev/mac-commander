@@ -5,9 +5,58 @@ import SwiftUI
 
 extension FileListController {
     func applySettings() {
+        applyRowSize()
         applyColumnLayout()
         applySortIndicator()
         updateCheckboxStates()
+    }
+
+    /// The current icon edge length in points.
+    var iconSize: CGFloat { CGFloat(rowSize.iconSize) }
+
+    /// Sets the row height and icon size of the stored row size. The rows on screen are updated in place
+    /// (no `reloadData()`), so the selection, expanded folders and the row at the top of the list stay.
+    func applyRowSize() {
+        let size = settings.settings.rowSize
+        let height = CGFloat(size.rowHeight)
+        guard size != rowSize || outlineView.rowHeight != height else { return }
+        let clip = scrollView.contentView
+        // Read before the change: a shorter list clamps the clip view's offset at once.
+        let oldOffset = clip.bounds.minY
+        let oldPitch = outlineView.numberOfRows > 0 ? outlineView.rect(ofRow: 0).height : 0
+        rowSize = size
+        // Setting `rowHeight` re-tiles the rows, but existing row views keep their disclosure triangle's
+        // old frame (off center on a taller row); noting every row's height lays them out again. Without
+        // animation: the change applies at once.
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0
+            outlineView.rowHeight = height
+            if outlineView.numberOfRows > 0 {
+                outlineView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<outlineView.numberOfRows))
+            }
+        }
+        if oldPitch > 0 {
+            var bounds = clip.bounds
+            bounds.origin.y = CGFloat(
+                RowSize.scrollOffset(
+                    Double(oldOffset), topInset: Double(clip.contentInsets.top), from: Double(oldPitch),
+                    to: Double(outlineView.rect(ofRow: 0).height)
+                ).rounded())
+            clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+            scrollView.reflectScrolledClipView(clip)
+        }
+        refreshNameCellIcons()
+    }
+
+    /// Gives the name cells of every row view the outline holds the current icon size and the matching icon.
+    private func refreshNameCellIcons() {
+        let columnIndex = outlineView.column(withIdentifier: NSUserInterfaceItemIdentifier(FileColumn.name))
+        guard columnIndex >= 0 else { return }
+        outlineView.enumerateAvailableRowViews { rowView, row in
+            guard let cell = rowView.view(atColumn: columnIndex) as? FileNameCellView, let node = node(atRow: row)
+            else { return }
+            showIcon(of: node, in: cell)
+        }
     }
 
     /// Moves, resizes and hides columns to match the stored layout (checkbox column stays first).

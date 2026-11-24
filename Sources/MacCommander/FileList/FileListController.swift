@@ -64,6 +64,8 @@ final class FileListController: NSViewController {
     /// True while columns are adjusted to the settings, so resize/move callbacks don't write back.
     var isApplyingLayout = false
     let icons = FileIconProvider()
+    /// The row size the rows and icons are laid out for (see `applyRowSize()`).
+    var rowSize = RowSize.regular
     var iconPassScheduled = false
     /// The folder whose batch of file icons is loading off the main actor; one batch per folder at a time. A
     /// batch that hangs (unresponsive server) doesn't hold up the icons of the next folder shown.
