@@ -26,7 +26,7 @@ struct NetworkSettings: View {
                 }
             }
             .listStyle(.bordered)
-            .frame(height: 220)
+            .frame(minHeight: 220, maxHeight: .infinity)
             .overlay {
                 if store.shares.isEmpty {
                     Text(String(localized: "No saved shares"))

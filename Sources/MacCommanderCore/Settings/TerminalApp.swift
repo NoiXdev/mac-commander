@@ -1,6 +1,6 @@
 import Foundation
 
-/// The terminal "Open in Terminal" uses (Settings ▸ General). The folder is handed to the app as a document,
+/// The terminal "Open in Terminal" uses (Settings ▸ Terminal). The folder is handed to the app as a document,
 /// which both apps answer with a new shell in that folder.
 public enum TerminalApp: String, Codable, CaseIterable, Sendable {
     case terminal, iTerm

@@ -51,6 +51,7 @@ struct MacCommanderApp: App {
                 .environment(appDelegate.router)
                 .environment(appDelegate.hotKeys)
         }
+        .windowResizability(.contentMinSize)
     }
 }
 
