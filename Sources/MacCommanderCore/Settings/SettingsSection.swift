@@ -7,13 +7,13 @@ public enum SettingsSection: String, CaseIterable, Hashable, Sendable {
 
     public var title: String {
         switch self {
-        case .general: String(localized: "General")
-        case .view: String(localized: "View")
-        case .terminal: String(localized: "Terminal")
-        case .shortcuts: String(localized: "Shortcuts")
-        case .sidebar: String(localized: "Sidebar")
-        case .tags: String(localized: "Tags")
-        case .network: String(localized: "Network")
+        case .general: L10n.string("settings.section.general", "General")
+        case .view: L10n.string("settings.section.view", "View")
+        case .terminal: L10n.string("settings.section.terminal", "Terminal")
+        case .shortcuts: L10n.string("settings.section.shortcuts", "Shortcuts")
+        case .sidebar: L10n.string("settings.section.sidebar", "Sidebar")
+        case .tags: L10n.string("settings.section.tags", "Tags")
+        case .network: L10n.string("settings.section.network", "Network")
         }
     }
 

@@ -3,6 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "MacCommander",
+    defaultLocalization: "en",
     platforms: [.macOS(.v15)],
     products: [.executable(name: "MacCommander", targets: ["MacCommander"])],
     dependencies: [
@@ -11,7 +12,8 @@ let package = Package(
     targets: [
         .target(
             name: "MacCommanderCore",
-            dependencies: [.product(name: "Markdown", package: "swift-markdown")]
+            dependencies: [.product(name: "Markdown", package: "swift-markdown")],
+            resources: [.process("Resources")]
         ),
         .executableTarget(name: "MacCommander", dependencies: ["MacCommanderCore"]),
         .testTarget(name: "MacCommanderCoreTests", dependencies: ["MacCommanderCore"]),

@@ -1,0 +1,6 @@
+/* Privacy prompts; Info.plist holds the English text. */
+"NSDesktopFolderUsageDescription" = "MacCommander a besoin d’un accès pour afficher et gérer vos fichiers.";
+"NSDocumentsFolderUsageDescription" = "MacCommander a besoin d’un accès pour afficher et gérer vos fichiers.";
+"NSDownloadsFolderUsageDescription" = "MacCommander a besoin d’un accès pour afficher et gérer vos fichiers.";
+"NSRemovableVolumesUsageDescription" = "MacCommander a besoin d’un accès pour afficher et gérer vos fichiers.";
+"NSNetworkVolumesUsageDescription" = "MacCommander a besoin d’un accès pour afficher et gérer vos fichiers.";

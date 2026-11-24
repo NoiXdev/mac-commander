@@ -7,7 +7,7 @@ import Testing
         #expect(SettingsSection.allCases == [.general, .view, .terminal, .shortcuts, .sidebar, .tags, .network])
     }
 
-    @Test func everySectionHasItsOwnSymbolAndTitle() {
+    @Test(.english) func everySectionHasItsOwnSymbolAndTitle() {
         let all = SettingsSection.allCases
         #expect(Set(all.map(\.systemImage)).count == all.count)
         #expect(Set(all.map(\.title)).count == all.count)

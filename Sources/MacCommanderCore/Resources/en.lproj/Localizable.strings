@@ -1,0 +1,11 @@
+/* Settings window sidebar */
+"settings.section.general" = "General";
+"settings.section.view" = "View";
+"settings.section.terminal" = "Terminal";
+"settings.section.shortcuts" = "Shortcuts";
+"settings.section.sidebar" = "Sidebar";
+"settings.section.tags" = "Tags";
+"settings.section.network" = "Network";
+
+/* Seeds for the lookup tests; no source uses them. */
+"test.location" = "%1$@ is in %2$@.";
