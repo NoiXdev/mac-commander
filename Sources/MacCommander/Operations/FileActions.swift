@@ -171,7 +171,8 @@ enum FileActions {
 
     /// Opens `items` like ⌘↓ (the caller picks them: one item, or only the files of several). Outside an
     /// archive `model.open`. Inside one, folders navigate and files are extracted through the preview cache
-    /// and opened with their default app; changes to those copies aren't written back (archives are read-only).
+    /// and opened like any file (`model.openExternally`, so the Open With rules apply); changes to those copies
+    /// aren't written back (archives are read-only).
     /// Nested pure archives (a `.zip` inside the archive) run "Extract To…" instead: Archive Utility would
     /// unpack them into the preview cache, which is deleted permanently.
     static func open(_ items: [FileItem], model: BrowserModel, window: NSWindow?) async {
@@ -199,7 +200,7 @@ enum FileActions {
         guard !entries.isEmpty else { return }
         let name = files.count == 1 ? files[0].name : archive.lastPathComponent
         guard let extracted = await extractForPreview(entries, of: archive, name: name, window: window) else { return }
-        for url in extracted { PathQueries.openWithDefaultApp(url) }
+        model.openExternally(extracted)
     }
 
     /// Extracts `entries` (files) of `archive` through `ArchivePreviewCache` and returns the temporary copies in

@@ -162,8 +162,17 @@ struct BrowserWindow: View {
         shareManager: ShareManager
     ) -> @MainActor (URL) -> BrowserModel {
         { [settings, preferences, operations, shareManager] start in
-            let model = BrowserModel(start: start, settings: settings, operations: operations)
+            // Files open honoring the Open With rules, read at open time so a change in Settings applies
+            // at once. Only a failed rule-app open is reported; default-app opens stay silent.
+            let opener: @MainActor (URL) -> Void = { [preferences] url in
+                let rules = preferences.preferences.openWithRules
+                Task { @MainActor in
+                    if let error = await PathQueries.open([url], rules: rules) { NSAlert(error: error).runModal() }
+                }
+            }
+            let model = BrowserModel(start: start, settings: settings, opener: opener, operations: operations)
             model.newFileName = { [preferences] in preferences.preferences.effectiveNewFileName }
+            model.openWithRules = { [preferences] in preferences.preferences.openWithRules }
             // A pure lookup (no file-system access): a vanished folder on a saved share shows Disconnected.
             model.shareResolver = { [weak shareManager] url in
                 guard let shareManager, let hit = shareManager.mountPoint(containing: url) else { return nil }

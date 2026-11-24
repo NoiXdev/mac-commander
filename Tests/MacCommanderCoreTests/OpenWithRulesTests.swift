@@ -128,6 +128,24 @@ import Testing
         #expect(typoraRules().menuDefault(for: [md, txt], locator: locator) == .app(typora))
     }
 
+    @Test func rulesSkipPackages() {
+        let package = URL(fileURLWithPath: "/x/Notes.rtfd", isDirectory: true)
+        var rules = OpenWithRules()
+        rules.set(rule(), for: "rtfd")
+        let locator = FakeLocator(bundles: [typoraID: typora], directories: [package.path])
+        #expect(rules.groups(for: [package], locator: locator) == [OpenGroup(app: nil, urls: [package])])
+        #expect(rules.menuDefault(for: [package], locator: locator) == .system)
+    }
+
+    @Test func rulesSkipArchivesWhenOpening() {
+        let archive = URL(fileURLWithPath: "/x/a.zip")
+        var rules = OpenWithRules()
+        rules.set(rule(), for: "zip")
+        let locator = FakeLocator(bundles: [typoraID: typora])
+        #expect(rules.groups(for: [archive], locator: locator) == [OpenGroup(app: nil, urls: [archive])])
+        #expect(rules.menuDefault(for: [archive], locator: locator) == .app(typora))
+    }
+
     @Test func applicationExistsRejectsAPlainFileOrFolder() throws {
         let dir = try TemporaryDirectory()
         let file = try dir.file("Fake.app")
@@ -161,15 +179,18 @@ import Testing
     }
 }
 
-/// A locator with fixed answers: bundle id to app, paths that exist, extension to system default.
+/// A locator with fixed answers: bundle id to app, paths that exist, extension to system default, paths
+/// that are directories.
 private struct FakeLocator: ApplicationLocating {
     var bundles: [String: URL] = [:]
     var existing: Set<String> = []
     var systemDefaults: [String: URL] = [:]
+    var directories: Set<String> = []
 
     func applicationURL(bundleIdentifier: String) -> URL? { bundles[bundleIdentifier] }
     func applicationExists(at url: URL) -> Bool { existing.contains(url.path) }
     func systemDefaultApplication(for url: URL) -> URL? { systemDefaults[url.pathExtension] }
+    func isDirectory(_ url: URL) -> Bool { directories.contains(url.path) }
 }
 
 /// The groups an `opening` closure was called with, from any thread.

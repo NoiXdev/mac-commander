@@ -129,7 +129,7 @@ enum FileContextMenu {
         if all.count == 1, !all[0].isDirectory {
             addArchiveFileActions(to: menu, file: all[0], model: model, window: window)
         }
-        menu.addItem(OpenWithMenu.make(for: urls))
+        menu.addItem(OpenWithMenu.make(for: urls, rules: model.openWithRules()))
         // The right-click selected exactly these items, so the panel previews them.
         menu.addItem(ActionMenuItem(quickLookTitle) { QuickLookController.showPanel() })
         menu.addItem(.separator())

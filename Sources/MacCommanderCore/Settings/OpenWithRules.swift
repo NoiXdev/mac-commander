@@ -61,17 +61,25 @@ public struct OpenWithRules: Codable, Equatable, Sendable {
         return locator.applicationExists(at: url) ? url : nil
     }
 
-    /// The located app of the rule for `url`, or nil when there is no rule or its app is missing.
-    private func ruleApplication(for url: URL, locator: some ApplicationLocating) -> URL? {
-        rule(for: url).flatMap { Self.application(for: $0, locator: locator) }
+    /// The located app of the rule for `url`, or nil when there is no rule, its app is missing, or the rule
+    /// doesn't apply: never to directories (folders and packages), and with `skippingArchives` not to pure
+    /// archives (`ArchiveFormats.isArchive`), which MacCommander browses instead of opening.
+    private func ruleApplication(
+        for url: URL, locator: some ApplicationLocating, skippingArchives: Bool
+    ) -> URL? {
+        guard let rule = rule(for: url) else { return nil }
+        if skippingArchives, ArchiveFormats.isArchive(url) { return nil }
+        guard !locator.isDirectory(url) else { return nil }
+        return Self.application(for: rule, locator: locator)
     }
 
-    /// `urls` split by the app that opens them: a located rule app, or nil for the system default. Groups
-    /// keep the order of each app's first appearance and URLs keep their order inside a group. Off the main actor.
+    /// `urls` split by the app that opens them: a located rule app, or nil for the system default. Folders,
+    /// packages and pure archives always get the system default. Groups keep the order of each app's first
+    /// appearance and URLs keep their order inside a group. Off the main actor.
     public func groups(for urls: [URL], locator: some ApplicationLocating) -> [OpenGroup] {
         var groups: [OpenGroup] = []
         for url in urls {
-            let app = ruleApplication(for: url, locator: locator)
+            let app = ruleApplication(for: url, locator: locator, skippingArchives: true)
             if let index = groups.firstIndex(where: { Self.sameApp($0.app, app) }) {
                 groups[index].urls.append(url)
             } else {
@@ -81,9 +89,11 @@ public struct OpenWithRules: Codable, Equatable, Sendable {
         return groups
     }
 
-    /// Which app the Open With menu marks as the default for `urls`; see `MenuDefault`. Off the main actor.
+    /// Which app the Open With menu marks as the default for `urls`; see `MenuDefault`. Folders and packages
+    /// count as having no rule; archives keep theirs (the menu is the only place a `zip` rule matters).
+    /// Off the main actor.
     public func menuDefault(for urls: [URL], locator: some ApplicationLocating) -> MenuDefault {
-        let ruleApps = urls.map { ruleApplication(for: $0, locator: locator) }
+        let ruleApps = urls.map { ruleApplication(for: $0, locator: locator, skippingArchives: false) }
         guard ruleApps.contains(where: { $0 != nil }) else { return .system }
         var shared: URL?
         for (url, ruleApp) in zip(urls, ruleApps) {

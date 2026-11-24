@@ -5,8 +5,9 @@ import MacCommanderCore
 @MainActor
 enum OpenWithMenu {
     /// The submenu shows "Loading…" until the applications are known: content types, Launch Services and
-    /// app icons are looked up off the main actor, since the files may be on a network volume.
-    static func make(for urls: [URL]) -> NSMenuItem {
+    /// app icons are looked up off the main actor, since the files may be on a network volume. `rules` (read
+    /// on the main actor by the caller) decide the "(default)" item; see `MenuDefault`.
+    static func make(for urls: [URL], rules: OpenWithRules) -> NSMenuItem {
         let item = NSMenuItem(title: L10n.string("operation.openWith.title", "Open With"), action: nil, keyEquivalent: "")
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -15,7 +16,7 @@ enum OpenWithMenu {
         menu.addItem(loading)
         item.submenu = menu
         Task { @MainActor in
-            let choices = await applications(for: urls)
+            let choices = await applications(for: urls, rules: rules)
             fill(menu, with: choices, urls: urls)
         }
         return item
@@ -31,7 +32,8 @@ enum OpenWithMenu {
     }
 
     private struct Choices: Sendable {
-        /// The first item's default app, when it opens all items.
+        /// The rule app when the Open With rules give all items one app; else the first item's default app,
+        /// when it opens all items.
         var defaultApp: App?
         /// Apps that open all items, sorted by name, without the default app.
         var others: [App] = []
@@ -53,29 +55,46 @@ enum OpenWithMenu {
         menu.addItem(ActionMenuItem(L10n.string("operation.openWith.other", "Other…")) { chooseApp(for: urls) })
     }
 
-    /// Launch Services is queried once per content type, not per item: a huge selection of a few types
-    /// stays cheap. nil with too many types: the menu then offers only "Other…".
+    /// The apps that open all items are queried once per content type, not per item: a huge selection of a
+    /// few types stays cheap. nil with too many types: the menu then offers only "Other…".
     /// On the blocking-I/O queue (`PathQueries.run`), not the cooperative pool.
-    private static func applications(for urls: [URL]) async -> Choices? {
-        await PathQueries.run { applicationsNow(for: urls) }
+    private static func applications(for urls: [URL], rules: OpenWithRules) async -> Choices? {
+        await PathQueries.run { applicationsNow(for: urls, rules: rules) }
     }
 
-    nonisolated private static func applicationsNow(for urls: [URL]) -> Choices? {
+    /// The rules' default (`menuDefault`) is resolved per item; the samples serve only the apps that open all
+    /// items. With no rule app involved (`.system`) the first item's default app is offered as before.
+    nonisolated private static func applicationsNow(for urls: [URL], rules: OpenWithRules) -> Choices? {
         guard let samples = samples(of: urls) else { return nil }
         let workspace = NSWorkspace.shared
-        var defaultApp = urls.first.flatMap { workspace.urlForApplication(toOpen: $0) }
         // With several items, only apps that open all of them.
         var common: Set<URL>?
         for url in samples {
             let apps = Set(workspace.urlsForApplications(toOpen: url))
             common = common.map { $0.intersection(apps) } ?? apps
         }
-        // The first item's default app is offered only if it opens all of them.
-        if urls.count > 1, let app = defaultApp, common?.contains(app) != true { defaultApp = nil }
+        let systemDefault = urls.first.flatMap { workspace.urlForApplication(toOpen: $0) }
+        // The first item's default app opens all of them (one item: always).
+        let systemDefaultOpensAll = systemDefault.map { urls.count == 1 || common?.contains($0) == true } ?? false
+        var defaultApp: URL?
+        var candidates = common ?? []
+        switch rules.menuDefault(for: urls, locator: WorkspaceApplicationLocator()) {
+        case .system:
+            if systemDefaultOpensAll { defaultApp = systemDefault }
+        case .app(let ruleApp):
+            // The rule app is the default even if Launch Services doesn't list it for the type; the system
+            // default is still offered among the others when it opens all items.
+            defaultApp = ruleApp
+            if systemDefaultOpensAll, let systemDefault { candidates.insert(systemDefault) }
+        case MenuDefault.none:
+            break
+        }
         var choices = Choices()
         choices.defaultApp = defaultApp.map { app($0) }
-        choices.others = (common ?? [])
-            .filter { $0 != defaultApp }
+        // One entry per app (by standardized path), never the default app again.
+        var seen = Set(defaultApp.map { [$0.standardizedFileURL.path] } ?? [])
+        choices.others = candidates
+            .filter { seen.insert($0.standardizedFileURL.path).inserted }
             .map { app($0) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return choices

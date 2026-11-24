@@ -10,6 +10,8 @@ public protocol ApplicationLocating: Sendable {
     func applicationExists(at url: URL) -> Bool
     /// The app macOS opens `url` with, or nil.
     func systemDefaultApplication(for url: URL) -> URL?
+    /// Whether `url` is a directory on disk: a folder or a package such as `.rtfd`. Rules never apply to them.
+    func isDirectory(_ url: URL) -> Bool
 }
 
 /// The live locator: Launch Services through `NSWorkspace`, bundle checks through Core Foundation. Stateless.
@@ -35,5 +37,9 @@ public struct WorkspaceApplicationLocator: ApplicationLocating {
 
     public func systemDefaultApplication(for url: URL) -> URL? {
         NSWorkspace.shared.urlForApplication(toOpen: url)
+    }
+
+    public func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
     }
 }
