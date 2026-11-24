@@ -26,6 +26,42 @@ import Testing
         }
     }
 
+    @Test func rowSizeDefaultsToRegular() {
+        #expect(ViewSettings().rowSize == .regular)
+    }
+
+    @Test func rowSizeRoundTrips() {
+        withDefaults { defaults in
+            let store = ViewSettingsStore(defaults: defaults)
+            store.settings.rowSize = .large
+            let reloaded = ViewSettingsStore(defaults: defaults)
+            #expect(reloaded.settings.rowSize == .large)
+        }
+    }
+
+    private func rowSizeJSON(_ edit: (inout [String: Any]) -> Void) throws -> ViewSettings {
+        var s = ViewSettings()
+        s.showHiddenFiles = true
+        s.rowSize = .large
+        var obj = try #require(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(s)) as? [String: Any])
+        edit(&obj)
+        return try JSONDecoder().decode(
+            ViewSettings.self, from: JSONSerialization.data(withJSONObject: obj))
+    }
+
+    @Test func missingRowSizeReadsAsRegular() throws {
+        let decoded = try rowSizeJSON { $0.removeValue(forKey: "rowSize") }
+        #expect(decoded.rowSize == .regular)
+        #expect(decoded.showHiddenFiles)
+    }
+
+    @Test func unknownRowSizeReadsAsRegular() throws {
+        let decoded = try rowSizeJSON { $0["rowSize"] = "huge" }
+        #expect(decoded.rowSize == .regular)
+        #expect(decoded.showHiddenFiles)
+    }
+
     @Test func corruptDataFallsBackToDefaults() {
         withDefaults { defaults in
             let garbage = Data("garbage".utf8)

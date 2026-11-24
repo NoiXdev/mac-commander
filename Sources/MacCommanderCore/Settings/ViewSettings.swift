@@ -68,6 +68,8 @@ public struct ViewSettings: Codable, Equatable, Sendable {
     public var markdownShowsSource = false
     /// The preview pane's visibility in dual-pane mode, kept separate from `showPreview`.
     public var showPreviewInDualPane = false
+    /// Height of the file list's rows.
+    public var rowSize = RowSize.regular
 
     public init() {}
 
@@ -81,7 +83,7 @@ public struct ViewSettings: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case columnLayout, sortOrder, showHiddenFiles, showCheckboxColumn
-        case showPreview, markdownShowsSource, showPreviewInDualPane
+        case showPreview, markdownShowsSource, showPreviewInDualPane, rowSize
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -98,6 +100,7 @@ public struct ViewSettings: Codable, Equatable, Sendable {
             (try? c.decodeIfPresent(Bool.self, forKey: .markdownShowsSource)) ?? d.markdownShowsSource
         showPreviewInDualPane =
             (try? c.decodeIfPresent(Bool.self, forKey: .showPreviewInDualPane)) ?? d.showPreviewInDualPane
+        rowSize = (try? c.decodeIfPresent(RowSize.self, forKey: .rowSize)) ?? d.rowSize
     }
 }
 
