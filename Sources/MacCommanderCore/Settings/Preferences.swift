@@ -27,6 +27,10 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var knownTags: [FileTag] = []
     /// Per-extension apps for opening files inside MacCommander; the system's own association stays untouched.
     public var openWithRules = OpenWithRules()
+    /// Whether MacCommander checks GitHub for a newer release once a day.
+    public var updateCheckEnabled = true
+    /// When the last update check was attempted (successful or not); nil means never.
+    public var lastUpdateCheck: Date?
 
     public init(
         newFileName: String = "", newWindowFolderPath: String? = nil,
@@ -44,7 +48,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case newFileName, newWindowFolderPath, hiddenSidebarSections, hiddenTags, didShowFullDiskAccessHint
         case dualPaneEnabled, terminalApp, globalShortcut, knownTags
-        case openWithRules
+        case openWithRules, updateCheckEnabled, lastUpdateCheck
     }
 
     /// Lenient decoding: a missing or unreadable field falls back to its default only.
@@ -98,6 +102,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         }
         knownTags = known
         openWithRules = (try? c.decodeIfPresent(OpenWithRules.self, forKey: .openWithRules)) ?? d.openWithRules
+        updateCheckEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .updateCheckEnabled)) ?? d.updateCheckEnabled
+        lastUpdateCheck = try? c.decodeIfPresent(Date.self, forKey: .lastUpdateCheck)
     }
 
     private struct AnyDecodable: Decodable {

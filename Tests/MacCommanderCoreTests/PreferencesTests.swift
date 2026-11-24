@@ -197,3 +197,25 @@ import Testing
         #expect(junk.openWithRules == OpenWithRules())
     }
 }
+
+@MainActor
+@Suite(.english) struct PreferencesUpdateCheckTests {
+    @Test func updateCheckDefaults() throws {
+        let empty = try JSONDecoder().decode(Preferences.self, from: Data("{}".utf8))
+        #expect(empty.updateCheckEnabled == true)
+        #expect(empty.lastUpdateCheck == nil)
+
+        var prefs = Preferences()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        prefs.updateCheckEnabled = false
+        prefs.lastUpdateCheck = date
+        let again = try JSONDecoder().decode(Preferences.self, from: JSONEncoder().encode(prefs))
+        #expect(again.updateCheckEnabled == false)
+        #expect(again.lastUpdateCheck == date)
+
+        let broken = try JSONDecoder().decode(
+            Preferences.self, from: Data(#"{"updateCheckEnabled":"x","lastUpdateCheck":"y"}"#.utf8))
+        #expect(broken.updateCheckEnabled == true)
+        #expect(broken.lastUpdateCheck == nil)
+    }
+}
