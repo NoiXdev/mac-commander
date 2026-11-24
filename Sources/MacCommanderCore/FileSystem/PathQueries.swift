@@ -106,6 +106,39 @@ public enum PathQueries {
         return nil
     }
 
+    /// Opens `urls` honoring `rules`: files whose rule app is located open with it (`open(_:withApplicationAt:)`),
+    /// the rest with their default app. The groups are resolved on the blocking-I/O queue. Returns the first
+    /// error from a rule-app group; default-app errors are dropped, as `openWithDefaultApp` does.
+    @discardableResult
+    public nonisolated static func open(
+        _ urls: [URL], rules: OpenWithRules, locator: some ApplicationLocating = WorkspaceApplicationLocator()
+    ) async -> (any Error)? {
+        await open(urls, rules: rules, locator: locator, opening: { app, urls in
+            await open(urls, withApplicationAt: app)
+        })
+    }
+
+    /// Test seam for `open(_:rules:locator:)`: `opening` opens one group (`nil` app: each file's default app)
+    /// and returns its error. Groups open concurrently.
+    nonisolated static func open(
+        _ urls: [URL], rules: OpenWithRules, locator: some ApplicationLocating,
+        opening: @escaping @Sendable (URL?, [URL]) async -> (any Error)?
+    ) async -> (any Error)? {
+        let groups = await run { rules.groups(for: urls, locator: locator) }
+        let errors = await withTaskGroup(of: (Int, (any Error)?).self) { tasks in
+            for (index, group) in groups.enumerated() {
+                tasks.addTask { (index, await opening(group.app, group.urls)) }
+            }
+            var errors: [Int: any Error] = [:]
+            for await (index, error) in tasks { errors[index] = error }
+            return errors
+        }
+        return groups.indices.lazy
+            .filter { groups[$0].app != nil }
+            .compactMap { errors[$0] }
+            .first
+    }
+
     /// Asks iCloud to download `url`. Errors are ignored: the file then opens as it is, and the system
     /// reports a failed download itself.
     public static func startDownloading(_ url: URL) async {

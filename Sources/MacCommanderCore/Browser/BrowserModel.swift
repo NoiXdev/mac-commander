@@ -588,6 +588,15 @@ public final class BrowserModel {
     /// The name for new files (the app wires it to the preferences).
     @ObservationIgnored public var newFileName: @MainActor () -> String = { Preferences.builtInNewFileName }
 
+    /// The Open With rules (the app wires it to the preferences).
+    @ObservationIgnored public var openWithRules: @MainActor () -> OpenWithRules = { OpenWithRules() }
+
+    /// Hands each URL to `opener`, in order, for files opened outside the panes' own navigation (for
+    /// example archive entries extracted by the UI).
+    public func openExternally(_ urls: [URL]) {
+        for url in urls { opener(url) }
+    }
+
     /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createEmptyFile(in directory: URL? = nil) async throws -> URL {
         let parent = directory ?? currentURL

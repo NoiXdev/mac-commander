@@ -465,6 +465,18 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(samePath(model.currentURL, dir.url))
     }
 
+    @Test func openExternallyHandsEachURLToTheOpener() async throws {
+        let dir = try TemporaryDirectory()
+        let recorder = OpenRecorder()
+        let model = BrowserModel(start: dir.url, settings: makeStore()) { recorder.opened.append($0) }
+        let first = URL(fileURLWithPath: "/x/a.md")
+        let second = URL(fileURLWithPath: "/x/b.txt")
+
+        model.openExternally([first, second])
+
+        #expect(recorder.opened == [first, second])
+    }
+
     @Test func openDirectoryAndFolderSymlinkNavigate() async throws {
         let dir = try TemporaryDirectory()
         let target = try dir.folder("target")

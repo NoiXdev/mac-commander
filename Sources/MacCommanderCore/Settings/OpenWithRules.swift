@@ -50,6 +50,56 @@ public struct OpenWithRules: Codable, Equatable, Sendable {
         self[url.pathExtension]
     }
 
+    // MARK: Resolving apps
+
+    /// The rule's app: the bundle identifier's app first, then the stored path if something is there; nil
+    /// when the app is missing. The locator may block; call this off the main actor.
+    public static func application(for rule: OpenWithRule, locator: some ApplicationLocating) -> URL? {
+        if let id = rule.bundleIdentifier, let url = locator.applicationURL(bundleIdentifier: id) { return url }
+        guard !rule.appPath.isEmpty else { return nil }
+        let url = URL(fileURLWithPath: rule.appPath, isDirectory: true)
+        return locator.applicationExists(at: url) ? url : nil
+    }
+
+    /// The located app of the rule for `url`, or nil when there is no rule or its app is missing.
+    private func ruleApplication(for url: URL, locator: some ApplicationLocating) -> URL? {
+        rule(for: url).flatMap { Self.application(for: $0, locator: locator) }
+    }
+
+    /// `urls` split by the app that opens them: a located rule app, or nil for the system default. Groups
+    /// keep the order of each app's first appearance and URLs keep their order inside a group. Off the main actor.
+    public func groups(for urls: [URL], locator: some ApplicationLocating) -> [OpenGroup] {
+        var groups: [OpenGroup] = []
+        for url in urls {
+            let app = ruleApplication(for: url, locator: locator)
+            if let index = groups.firstIndex(where: { Self.sameApp($0.app, app) }) {
+                groups[index].urls.append(url)
+            } else {
+                groups.append(OpenGroup(app: app, urls: [url]))
+            }
+        }
+        return groups
+    }
+
+    /// Which app the Open With menu marks as the default for `urls`; see `MenuDefault`. Off the main actor.
+    public func menuDefault(for urls: [URL], locator: some ApplicationLocating) -> MenuDefault {
+        let ruleApps = urls.map { ruleApplication(for: $0, locator: locator) }
+        guard ruleApps.contains(where: { $0 != nil }) else { return .system }
+        var shared: URL?
+        for (url, ruleApp) in zip(urls, ruleApps) {
+            guard let app = ruleApp ?? locator.systemDefaultApplication(for: url) else { return .none }
+            if let shared, !Self.sameApp(shared, app) { return .none }
+            shared = shared ?? app
+        }
+        guard let shared else { return .none }
+        return .app(shared)
+    }
+
+    /// Two app URLs name the same app; a trailing slash or `..` doesn't matter.
+    private static func sameApp(_ lhs: URL?, _ rhs: URL?) -> Bool {
+        lhs?.standardizedFileURL.path == rhs?.standardizedFileURL.path
+    }
+
     // MARK: Coding as a JSON object `{ext: rule}`
 
     private struct Key: CodingKey {
@@ -77,4 +127,25 @@ public struct OpenWithRules: Codable, Equatable, Sendable {
             try c.encode(rule, forKey: Key(stringValue: ext))
         }
     }
+}
+
+/// Files that open with one app. `app == nil` means each file's system default.
+public struct OpenGroup: Equatable, Sendable {
+    public var app: URL?
+    public var urls: [URL]
+
+    public init(app: URL?, urls: [URL]) {
+        self.app = app
+        self.urls = urls
+    }
+}
+
+/// The Open With menu's default choice for a selection.
+public enum MenuDefault: Equatable, Sendable {
+    /// No file has a located rule app: the menu keeps its usual choice.
+    case system
+    /// Every file opens with this app (its rule app, else its system default) and at least one has a rule.
+    case app(URL)
+    /// The files open with different apps, or one has no app.
+    case none
 }
