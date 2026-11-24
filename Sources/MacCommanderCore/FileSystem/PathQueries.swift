@@ -10,6 +10,8 @@ public struct PathInfo: Sendable, Equatable {
     /// False for network volumes. A missing path reports true: there is no volume to ask, and
     /// the caller treats it as gone anyway.
     public let isLocalVolume: Bool
+    /// A folder a double-click navigates into: a directory that isn't a package.
+    public var isPlainFolder: Bool { isDirectory && !isPackage }
 
     public init(exists: Bool, isDirectory: Bool, isPackage: Bool, isRegularFile: Bool, isLocalVolume: Bool) {
         self.exists = exists

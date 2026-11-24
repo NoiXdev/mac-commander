@@ -356,25 +356,61 @@ public final class BrowserModel {
     /// Navigating ends a shown search; opening a file leaves it.
     public func open(_ item: FileItem) async {
         let generation = beginNavigation()
-        if archiveLocation != nil, !isSearching {
-            if item.isDirectory {
-                endSearch()
-                await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
-            }
-        } else if item.isDirectory {
-            endSearch()
-            await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
-        } else if !item.isPackage, await isPlainFolder(item.url) {
+        switch await openAction(for: item) {
+        case .navigate, .navigateInArchive:
+            // Only a symlink's folder check suspends; a navigation that came meanwhile wins.
             guard generation == navigationGeneration else { return }
             endSearch()
             await navigate(to: item.url, anyBrowsable: false, openFallback: false, generation: generation)
-        } else if ArchiveFormats.isArchive(item.url) {
+        case .openArchive:
             endSearch()
             await navigate(to: item.url, anyBrowsable: false, openFallback: true, generation: generation)
-        } else {
+        case .openFile:
             if item.cloudStatus == .notDownloaded { await downloader(item.url) }
             opener(item.url)
+        case .ignore:
+            break
         }
+    }
+
+    /// The folder a new tab would show for `item`: its URL when `open(item)` navigates into it as a folder
+    /// outside an archive (a folder, or a symlink to a plain folder, at the link's path). Nil for packages,
+    /// archive files, files, and anything while the model lists an archive's contents. Doesn't navigate.
+    public func folderForNewTab(_ item: FileItem) async -> URL? {
+        await openAction(for: item) == .navigate ? item.url : nil
+    }
+
+    /// A synchronous, cheap stand-in for `folderForNewTab(_:) != nil` outside an archive, for menus that can't
+    /// await. A listed folder is one; otherwise only a symlink costs a lookup, and it uses `openAction`'s rule
+    /// (the target is a folder and not a package; an archive file is a file).
+    public static func mayOpenAsFolder(_ item: FileItem) -> Bool {
+        if item.isDirectory { return true }
+        guard !item.isPackage, (try? item.url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true
+        else { return false }
+        return PathQueries.infoNow(item.url).isPlainFolder
+    }
+
+    /// What `open(_:)` does with an item.
+    private enum OpenAction {
+        /// Navigates into it as a folder.
+        case navigate
+        /// Navigates into a folder inside the listed archive.
+        case navigateInArchive
+        /// Lists an archive file as a folder.
+        case openArchive
+        /// Hands it to `opener`.
+        case openFile
+        /// Nothing: a file entry inside an archive (the UI extracts it first).
+        case ignore
+    }
+
+    /// The one classification behind `open(_:)` and `folderForNewTab(_:)`. The shown items decide
+    /// (`archiveLocation` is published with them). Only a symlink's folder check suspends.
+    private func openAction(for item: FileItem) async -> OpenAction {
+        if archiveLocation != nil, !isSearching { return item.isDirectory ? .navigateInArchive : .ignore }
+        if item.isDirectory { return .navigate }
+        if !item.isPackage, await isPlainFolder(item.url) { return .navigate }
+        return ArchiveFormats.isArchive(item.url) ? .openArchive : .openFile
     }
 
     /// Lists a subfolder for inline expansion, with the same sorting and filtering as `items`.
@@ -1298,7 +1334,7 @@ public final class BrowserModel {
     /// A folder (symlinks followed) that isn't a package, checked off the main actor.
     private func isPlainFolder(_ url: URL) async -> Bool {
         let info = await queries.info(url)
-        return info.isDirectory && !info.isPackage
+        return info.isPlainFolder
     }
 
     /// What a load lists: for a folder its `PathInfo`; otherwise also the archive location, if any.
