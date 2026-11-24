@@ -12,13 +12,34 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-swift build -c "$CONFIG"
-BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)"
+if [[ "$CONFIG" == "release" ]]; then
+    # Universal: Apple silicon and Intel, as the Homebrew tap promises for everything it ships. Two single-arch
+    # builds joined with lipo, as macSCP does. `--build-system native` is spelled out: Swift Build (the default
+    # since Swift 6.4) writes both triples to the same products folder, so the second slice overwrote the first.
+    FLAGS=(-c release --build-system native)
+    swift build "${FLAGS[@]}" --triple arm64-apple-macosx
+    swift build "${FLAGS[@]}" --triple x86_64-apple-macosx
+    BIN_PATH="$(swift build "${FLAGS[@]}" --triple arm64-apple-macosx --show-bin-path)"
+    X86_BIN_PATH="$(swift build "${FLAGS[@]}" --triple x86_64-apple-macosx --show-bin-path)"
+else
+    # Debug builds stay host-only, for speed.
+    swift build -c "$CONFIG"
+    BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)"
+fi
 
 APP=build/MacCommander.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN_PATH/MacCommander" "$APP/Contents/MacOS/MacCommander"
+if [[ -n "${X86_BIN_PATH:-}" ]]; then
+    lipo -create "$BIN_PATH/MacCommander" "$X86_BIN_PATH/MacCommander" -output "$APP/Contents/MacOS/MacCommander"
+    ARCHS="$(lipo -archs "$APP/Contents/MacOS/MacCommander")"
+    if [[ "$ARCHS" != *arm64* || "$ARCHS" != *x86_64* ]]; then
+        echo "error: expected a universal binary, got: $ARCHS" >&2
+        exit 1
+    fi
+else
+    cp "$BIN_PATH/MacCommander" "$APP/Contents/MacOS/MacCommander"
+fi
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 if [[ ! -f THIRD-PARTY-NOTICES.md ]]; then
     echo "error: THIRD-PARTY-NOTICES.md is missing; it must ship in the app bundle" >&2
