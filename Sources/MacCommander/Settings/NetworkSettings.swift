@@ -29,14 +29,14 @@ struct NetworkSettings: View {
             .frame(minHeight: 220, maxHeight: .infinity)
             .overlay {
                 if store.shares.isEmpty {
-                    Text(String(localized: "No saved shares"))
+                    L10n.text("settings.network.empty", "No saved shares")
                         .foregroundStyle(.secondary)
                 }
             }
             HStack {
                 buttons
                 Spacer()
-                Button(String(localized: "Connect to Server…")) { sheets.showConnectToServer = true }
+                Button(L10n.string("shares.action.connectToServer", "Connect to Server…")) { sheets.showConnectToServer = true }
             }
         }
         .padding(20)
@@ -72,19 +72,19 @@ struct NetworkSettings: View {
     private var buttons: some View {
         let share = selected
         let status = share.flatMap { manager.status[$0.id] }
-        Button(String(localized: "Connect")) {
+        Button(L10n.string("shares.action.connect", "Connect")) {
             guard let share else { return }
             Task { await ShareActions.connect(share, manager: manager, model: nil, sheets: sheets) }
         }
         .disabled(share == nil || NetworkSection.isConnected(status))
-        Button(String(localized: "Disconnect")) {
+        Button(L10n.string("shares.action.disconnect", "Disconnect")) {
             guard let share else { return }
             Task { await ShareActions.disconnect(share, manager: manager, sheets: sheets) }
         }
         .disabled(share.map { !NetworkSection.canDisconnect($0, status: status, manager: manager) } ?? true)
-        Button(String(localized: "Edit…")) { sheets.editing = share }
+        Button(L10n.string("shares.action.edit", "Edit…")) { sheets.editing = share }
             .disabled(share == nil)
-        Button(String(localized: "Remove…")) {
+        Button(L10n.string("shares.action.remove", "Remove…")) {
             guard let share else { return }
             Task { await ShareActions.confirmRemove(share, manager: manager, sheets: sheets) }
         }

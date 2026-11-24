@@ -226,5 +226,37 @@
             <string>%lld files couldn't be changed.</string>
         </dict>
     </dict>
+    <key>tags.rename.files</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>The tag is renamed on 1 file.</string>
+            <key>other</key>
+            <string>The tag is renamed on %lld files.</string>
+        </dict>
+    </dict>
+    <key>tags.delete.files</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>It is removed from 1 file.</string>
+            <key>other</key>
+            <string>It is removed from %lld files.</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

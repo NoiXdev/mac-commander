@@ -579,7 +579,8 @@ public final class BrowserModel {
         let parent = directory ?? currentURL
         try await refuseWritesInArchive(parent)
         let historyAtStart = history
-        let created = try await Self.offMain { try ItemCreator.createFolder(in: parent) }
+        let folderName = ItemCreator.newFolderName
+        let created = try await Self.offMain { try ItemCreator.createFolder(in: parent, named: folderName) }
         operations.recordCreated(created, isFolder: true)
         return await didCreate(created, in: parent, historyAtStart: historyAtStart)
     }

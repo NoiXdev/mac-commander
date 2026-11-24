@@ -352,6 +352,17 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(model.items.contains { $0.url == url && $0.isDirectory })
     }
 
+    /// The name comes from the caller's language, although the folder is created off the main actor.
+    @Test func createFolderUsesTheCallersLanguage() async throws {
+        let dir = try TemporaryDirectory()
+        let model = BrowserModel(start: dir.url, settings: makeStore())
+        await model.reload()
+
+        let url = try await L10n.$localeOverride.withValue("de") { try await model.createFolder() }
+
+        #expect(url.lastPathComponent == "Neuer Ordner")
+    }
+
     @Test func renameUpdatesItemsAndSelection() async throws {
         let dir = try TemporaryDirectory()
         let old = try dir.file("old.txt")
@@ -746,7 +757,7 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(await waitUntil { names(model) == ["a.txt"] })
     }
 
-    @Test func selectAfterOperationSelectsItems() async throws {
+    @Test(.english) func selectAfterOperationSelectsItems() async throws {
         let dir = try TemporaryDirectory()
         let work = try dir.folder("work")
         let a = try dir.file("work/a.txt")

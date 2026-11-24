@@ -14,6 +14,48 @@
 "settings.general.language.relaunch" = "Relaunch MacCommander";
 "settings.general.newFileName.invalid" = "Not a valid file name; “%@” is used.";
 
+/* Settings > View */
+"settings.view.showCheckboxColumn" = "Show checkbox column";
+"settings.view.showHiddenFiles" = "Show hidden files";
+"settings.view.dualPane" = "Enable dual-pane mode";
+"settings.view.dualPaneFooter" = "Adds a second folder pane to windows (View ▸ Dual Pane, ⌘2).";
+
+/* Settings > General */
+"settings.general.newWindows" = "New windows open:";
+"settings.general.newWindows.choose" = "Choose…";
+"settings.general.newWindows.home" = "Home";
+"settings.general.newWindows.panelPrompt" = "Choose";
+"settings.general.newFileName.label" = "Default name for new files";
+"settings.general.fileViewer" = "Use MacCommander for “Show in Finder”";
+"settings.general.fileViewer.footer" = "Other apps’ “Show in Finder” opens a MacCommander window. Folders opened from Spotlight or the Dock still open in the Finder.";
+"settings.general.fullDiskAccess.label" = "Full Disk Access:";
+"settings.general.fullDiskAccess.button" = "Full Disk Access…";
+
+/* Settings > Terminal */
+"settings.terminal.app" = "Terminal app:";
+
+/* Settings > Shortcuts */
+"settings.shortcuts.globalHotkey" = "Global hotkey";
+"settings.shortcuts.clear" = "Clear";
+"settings.shortcuts.inUse" = "This shortcut is already in use";
+"settings.shortcuts.recording" = "Type shortcut";
+"settings.shortcuts.empty" = "Click to record";
+
+/* Settings > Sidebar */
+"settings.sidebar.show.header" = "Show in Sidebar";
+"settings.sidebar.hiddenTags.header" = "Hidden Tags";
+"settings.sidebar.hiddenTags.empty" = "No hidden tags";
+"settings.sidebar.hiddenTags.show" = "Show";
+
+/* Settings > Tags */
+"settings.tags.footer" = "Renaming or deleting a tag changes every file in your home folder that Spotlight finds with it.";
+"settings.tags.rename" = "Rename…";
+"settings.tags.delete" = "Delete…";
+"settings.tags.showInSidebar" = "Show in Sidebar";
+
+/* Settings > Network */
+"settings.network.empty" = "No saved shares";
+
 /* File list: folder load errors */
 "fileList.error.noPermission" = "You don't have permission to see the contents of “%@”.";
 "fileList.error.notFound" = "The folder “%@” can't be found.";
@@ -138,6 +180,89 @@
 "shares.error.noLongerExists" = "The share no longer exists.";
 "shares.error.connectionCancelled" = "The connection was cancelled.";
 "shares.error.alreadyConnected" = "Already connected.";
+
+/* Sidebar */
+"sidebar.section.favorites" = "Favorites";
+"sidebar.section.cloud" = "Cloud";
+"sidebar.section.locations" = "Locations";
+"sidebar.section.network" = "Network";
+"sidebar.section.tags" = "Tags";
+"sidebar.favorites.removeFromSidebar" = "Remove from Sidebar";
+"sidebar.favorites.missing" = "“%@” can't be found. Remove it from Favorites?";
+"sidebar.favorites.missing.remove" = "Remove";
+"sidebar.favorites.missing.cancel" = "Cancel";
+"sidebar.cloud.iCloudDrive" = "iCloud Drive";
+"sidebar.cloud.openApp" = "Open %@";
+"sidebar.cloud.active" = "Connected";
+"sidebar.cloud.appNotRunning" = "%@ isn't running: changes don't sync.";
+"sidebar.cloud.disconnected" = "Not connected: macOS doesn't know this folder as a %@ account. It may be left over from a removed account.";
+"sidebar.locations.eject" = "Eject";
+"sidebar.locations.ejectFailed" = "The volume “%@” couldn't be ejected.";
+
+/* Tags: sidebar, Settings, menus and prompts */
+"tags.menu.title" = "Tags";
+"tags.action.newTag" = "New Tag…";
+"tags.action.renameTag" = "Rename Tag…";
+"tags.action.deleteTag" = "Delete Tag…";
+"tags.action.removeFromSidebar" = "Remove Tag from Sidebar";
+"tags.action.color" = "Color";
+"tags.color.none" = "None";
+"tags.new.title" = "New Tag";
+"tags.new.message" = "Enter a name for the new tag.";
+"tags.new.messageWithColor" = "Enter a name and choose a color for the new tag.";
+"tags.new.add" = "Add";
+"tags.prompt.placeholder" = "Tag name";
+"tags.prompt.cancel" = "Cancel";
+"tags.rename.title" = "Rename “%@”";
+"tags.rename.noFiles" = "No file has this tag yet.";
+"tags.rename.button" = "Rename";
+"tags.delete.title" = "Delete the tag “%@”?";
+"tags.delete.noFiles" = "No file has this tag.";
+"tags.delete.button" = "Delete Tag";
+
+/* Network shares: sidebar, Settings, sheets and alerts */
+"shares.action.connectToServer" = "Connect to Server…";
+"shares.action.connect" = "Connect";
+"shares.action.disconnect" = "Disconnect";
+"shares.action.signIn" = "Sign In…";
+"shares.action.edit" = "Edit…";
+"shares.action.remove" = "Remove…";
+"shares.action.cancel" = "Cancel";
+"shares.status.connected" = "Connected";
+"shares.status.needsSignIn" = "Sign-in needed";
+"shares.status.available" = "Not connected";
+"shares.status.unreachable" = "Can’t be reached";
+"shares.status.checking" = "Checking…";
+"shares.connect.address" = "Server Address:";
+"shares.connect.recent" = "Recent";
+"shares.connect.failed" = "“%1$@” couldn’t be connected: %2$@";
+"shares.unreachable.message" = "“%@” can’t be reached from this network.";
+"shares.unreachable.retry" = "Retry";
+"shares.disconnect.unreachable" = "The server can’t be reached.";
+"shares.disconnect.cancelled" = "The operation was cancelled.";
+"shares.disconnect.refused" = "The server refused the request.";
+"shares.disconnect.inUse" = "The share is in use.";
+"shares.disconnect.failed" = "“%1$@” couldn’t be disconnected: %2$@";
+"shares.remove.title" = "Remove “%@” from the sidebar?";
+"shares.remove.message" = "The share stays connected until you disconnect it. Saved passwords are kept in the Keychain.";
+"shares.remove.button" = "Remove";
+"shares.edit.title" = "Edit “%@”";
+"shares.edit.address" = "Address";
+"shares.edit.name" = "Name";
+"shares.edit.user" = "User";
+"shares.edit.reconnect" = "Reconnect automatically";
+"shares.edit.guest" = "Connect as Guest";
+"shares.edit.invalidAddress" = "Enter a valid smb://, afp://, nfs://, https:// or http:// address.";
+"shares.edit.duplicate" = "Another saved share already uses this address.";
+"shares.edit.save" = "Save";
+"shares.signIn.title" = "Sign in to “%@”";
+"shares.signIn.username" = "Username";
+"shares.signIn.domainHint" = "For a domain account use DOMAIN\\name or name@domain.";
+"shares.signIn.password" = "Password";
+"shares.signIn.remember" = "Remember in Keychain";
+"shares.signIn.guest" = "Connect as Guest";
+"shares.signIn.noGuest" = "This share doesn’t allow guest access.";
+"shares.signIn.rejected" = "The user name or password is incorrect.";
 
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ is in %2$@.";

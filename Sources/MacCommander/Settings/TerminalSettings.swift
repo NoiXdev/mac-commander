@@ -9,7 +9,7 @@ struct TerminalSettings: View {
     var body: some View {
         Form {
             Section {
-                Picker(String(localized: "Terminal app:"), selection: terminalApp) {
+                Picker(L10n.string("settings.terminal.app", "Terminal app:"), selection: terminalApp) {
                     ForEach(installedTerminals, id: \.self) { app in
                         Text(app.displayName).tag(app)
                     }

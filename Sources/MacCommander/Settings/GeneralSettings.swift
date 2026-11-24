@@ -39,14 +39,14 @@ struct GeneralSettings: View {
                 }
             }
             Section {
-                LabeledContent(String(localized: "New windows open:")) {
+                LabeledContent(L10n.string("settings.general.newWindows", "New windows open:")) {
                     HStack {
                         Text(folderDescription)
                             .lineLimit(1)
                             .truncationMode(.middle)
                             .help(preferences.preferences.newWindowFolderPath ?? "")
-                        Button(String(localized: "Choose…"), action: chooseFolder)
-                        Button(String(localized: "Home")) { preferences.preferences.newWindowFolderPath = nil }
+                        Button(L10n.string("settings.general.newWindows.choose", "Choose…"), action: chooseFolder)
+                        Button(L10n.string("settings.general.newWindows.home", "Home")) { preferences.preferences.newWindowFolderPath = nil }
                             .disabled(preferences.preferences.newWindowFolderPath == nil)
                     }
                 }
@@ -54,7 +54,7 @@ struct GeneralSettings: View {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField(
-                        String(localized: "Default name for new files"),
+                        L10n.string("settings.general.newFileName.label", "Default name for new files"),
                         text: Bindable(preferences).preferences.newFileName,
                         prompt: Text(Preferences.builtInNewFileName))
                     if !preferences.preferences.newFileName.isEmpty,
@@ -68,15 +68,15 @@ struct GeneralSettings: View {
             }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    Toggle(String(localized: "Use MacCommander for “Show in Finder”"), isOn: fileViewerEnabled)
-                    Text(String(localized: "Other apps’ “Show in Finder” opens a MacCommander window. Folders opened from Spotlight or the Dock still open in the Finder."))
+                    Toggle(L10n.string("settings.general.fileViewer", "Use MacCommander for “Show in Finder”"), isOn: fileViewerEnabled)
+                    L10n.text("settings.general.fileViewer.footer", "Other apps’ “Show in Finder” opens a MacCommander window. Folders opened from Spotlight or the Dock still open in the Finder.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
             Section {
-                LabeledContent(String(localized: "Full Disk Access:")) {
-                    Button(String(localized: "Full Disk Access…")) {
+                LabeledContent(L10n.string("settings.general.fullDiskAccess.label", "Full Disk Access:")) {
+                    Button(L10n.string("settings.general.fullDiskAccess.button", "Full Disk Access…")) {
                         FullDiskAccessHint.present(preferences: preferences)
                     }
                 }
@@ -116,7 +116,7 @@ struct GeneralSettings: View {
 
     /// The chosen folder's path with `~` for home, or "Home".
     private var folderDescription: String {
-        guard let path = preferences.preferences.newWindowFolderPath else { return String(localized: "Home") }
+        guard let path = preferences.preferences.newWindowFolderPath else { return L10n.string("settings.general.newWindows.home", "Home") }
         return (path as NSString).abbreviatingWithTildeInPath
     }
 
@@ -126,7 +126,7 @@ struct GeneralSettings: View {
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.prompt = String(localized: "Choose")
+        panel.prompt = L10n.string("settings.general.newWindows.panelPrompt", "Choose")
         if let path = preferences.preferences.newWindowFolderPath {
             panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true)
         }

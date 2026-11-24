@@ -157,9 +157,9 @@
             <key>NSStringFormatValueTypeKey</key>
             <string>lld</string>
             <key>one</key>
-            <string>1 Objekt wird konvertiert …</string>
+            <string>1 Objekt wird konvertiert …</string>
             <key>other</key>
-            <string>%lld Objekte werden konvertiert …</string>
+            <string>%lld Objekte werden konvertiert …</string>
         </dict>
     </dict>
     <key>operation.extract.title</key>
@@ -224,6 +224,38 @@
             <string>1 Datei konnte nicht geändert werden.</string>
             <key>other</key>
             <string>%lld Dateien konnten nicht geändert werden.</string>
+        </dict>
+    </dict>
+    <key>tags.rename.files</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Das Tag wird bei 1 Datei umbenannt.</string>
+            <key>other</key>
+            <string>Das Tag wird bei %lld Dateien umbenannt.</string>
+        </dict>
+    </dict>
+    <key>tags.delete.files</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Es wird von 1 Datei entfernt.</string>
+            <key>other</key>
+            <string>Es wird von %lld Dateien entfernt.</string>
         </dict>
     </dict>
 </dict>

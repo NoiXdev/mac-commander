@@ -75,7 +75,7 @@ enum ShareActions {
         case .failed(let message):
             await waitForSheetToClose(sheets.window.window)
             FileActions.showAlert(
-                [String(localized: "“\(share.name)” couldn’t be connected: \(message)")], window: sheets.window.window)
+                [L10n.format("shares.connect.failed", "“%1$@” couldn’t be connected: %2$@", share.name, message)], window: sheets.window.window)
         }
     }
 
@@ -86,9 +86,9 @@ enum ShareActions {
     ) async {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = String(localized: "“\(share.name)” can’t be reached from this network.")
-        alert.addButton(withTitle: String(localized: "Retry"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.messageText = L10n.format("shares.unreachable.message", "“%@” can’t be reached from this network.", share.name)
+        alert.addButton(withTitle: L10n.string("shares.unreachable.retry", "Retry"))
+        alert.addButton(withTitle: L10n.string("shares.action.cancel", "Cancel"))
         guard await run(alert, window: sheets.window.window) == .alertFirstButtonReturn else { return }
         await connect(share, manager: manager, model: model, sheets: sheets, pane: pane)
     }
@@ -101,13 +101,13 @@ enum ShareActions {
             let message: String
             switch error {
             case .failed(let detail): message = detail
-            case .unreachable: message = String(localized: "The server can’t be reached.")
-            case .cancelled: message = String(localized: "The operation was cancelled.")
-            case .authenticationFailed: message = String(localized: "The server refused the request.")
-            case .alreadyMounted: message = String(localized: "The share is in use.")
+            case .unreachable: message = L10n.string("shares.disconnect.unreachable", "The server can’t be reached.")
+            case .cancelled: message = L10n.string("shares.disconnect.cancelled", "The operation was cancelled.")
+            case .authenticationFailed: message = L10n.string("shares.disconnect.refused", "The server refused the request.")
+            case .alreadyMounted: message = L10n.string("shares.disconnect.inUse", "The share is in use.")
             }
             FileActions.showAlert(
-                [String(localized: "“\(share.name)” couldn’t be disconnected: \(message)")],
+                [L10n.format("shares.disconnect.failed", "“%1$@” couldn’t be disconnected: %2$@", share.name, message)],
                 window: sheets.window.window)
         }
     }
@@ -116,13 +116,11 @@ enum ShareActions {
     static func confirmRemove(_ share: SavedShare, manager: ShareManager, sheets: ShareSheets) async {
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = String(localized: "Remove “\(share.name)” from the sidebar?")
-        alert.informativeText = String(
-            localized:
-                "The share stays connected until you disconnect it. Saved passwords are kept in the Keychain.")
-        let remove = alert.addButton(withTitle: String(localized: "Remove"))
+        alert.messageText = L10n.format("shares.remove.title", "Remove “%@” from the sidebar?", share.name)
+        alert.informativeText = L10n.string("shares.remove.message", "The share stays connected until you disconnect it. Saved passwords are kept in the Keychain.")
+        let remove = alert.addButton(withTitle: L10n.string("shares.remove.button", "Remove"))
         remove.hasDestructiveAction = true
-        let cancel = alert.addButton(withTitle: String(localized: "Cancel"))
+        let cancel = alert.addButton(withTitle: L10n.string("shares.action.cancel", "Cancel"))
         // Cancel is the default button (Return); Remove has no key equivalent.
         remove.keyEquivalent = ""
         cancel.keyEquivalent = "\r"

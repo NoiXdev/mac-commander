@@ -7,21 +7,21 @@ struct SidebarSettings: View {
 
     var body: some View {
         Form {
-            Section(String(localized: "Show in Sidebar")) {
+            Section(L10n.string("settings.sidebar.show.header", "Show in Sidebar")) {
                 ForEach(SidebarSection.allCases, id: \.self) { section in
                     Toggle(Self.title(for: section), isOn: shown(section))
                 }
             }
-            Section(String(localized: "Hidden Tags")) {
+            Section(L10n.string("settings.sidebar.hiddenTags.header", "Hidden Tags")) {
                 if hiddenTags.isEmpty {
-                    Text(String(localized: "No hidden tags"))
+                    L10n.text("settings.sidebar.hiddenTags.empty", "No hidden tags")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(hiddenTags, id: \.self) { tag in
                         HStack {
                             Text(tag)
                             Spacer()
-                            Button(String(localized: "Show")) { preferences.preferences.hiddenTags.remove(tag) }
+                            Button(L10n.string("settings.sidebar.hiddenTags.show", "Show")) { preferences.preferences.hiddenTags.remove(tag) }
                         }
                     }
                 }
@@ -48,11 +48,11 @@ struct SidebarSettings: View {
 
     static func title(for section: SidebarSection) -> String {
         switch section {
-        case .favorites: String(localized: "Favorites")
-        case .iCloud: String(localized: "Cloud")
-        case .locations: String(localized: "Locations")
-        case .network: String(localized: "Network")
-        case .tags: String(localized: "Tags")
+        case .favorites: L10n.string("sidebar.section.favorites", "Favorites")
+        case .iCloud: L10n.string("sidebar.section.cloud", "Cloud")
+        case .locations: L10n.string("sidebar.section.locations", "Locations")
+        case .network: L10n.string("sidebar.section.network", "Network")
+        case .tags: L10n.string("sidebar.section.tags", "Tags")
         }
     }
 }

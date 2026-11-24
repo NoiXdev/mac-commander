@@ -14,6 +14,48 @@
 "settings.general.language.relaunch" = "MacCommander neu starten";
 "settings.general.newFileName.invalid" = "Kein gültiger Dateiname; „%@“ wird verwendet.";
 
+/* Settings > View */
+"settings.view.showCheckboxColumn" = "Spalte mit Markierungsfeldern anzeigen";
+"settings.view.showHiddenFiles" = "Versteckte Dateien anzeigen";
+"settings.view.dualPane" = "Modus mit zwei Bereichen aktivieren";
+"settings.view.dualPaneFooter" = "Fügt Fenstern einen zweiten Ordnerbereich hinzu (Darstellung ▸ Zwei Bereiche, ⌘2).";
+
+/* Settings > General */
+"settings.general.newWindows" = "Neue Fenster zeigen:";
+"settings.general.newWindows.choose" = "Auswählen …";
+"settings.general.newWindows.home" = "Benutzerordner";
+"settings.general.newWindows.panelPrompt" = "Auswählen";
+"settings.general.newFileName.label" = "Standardname für neue Dateien";
+"settings.general.fileViewer" = "MacCommander für „Im Finder zeigen“ verwenden";
+"settings.general.fileViewer.footer" = "„Im Finder zeigen“ in anderen Apps öffnet ein MacCommander-Fenster. Ordner, die du über Spotlight oder das Dock öffnest, werden weiterhin im Finder geöffnet.";
+"settings.general.fullDiskAccess.label" = "Festplattenvollzugriff:";
+"settings.general.fullDiskAccess.button" = "Festplattenvollzugriff …";
+
+/* Settings > Terminal */
+"settings.terminal.app" = "Terminal-App:";
+
+/* Settings > Shortcuts */
+"settings.shortcuts.globalHotkey" = "Globaler Kurzbefehl";
+"settings.shortcuts.clear" = "Entfernen";
+"settings.shortcuts.inUse" = "Dieser Kurzbefehl wird bereits verwendet";
+"settings.shortcuts.recording" = "Kurzbefehl drücken";
+"settings.shortcuts.empty" = "Zum Aufnehmen klicken";
+
+/* Settings > Sidebar */
+"settings.sidebar.show.header" = "In der Seitenleiste anzeigen";
+"settings.sidebar.hiddenTags.header" = "Ausgeblendete Tags";
+"settings.sidebar.hiddenTags.empty" = "Keine ausgeblendeten Tags";
+"settings.sidebar.hiddenTags.show" = "Einblenden";
+
+/* Settings > Tags */
+"settings.tags.footer" = "Wenn du ein Tag umbenennst oder löschst, ändert das jede Datei in deinem Benutzerordner, die Spotlight mit diesem Tag findet.";
+"settings.tags.rename" = "Umbenennen …";
+"settings.tags.delete" = "Löschen …";
+"settings.tags.showInSidebar" = "In der Seitenleiste anzeigen";
+
+/* Settings > Network */
+"settings.network.empty" = "Keine gesicherten Freigaben";
+
 /* File list: folder load errors */
 "fileList.error.noPermission" = "Du hast keine Berechtigung, den Inhalt von „%@“ anzuzeigen.";
 "fileList.error.notFound" = "Der Ordner „%@“ wurde nicht gefunden.";
@@ -63,7 +105,7 @@
 "operation.duplicate.titleOne" = "„%@“ wird dupliziert";
 "operation.trash.titleOne" = "„%@“ wird in den Papierkorb gelegt";
 "operation.compress.titleOne" = "„%@“ wird komprimiert";
-"operation.convert.titleOne" = "„%@“ wird konvertiert …";
+"operation.convert.titleOne" = "„%@“ wird konvertiert …";
 "operation.extract.titleOne" = "„%@“ wird entpackt";
 "operation.undo.duplicate" = "Duplizieren";
 "operation.undo.trash" = "In den Papierkorb legen";
@@ -138,6 +180,89 @@
 "shares.error.noLongerExists" = "Die Freigabe existiert nicht mehr.";
 "shares.error.connectionCancelled" = "Die Verbindung wurde abgebrochen.";
 "shares.error.alreadyConnected" = "Bereits verbunden.";
+
+/* Sidebar */
+"sidebar.section.favorites" = "Favoriten";
+"sidebar.section.cloud" = "Cloud";
+"sidebar.section.locations" = "Orte";
+"sidebar.section.network" = "Netzwerk";
+"sidebar.section.tags" = "Tags";
+"sidebar.favorites.removeFromSidebar" = "Aus der Seitenleiste entfernen";
+"sidebar.favorites.missing" = "„%@“ wurde nicht gefunden. Aus den Favoriten entfernen?";
+"sidebar.favorites.missing.remove" = "Entfernen";
+"sidebar.favorites.missing.cancel" = "Abbrechen";
+"sidebar.cloud.iCloudDrive" = "iCloud Drive";
+"sidebar.cloud.openApp" = "%@ öffnen";
+"sidebar.cloud.active" = "Verbunden";
+"sidebar.cloud.appNotRunning" = "%@ läuft nicht: Änderungen werden nicht synchronisiert.";
+"sidebar.cloud.disconnected" = "Nicht verbunden: macOS kennt diesen Ordner nicht als %@-Account. Er stammt vielleicht von einem entfernten Account.";
+"sidebar.locations.eject" = "Auswerfen";
+"sidebar.locations.ejectFailed" = "Das Volume „%@“ konnte nicht ausgeworfen werden.";
+
+/* Tags: sidebar, Settings, menus and prompts */
+"tags.menu.title" = "Tags";
+"tags.action.newTag" = "Neues Tag …";
+"tags.action.renameTag" = "Tag umbenennen …";
+"tags.action.deleteTag" = "Tag löschen …";
+"tags.action.removeFromSidebar" = "Tag aus der Seitenleiste entfernen";
+"tags.action.color" = "Farbe";
+"tags.color.none" = "Keine";
+"tags.new.title" = "Neues Tag";
+"tags.new.message" = "Gib einen Namen für das neue Tag ein.";
+"tags.new.messageWithColor" = "Gib einen Namen ein und wähle eine Farbe für das neue Tag.";
+"tags.new.add" = "Hinzufügen";
+"tags.prompt.placeholder" = "Name des Tags";
+"tags.prompt.cancel" = "Abbrechen";
+"tags.rename.title" = "„%@“ umbenennen";
+"tags.rename.noFiles" = "Noch keine Datei hat dieses Tag.";
+"tags.rename.button" = "Umbenennen";
+"tags.delete.title" = "Das Tag „%@“ löschen?";
+"tags.delete.noFiles" = "Keine Datei hat dieses Tag.";
+"tags.delete.button" = "Tag löschen";
+
+/* Network shares: sidebar, Settings, sheets and alerts */
+"shares.action.connectToServer" = "Mit Server verbinden …";
+"shares.action.connect" = "Verbinden";
+"shares.action.disconnect" = "Trennen";
+"shares.action.signIn" = "Anmelden …";
+"shares.action.edit" = "Bearbeiten …";
+"shares.action.remove" = "Entfernen …";
+"shares.action.cancel" = "Abbrechen";
+"shares.status.connected" = "Verbunden";
+"shares.status.needsSignIn" = "Anmeldung erforderlich";
+"shares.status.available" = "Nicht verbunden";
+"shares.status.unreachable" = "Nicht erreichbar";
+"shares.status.checking" = "Wird geprüft …";
+"shares.connect.address" = "Serveradresse:";
+"shares.connect.recent" = "Zuletzt benutzt";
+"shares.connect.failed" = "„%1$@“ konnte nicht verbunden werden: %2$@";
+"shares.unreachable.message" = "„%@“ ist aus diesem Netzwerk nicht erreichbar.";
+"shares.unreachable.retry" = "Erneut versuchen";
+"shares.disconnect.unreachable" = "Der Server ist nicht erreichbar.";
+"shares.disconnect.cancelled" = "Der Vorgang wurde abgebrochen.";
+"shares.disconnect.refused" = "Der Server hat die Anfrage abgelehnt.";
+"shares.disconnect.inUse" = "Die Freigabe wird verwendet.";
+"shares.disconnect.failed" = "„%1$@“ konnte nicht getrennt werden: %2$@";
+"shares.remove.title" = "„%@“ aus der Seitenleiste entfernen?";
+"shares.remove.message" = "Die Freigabe bleibt verbunden, bis du sie trennst. Gesicherte Passwörter bleiben im Schlüsselbund.";
+"shares.remove.button" = "Entfernen";
+"shares.edit.title" = "„%@“ bearbeiten";
+"shares.edit.address" = "Adresse";
+"shares.edit.name" = "Name";
+"shares.edit.user" = "Benutzer";
+"shares.edit.reconnect" = "Automatisch neu verbinden";
+"shares.edit.guest" = "Als Gast verbinden";
+"shares.edit.invalidAddress" = "Gib eine gültige Adresse mit smb://, afp://, nfs://, https:// oder http:// ein.";
+"shares.edit.duplicate" = "Eine andere gesicherte Freigabe verwendet bereits diese Adresse.";
+"shares.edit.save" = "Sichern";
+"shares.signIn.title" = "Bei „%@“ anmelden";
+"shares.signIn.username" = "Benutzername";
+"shares.signIn.domainHint" = "Verwende für einen Domain-Account DOMAIN\\Name oder Name@Domain.";
+"shares.signIn.password" = "Passwort";
+"shares.signIn.remember" = "Im Schlüsselbund sichern";
+"shares.signIn.guest" = "Als Gast verbinden";
+"shares.signIn.noGuest" = "Diese Freigabe erlaubt keinen Gastzugriff.";
+"shares.signIn.rejected" = "Benutzername oder Passwort ist falsch.";
 
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "In %2$@ liegt %1$@.";

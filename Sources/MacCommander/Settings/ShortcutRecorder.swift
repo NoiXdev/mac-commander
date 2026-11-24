@@ -30,8 +30,8 @@ struct ShortcutRecorder: View {
     }
 
     private func label(isRecording: Bool) -> String {
-        if isRecording { return String(localized: "Type shortcut") }
-        return shortcut?.displayString ?? String(localized: "Click to record")
+        if isRecording { return L10n.string("settings.shortcuts.recording", "Type shortcut") }
+        return shortcut?.displayString ?? L10n.string("settings.shortcuts.empty", "Click to record")
     }
 }
 

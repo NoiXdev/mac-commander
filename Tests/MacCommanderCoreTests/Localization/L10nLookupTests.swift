@@ -34,6 +34,36 @@ import Testing
         }
     }
 
+    /// The tag counts of the rename and delete prompts. `TagActions` is in the app target, which tests can't import,
+    /// so this looks the keys up with the same English the call sites pass.
+    @Test(arguments: [
+        (1, "Zmiana nazwy obejmie 1 plik.", "Usunięcie obejmie 1 plik."),
+        (2, "Zmiana nazwy obejmie 2 pliki.", "Usunięcie obejmie 2 pliki."),
+        (5, "Zmiana nazwy obejmie 5 plików.", "Usunięcie obejmie 5 plików."),
+        (22, "Zmiana nazwy obejmie 22 pliki.", "Usunięcie obejmie 22 pliki."),
+    ])
+    func polishTagCountForms(count: Int, rename: String, delete: String) {
+        L10n.$localeOverride.withValue("pl") {
+            #expect(Self.tagRenameCount(count) == rename)
+            #expect(Self.tagDeleteCount(count) == delete)
+        }
+    }
+
+    @Test(.english) func englishTagCountForms() {
+        #expect(Self.tagRenameCount(1) == "The tag is renamed on 1 file.")
+        #expect(Self.tagRenameCount(3) == "The tag is renamed on 3 files.")
+        #expect(Self.tagDeleteCount(1) == "It is removed from 1 file.")
+        #expect(Self.tagDeleteCount(3) == "It is removed from 3 files.")
+    }
+
+    private static func tagRenameCount(_ count: Int) -> String {
+        L10n.plural("tags.rename.files", count: count, one: "The tag is renamed on 1 file.", other: "The tag is renamed on %lld files.")
+    }
+
+    private static func tagDeleteCount(_ count: Int) -> String {
+        L10n.plural("tags.delete.files", count: count, one: "It is removed from 1 file.", other: "It is removed from %lld files.")
+    }
+
     @Test func formatFillsPositionalPlaceholdersInTheTranslationsOrder() {
         L10n.$localeOverride.withValue("de") {
             #expect(L10n.format("test.location", "%1$@ is in %2$@.", "Bericht", "Dokumente") == "In Dokumente liegt Bericht.")

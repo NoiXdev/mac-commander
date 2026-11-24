@@ -1,9 +1,18 @@
 import Foundation
 
 public enum ItemCreator {
+    /// The new-folder name in the current language. Look it up on the caller's task, before any hop to a queue:
+    /// a language pinned with `L10n.localeOverride` doesn't reach a GCD queue.
+    public static var newFolderName: String { L10n.string("name.newFolder", "untitled folder") }
+
     public static func createFolder(in directory: URL) throws -> URL {
+        try createFolder(in: directory, named: newFolderName)
+    }
+
+    /// `named` is the base name; a number is added when it is taken.
+    public static func createFolder(in directory: URL, named: String) throws -> URL {
         for _ in 0..<100 {
-            let name = NameGenerator.uniqueName(base: L10n.string("name.newFolder", "untitled folder"), pathExtension: nil, in: directory)
+            let name = NameGenerator.uniqueName(base: named, pathExtension: nil, in: directory)
             let url = directory.appendingPathComponent(name, isDirectory: true)
             do {
                 try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)

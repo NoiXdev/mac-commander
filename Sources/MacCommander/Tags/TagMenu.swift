@@ -12,7 +12,7 @@ enum TagMenu {
         for urls: [URL], current: [[FileTag]], window: NSWindow?,
         didChange: (@MainActor () -> Void)? = nil
     ) -> NSMenuItem {
-        let item = NSMenuItem(title: String(localized: "Tags"), action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: L10n.string("tags.menu.title", "Tags"), action: nil, keyEquivalent: "")
         let menu = NSMenu()
         menu.autoenablesItems = false
         let standard = standardTags()
@@ -33,7 +33,7 @@ enum TagMenu {
         }
         menu.addItem(.separator())
         let known = standard + custom
-        menu.addItem(ActionMenuItem(String(localized: "New Tag…")) {
+        menu.addItem(ActionMenuItem(L10n.string("tags.action.newTag", "New Tag…")) {
             Task { @MainActor in
                 guard let name = await askForTagName(window: window) else { return }
                 // An existing tag of that name (case-insensitive) keeps its color.
@@ -119,12 +119,12 @@ enum TagMenu {
     /// Asks for a new tag's name; nil when cancelled or empty.
     private static func askForTagName(window: NSWindow?) async -> String? {
         let alert = NSAlert()
-        alert.messageText = String(localized: "New Tag")
-        alert.informativeText = String(localized: "Enter a name for the new tag.")
-        alert.addButton(withTitle: String(localized: "Add"))
-        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.messageText = L10n.string("tags.new.title", "New Tag")
+        alert.informativeText = L10n.string("tags.new.message", "Enter a name for the new tag.")
+        alert.addButton(withTitle: L10n.string("tags.new.add", "Add"))
+        alert.addButton(withTitle: L10n.string("tags.prompt.cancel", "Cancel"))
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
-        field.placeholderString = String(localized: "Tag name")
+        field.placeholderString = L10n.string("tags.prompt.placeholder", "Tag name")
         alert.accessoryView = field
         alert.window.initialFirstResponder = field
         let response: NSApplication.ModalResponse

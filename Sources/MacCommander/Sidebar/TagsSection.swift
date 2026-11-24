@@ -10,7 +10,7 @@ struct TagsSection: View {
     private let catalog = TagCatalog.shared
 
     var body: some View {
-        Section(String(localized: "Tags")) {
+        Section(L10n.string("sidebar.section.tags", "Tags")) {
             ForEach(visibleTags, id: \.name) { tag in
                 Label {
                     Text(tag.name).lineLimit(1)
@@ -22,19 +22,19 @@ struct TagsSection: View {
                 .onTapGesture { Task { await model.showTag(tag.name) } }
                 .contextMenu {
                     if !catalog.isStandard(tag) {
-                        Button(String(localized: "Rename Tag…")) { TagActions.rename(tag, preferences) }
-                        Picker(String(localized: "Color"), selection: color(of: tag)) {
+                        Button(L10n.string("tags.action.renameTag", "Rename Tag…")) { TagActions.rename(tag, preferences) }
+                        Picker(L10n.string("tags.action.color", "Color"), selection: color(of: tag)) {
                             ForEach(TagActions.colorChoices, id: \.self) { color in
                                 Text(TagActions.colorName(color)).tag(color)
                             }
                         }
-                        Button(String(localized: "Delete Tag…")) { TagActions.delete(tag, preferences) }
+                        Button(L10n.string("tags.action.deleteTag", "Delete Tag…")) { TagActions.delete(tag, preferences) }
                         Divider()
                     }
-                    Button(String(localized: "Remove Tag from Sidebar")) {
+                    Button(L10n.string("tags.action.removeFromSidebar", "Remove Tag from Sidebar")) {
                         preferences.preferences.hiddenTags.insert(tag.name)
                     }
-                    Button(String(localized: "New Tag…")) { TagActions.create(preferences) }
+                    Button(L10n.string("tags.action.newTag", "New Tag…")) { TagActions.create(preferences) }
                 }
             }
         }

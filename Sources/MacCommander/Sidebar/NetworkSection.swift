@@ -11,9 +11,9 @@ struct NetworkSection: View {
     @Environment(ShareManager.self) private var manager
 
     var body: some View {
-        Section(String(localized: "Network")) {
+        Section(L10n.string("sidebar.section.network", "Network")) {
             if store.shares.isEmpty {
-                Label(String(localized: "Connect to Server…"), systemImage: "plus.circle")
+                Label(L10n.string("shares.action.connectToServer", "Connect to Server…"), systemImage: "plus.circle")
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                     .onTapGesture { sheets.showConnectToServer = true }
@@ -44,21 +44,21 @@ struct NetworkSection: View {
         .help(Self.tooltip(for: status))
         .onTapGesture { click(share, status: status) }
         .contextMenu {
-            Button(String(localized: "Connect")) {
+            Button(L10n.string("shares.action.connect", "Connect")) {
                 Task { await ShareActions.connect(share, manager: manager, model: model, sheets: sheets) }
             }
             .disabled(Self.isConnected(status))
-            Button(String(localized: "Disconnect")) {
+            Button(L10n.string("shares.action.disconnect", "Disconnect")) {
                 Task { await ShareActions.disconnect(share, manager: manager, sheets: sheets) }
             }
             .disabled(!Self.canDisconnect(share, status: status, manager: manager))
-            Button(String(localized: "Sign In…")) {
+            Button(L10n.string("shares.action.signIn", "Sign In…")) {
                 Task { await ShareActions.showSignIn(share, sheets: sheets) }
             }
             .disabled(Self.isConnected(status))
             Divider()
-            Button(String(localized: "Edit…")) { sheets.editing = share }
-            Button(String(localized: "Remove…")) {
+            Button(L10n.string("shares.action.edit", "Edit…")) { sheets.editing = share }
+            Button(L10n.string("shares.action.remove", "Remove…")) {
                 Task { await ShareActions.confirmRemove(share, manager: manager, sheets: sheets) }
             }
         }
@@ -77,7 +77,7 @@ struct NetworkSection: View {
         }
     }
 
-    /// Also used by the Settings window's Network tab (Connect and Sign In are enabled when this is false).
+    /// Also used by the Settings window's Network section (Connect and Sign In are enabled when this is false).
     static func isConnected(_ status: ShareStatus?) -> Bool {
         if case .connected? = status { return true }
         return false
@@ -88,7 +88,7 @@ struct NetworkSection: View {
         isConnected(status) || (status == .unreachable && manager.hasMountPoint(share.id))
     }
 
-    /// The status dot, shared with the Settings window's Network tab.
+    /// The status dot, shared with the Settings window's Network section.
     @ViewBuilder
     static func symbol(for status: ShareStatus?) -> some View {
         switch status {
@@ -105,11 +105,11 @@ struct NetworkSection: View {
 
     static func tooltip(for status: ShareStatus?) -> String {
         switch status {
-        case .connected?: String(localized: "Connected")
-        case .available(needsSignIn: true)?: String(localized: "Sign-in needed")
-        case .available?: String(localized: "Not connected")
-        case .unreachable?: String(localized: "Can’t be reached")
-        case .checking?, nil: String(localized: "Checking…")
+        case .connected?: L10n.string("shares.status.connected", "Connected")
+        case .available(needsSignIn: true)?: L10n.string("shares.status.needsSignIn", "Sign-in needed")
+        case .available?: L10n.string("shares.status.available", "Not connected")
+        case .unreachable?: L10n.string("shares.status.unreachable", "Can’t be reached")
+        case .checking?, nil: L10n.string("shares.status.checking", "Checking…")
         }
     }
 }

@@ -14,6 +14,48 @@
 "settings.general.language.relaunch" = "Relancer MacCommander";
 "settings.general.newFileName.invalid" = "Nom de fichier non valide ; « %@ » est utilisé.";
 
+/* Settings > View */
+"settings.view.showCheckboxColumn" = "Afficher la colonne de cases à cocher";
+"settings.view.showHiddenFiles" = "Afficher les fichiers masqués";
+"settings.view.dualPane" = "Activer le mode double panneau";
+"settings.view.dualPaneFooter" = "Ajoute un second panneau de dossier aux fenêtres (Présentation ▸ Double panneau, ⌘2).";
+
+/* Settings > General */
+"settings.general.newWindows" = "Les nouvelles fenêtres affichent :";
+"settings.general.newWindows.choose" = "Choisir…";
+"settings.general.newWindows.home" = "Départ";
+"settings.general.newWindows.panelPrompt" = "Choisir";
+"settings.general.newFileName.label" = "Nom par défaut des nouveaux fichiers";
+"settings.general.fileViewer" = "Utiliser MacCommander pour « Afficher dans le Finder »";
+"settings.general.fileViewer.footer" = "« Afficher dans le Finder » dans les autres apps ouvre une fenêtre MacCommander. Les dossiers ouverts depuis Spotlight ou le Dock s’ouvrent toujours dans le Finder.";
+"settings.general.fullDiskAccess.label" = "Accès complet au disque :";
+"settings.general.fullDiskAccess.button" = "Accès complet au disque…";
+
+/* Settings > Terminal */
+"settings.terminal.app" = "App de terminal :";
+
+/* Settings > Shortcuts */
+"settings.shortcuts.globalHotkey" = "Raccourci global";
+"settings.shortcuts.clear" = "Effacer";
+"settings.shortcuts.inUse" = "Ce raccourci est déjà utilisé";
+"settings.shortcuts.recording" = "Tapez le raccourci";
+"settings.shortcuts.empty" = "Cliquez pour enregistrer";
+
+/* Settings > Sidebar */
+"settings.sidebar.show.header" = "Afficher dans la barre latérale";
+"settings.sidebar.hiddenTags.header" = "Tags masqués";
+"settings.sidebar.hiddenTags.empty" = "Aucun tag masqué";
+"settings.sidebar.hiddenTags.show" = "Afficher";
+
+/* Settings > Tags */
+"settings.tags.footer" = "Renommer ou supprimer un tag modifie chaque fichier de votre dossier de départ que Spotlight trouve avec ce tag.";
+"settings.tags.rename" = "Renommer…";
+"settings.tags.delete" = "Supprimer…";
+"settings.tags.showInSidebar" = "Afficher dans la barre latérale";
+
+/* Settings > Network */
+"settings.network.empty" = "Aucun partage enregistré";
+
 /* File list: folder load errors */
 "fileList.error.noPermission" = "Vous n’avez pas l’autorisation de voir le contenu de « %@ ».";
 "fileList.error.notFound" = "Le dossier « %@ » est introuvable.";
@@ -138,6 +180,89 @@
 "shares.error.noLongerExists" = "Le partage n’existe plus.";
 "shares.error.connectionCancelled" = "La connexion a été annulée.";
 "shares.error.alreadyConnected" = "Déjà connecté.";
+
+/* Sidebar */
+"sidebar.section.favorites" = "Favoris";
+"sidebar.section.cloud" = "Cloud";
+"sidebar.section.locations" = "Emplacements";
+"sidebar.section.network" = "Réseau";
+"sidebar.section.tags" = "Tags";
+"sidebar.favorites.removeFromSidebar" = "Supprimer de la barre latérale";
+"sidebar.favorites.missing" = "« %@ » est introuvable. Le supprimer des favoris ?";
+"sidebar.favorites.missing.remove" = "Supprimer";
+"sidebar.favorites.missing.cancel" = "Annuler";
+"sidebar.cloud.iCloudDrive" = "iCloud Drive";
+"sidebar.cloud.openApp" = "Ouvrir %@";
+"sidebar.cloud.active" = "Connecté";
+"sidebar.cloud.appNotRunning" = "L’app %@ n’est pas ouverte : les modifications ne sont pas synchronisées.";
+"sidebar.cloud.disconnected" = "Non connecté : macOS ne reconnaît pas ce dossier comme un compte %@. Il provient peut-être d’un compte supprimé.";
+"sidebar.locations.eject" = "Éjecter";
+"sidebar.locations.ejectFailed" = "Le volume « %@ » n’a pas pu être éjecté.";
+
+/* Tags: sidebar, Settings, menus and prompts */
+"tags.menu.title" = "Tags";
+"tags.action.newTag" = "Nouveau tag…";
+"tags.action.renameTag" = "Renommer le tag…";
+"tags.action.deleteTag" = "Supprimer le tag…";
+"tags.action.removeFromSidebar" = "Supprimer le tag de la barre latérale";
+"tags.action.color" = "Couleur";
+"tags.color.none" = "Aucune";
+"tags.new.title" = "Nouveau tag";
+"tags.new.message" = "Saisissez un nom pour le nouveau tag.";
+"tags.new.messageWithColor" = "Saisissez un nom et choisissez une couleur pour le nouveau tag.";
+"tags.new.add" = "Ajouter";
+"tags.prompt.placeholder" = "Nom du tag";
+"tags.prompt.cancel" = "Annuler";
+"tags.rename.title" = "Renommer « %@ »";
+"tags.rename.noFiles" = "Aucun fichier n’a encore ce tag.";
+"tags.rename.button" = "Renommer";
+"tags.delete.title" = "Supprimer le tag « %@ » ?";
+"tags.delete.noFiles" = "Aucun fichier n’a ce tag.";
+"tags.delete.button" = "Supprimer le tag";
+
+/* Network shares: sidebar, Settings, sheets and alerts */
+"shares.action.connectToServer" = "Se connecter au serveur…";
+"shares.action.connect" = "Connecter";
+"shares.action.disconnect" = "Déconnecter";
+"shares.action.signIn" = "S’identifier…";
+"shares.action.edit" = "Modifier…";
+"shares.action.remove" = "Supprimer…";
+"shares.action.cancel" = "Annuler";
+"shares.status.connected" = "Connecté";
+"shares.status.needsSignIn" = "Identification requise";
+"shares.status.available" = "Non connecté";
+"shares.status.unreachable" = "Inaccessible";
+"shares.status.checking" = "Vérification…";
+"shares.connect.address" = "Adresse du serveur :";
+"shares.connect.recent" = "Récents";
+"shares.connect.failed" = "Impossible de connecter « %1$@ » : %2$@";
+"shares.unreachable.message" = "« %@ » est inaccessible depuis ce réseau.";
+"shares.unreachable.retry" = "Réessayer";
+"shares.disconnect.unreachable" = "Le serveur est inaccessible.";
+"shares.disconnect.cancelled" = "L’opération a été annulée.";
+"shares.disconnect.refused" = "Le serveur a refusé la requête.";
+"shares.disconnect.inUse" = "Le partage est en cours d’utilisation.";
+"shares.disconnect.failed" = "Impossible de déconnecter « %1$@ » : %2$@";
+"shares.remove.title" = "Supprimer « %@ » de la barre latérale ?";
+"shares.remove.message" = "Le partage reste connecté jusqu’à ce que vous le déconnectiez. Les mots de passe enregistrés sont conservés dans le trousseau.";
+"shares.remove.button" = "Supprimer";
+"shares.edit.title" = "Modifier « %@ »";
+"shares.edit.address" = "Adresse";
+"shares.edit.name" = "Nom";
+"shares.edit.user" = "Utilisateur";
+"shares.edit.reconnect" = "Se reconnecter automatiquement";
+"shares.edit.guest" = "Se connecter en tant qu’invité";
+"shares.edit.invalidAddress" = "Saisissez une adresse smb://, afp://, nfs://, https:// ou http:// valide.";
+"shares.edit.duplicate" = "Un autre partage enregistré utilise déjà cette adresse.";
+"shares.edit.save" = "Enregistrer";
+"shares.signIn.title" = "S’identifier auprès de « %@ »";
+"shares.signIn.username" = "Nom d’utilisateur";
+"shares.signIn.domainHint" = "Pour un compte de domaine, utilisez DOMAINE\\nom ou nom@domaine.";
+"shares.signIn.password" = "Mot de passe";
+"shares.signIn.remember" = "Conserver dans le trousseau";
+"shares.signIn.guest" = "Se connecter en tant qu’invité";
+"shares.signIn.noGuest" = "Ce partage n’accepte pas les invités.";
+"shares.signIn.rejected" = "Le nom d’utilisateur ou le mot de passe est incorrect.";
 
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ se trouve dans %2$@.";

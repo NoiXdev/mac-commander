@@ -65,13 +65,13 @@ struct SidebarView: View {
             await observeVolumes()
         }
         .alert(
-            String(localized: "“\(missing?.name ?? "")” can't be found. Remove it from Favorites?"),
+            L10n.format("sidebar.favorites.missing", "“%@” can't be found. Remove it from Favorites?", missing?.name ?? ""),
             isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })
         ) {
-            Button(String(localized: "Remove"), role: .destructive) {
+            Button(L10n.string("sidebar.favorites.missing.remove", "Remove"), role: .destructive) {
                 if let missing { favorites.remove(missing.url) }
             }
-            Button(String(localized: "Cancel"), role: .cancel) {}
+            Button(L10n.string("sidebar.favorites.missing.cancel", "Cancel"), role: .cancel) {}
         }
     }
 
@@ -82,7 +82,7 @@ struct SidebarView: View {
                     .onTapGesture { select(location) }
                     .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: location.url, enabled: location.exists))
                     .contextMenu {
-                        Button(String(localized: "Remove from Sidebar")) { favorites.remove(location.url) }
+                        Button(L10n.string("sidebar.favorites.removeFromSidebar", "Remove from Sidebar")) { favorites.remove(location.url) }
                     }
             }
             .onMove { favorites.move(fromOffsets: $0, toOffset: $1) }
@@ -90,7 +90,7 @@ struct SidebarView: View {
             .onInsert(of: [.fileURL]) { index, providers in drop(providers, at: index) }
         } header: {
             // Also adds favorites (at the end), in case drops between rows land on a row instead.
-            Text(String(localized: "Favorites"))
+            L10n.text("sidebar.section.favorites", "Favorites")
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onDrop(of: [.fileURL], isTargeted: nil) { providers in
@@ -104,9 +104,9 @@ struct SidebarView: View {
     /// app not running (nothing syncs), or not connected (a folder left behind, shown dimmed). Accounts are added
     /// in the provider's own app (for OneDrive: Settings ▸ Account ▸ Add an Account) and show up by themselves.
     private var cloudSection: some View {
-        Section(String(localized: "Cloud")) {
+        Section(L10n.string("sidebar.section.cloud", "Cloud")) {
             if iCloudExists {
-                row(name: String(localized: "iCloud Drive"), url: Self.iCloudDrive, exists: true, symbol: "icloud")
+                row(name: L10n.string("sidebar.cloud.iCloudDrive", "iCloud Drive"), url: Self.iCloudDrive, exists: true, symbol: "icloud")
                     .onTapGesture { Task { await model.navigate(to: Self.iCloudDrive) } }
                     .onDrop(of: FolderDropDelegate.types, delegate: dropDelegate(into: Self.iCloudDrive, enabled: true))
             }
@@ -127,7 +127,7 @@ struct SidebarView: View {
                     if status != .active, let app = location.appBundleID,
                         let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app)
                     {
-                        Button(String(localized: "Open \(location.provider)")) {
+                        Button(L10n.format("sidebar.cloud.openApp", "Open %@", location.provider)) {
                             NSWorkspace.shared.openApplication(at: appURL, configuration: .init())
                         }
                     }
@@ -148,11 +148,11 @@ struct SidebarView: View {
     private static func cloudTooltip(_ location: CloudLocation, status: CloudAccountStatus) -> String {
         switch status {
         case .active:
-            String(localized: "Connected")
+            L10n.string("sidebar.cloud.active", "Connected")
         case .appNotRunning:
-            String(localized: "\(location.provider) isn't running: changes don't sync.")
+            L10n.format("sidebar.cloud.appNotRunning", "%@ isn't running: changes don't sync.", location.provider)
         case .disconnected:
-            String(localized: "Not connected: macOS doesn't know this folder as a \(location.provider) account. It may be left over from a removed account.")
+            L10n.format("sidebar.cloud.disconnected", "Not connected: macOS doesn't know this folder as a %@ account. It may be left over from a removed account.", location.provider)
         }
     }
 
@@ -188,7 +188,7 @@ struct SidebarView: View {
     }
 
     private var locationsSection: some View {
-        Section(String(localized: "Locations")) {
+        Section(L10n.string("sidebar.section.locations", "Locations")) {
             ForEach(volumes) { volume in
                 HStack {
                     row(name: volume.name, url: volume.url, exists: true, symbol: volume.isBoot ? "internaldrive" : "externaldrive")
@@ -199,7 +199,7 @@ struct SidebarView: View {
                             Image(systemName: "eject")
                         }
                         .buttonStyle(.borderless)
-                        .help(String(localized: "Eject"))
+                        .help(L10n.string("sidebar.locations.eject", "Eject"))
                     }
                 }
                 .contentShape(Rectangle())
@@ -223,7 +223,7 @@ struct SidebarView: View {
                 try await Self.unmount(volume.url)
             } catch {
                 let alert = NSAlert(error: error)
-                alert.messageText = String(localized: "The volume “\(volume.name)” couldn't be ejected.")
+                alert.messageText = L10n.format("sidebar.locations.ejectFailed", "The volume “%@” couldn't be ejected.", volume.name)
                 alert.informativeText = error.localizedDescription
                 alert.runModal()
             }

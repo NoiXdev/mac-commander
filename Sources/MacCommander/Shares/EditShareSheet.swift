@@ -39,29 +39,29 @@ struct EditShareSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Edit “\(share.name)”")).font(.headline)
+            Text(L10n.format("shares.edit.title", "Edit “%@”", share.name)).font(.headline)
             Form {
-                TextField(String(localized: "Address"), text: urlText)
-                TextField(String(localized: "Name"), text: name)
-                TextField(String(localized: "User"), text: user)
+                TextField(L10n.string("shares.edit.address", "Address"), text: urlText)
+                TextField(L10n.string("shares.edit.name", "Name"), text: name)
+                TextField(L10n.string("shares.edit.user", "User"), text: user)
                     .disabled(guest.wrappedValue)
-                Toggle(String(localized: "Reconnect automatically"), isOn: reconnect)
+                Toggle(L10n.string("shares.edit.reconnect", "Reconnect automatically"), isOn: reconnect)
                     .toggleStyle(.checkbox)
-                Toggle(String(localized: "Connect as Guest"), isOn: guest)
+                Toggle(L10n.string("shares.edit.guest", "Connect as Guest"), isOn: guest)
                     .toggleStyle(.checkbox)
             }
             if parsedURL == nil {
-                Text(String(localized: "Enter a valid smb://, afp://, nfs://, https:// or http:// address."))
+                L10n.text("shares.edit.invalidAddress", "Enter a valid smb://, afp://, nfs://, https:// or http:// address.")
                     .font(.callout).foregroundStyle(.red)
             } else if duplicate {
-                Text(String(localized: "Another saved share already uses this address."))
+                L10n.text("shares.edit.duplicate", "Another saved share already uses this address.")
                     .font(.callout).foregroundStyle(.red)
             }
             HStack {
                 Spacer()
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
+                Button(L10n.string("shares.action.cancel", "Cancel"), role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(String(localized: "Save")) { save() }
+                Button(L10n.string("shares.edit.save", "Save")) { save() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(parsedURL == nil)
             }

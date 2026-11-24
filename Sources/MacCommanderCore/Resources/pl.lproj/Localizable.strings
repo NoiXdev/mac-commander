@@ -14,6 +14,48 @@
 "settings.general.language.relaunch" = "Uruchom ponownie MacCommander";
 "settings.general.newFileName.invalid" = "Nieprawidłowa nazwa pliku; używana jest „%@”.";
 
+/* Settings > View */
+"settings.view.showCheckboxColumn" = "Pokaż kolumnę pól wyboru";
+"settings.view.showHiddenFiles" = "Pokaż ukryte pliki";
+"settings.view.dualPane" = "Włącz tryb dwóch paneli";
+"settings.view.dualPaneFooter" = "Dodaje do okien drugi panel folderu (Widok ▸ Dwa panele, ⌘2).";
+
+/* Settings > General */
+"settings.general.newWindows" = "Nowe okna pokazują:";
+"settings.general.newWindows.choose" = "Wybierz…";
+"settings.general.newWindows.home" = "Folder domowy";
+"settings.general.newWindows.panelPrompt" = "Wybierz";
+"settings.general.newFileName.label" = "Domyślna nazwa nowych plików";
+"settings.general.fileViewer" = "Używaj aplikacji MacCommander do „Pokaż w Finderze”";
+"settings.general.fileViewer.footer" = "„Pokaż w Finderze” w innych aplikacjach otwiera okno aplikacji MacCommander. Foldery otwierane ze Spotlight lub z Docka nadal otwierają się w Finderze.";
+"settings.general.fullDiskAccess.label" = "Pełny dostęp do dysku:";
+"settings.general.fullDiskAccess.button" = "Pełny dostęp do dysku…";
+
+/* Settings > Terminal */
+"settings.terminal.app" = "Aplikacja terminala:";
+
+/* Settings > Shortcuts */
+"settings.shortcuts.globalHotkey" = "Globalny skrót";
+"settings.shortcuts.clear" = "Wyczyść";
+"settings.shortcuts.inUse" = "Ten skrót jest już używany";
+"settings.shortcuts.recording" = "Naciśnij skrót";
+"settings.shortcuts.empty" = "Kliknij, aby nagrać";
+
+/* Settings > Sidebar */
+"settings.sidebar.show.header" = "Pokazuj na pasku bocznym";
+"settings.sidebar.hiddenTags.header" = "Ukryte tagi";
+"settings.sidebar.hiddenTags.empty" = "Brak ukrytych tagów";
+"settings.sidebar.hiddenTags.show" = "Pokaż";
+
+/* Settings > Tags */
+"settings.tags.footer" = "Zmiana nazwy lub usunięcie taga zmienia wszystkie pliki z tym tagiem, które Spotlight znajdzie w folderze domowym.";
+"settings.tags.rename" = "Zmień nazwę…";
+"settings.tags.delete" = "Usuń…";
+"settings.tags.showInSidebar" = "Pokazuj na pasku bocznym";
+
+/* Settings > Network */
+"settings.network.empty" = "Brak zapisanych udziałów";
+
 /* File list: folder load errors */
 "fileList.error.noPermission" = "Nie masz uprawnień do wyświetlania zawartości „%@”.";
 "fileList.error.notFound" = "Nie można znaleźć folderu „%@”.";
@@ -138,6 +180,89 @@
 "shares.error.noLongerExists" = "Udział już nie istnieje.";
 "shares.error.connectionCancelled" = "Połączenie zostało anulowane.";
 "shares.error.alreadyConnected" = "Już połączono.";
+
+/* Sidebar */
+"sidebar.section.favorites" = "Ulubione";
+"sidebar.section.cloud" = "Chmura";
+"sidebar.section.locations" = "Miejsca";
+"sidebar.section.network" = "Sieć";
+"sidebar.section.tags" = "Tagi";
+"sidebar.favorites.removeFromSidebar" = "Usuń z paska bocznego";
+"sidebar.favorites.missing" = "Nie można znaleźć „%@”. Usunąć z Ulubionych?";
+"sidebar.favorites.missing.remove" = "Usuń";
+"sidebar.favorites.missing.cancel" = "Anuluj";
+"sidebar.cloud.iCloudDrive" = "iCloud Drive";
+"sidebar.cloud.openApp" = "Otwórz %@";
+"sidebar.cloud.active" = "Połączono";
+"sidebar.cloud.appNotRunning" = "Aplikacja %@ nie jest uruchomiona: zmiany nie są synchronizowane.";
+"sidebar.cloud.disconnected" = "Nie połączono: macOS nie rozpoznaje tego folderu jako konta %@. Może pozostał po usuniętym koncie.";
+"sidebar.locations.eject" = "Wysuń";
+"sidebar.locations.ejectFailed" = "Nie można wysunąć woluminu „%@”.";
+
+/* Tags: sidebar, Settings, menus and prompts */
+"tags.menu.title" = "Tagi";
+"tags.action.newTag" = "Nowy tag…";
+"tags.action.renameTag" = "Zmień nazwę taga…";
+"tags.action.deleteTag" = "Usuń tag…";
+"tags.action.removeFromSidebar" = "Usuń tag z paska bocznego";
+"tags.action.color" = "Kolor";
+"tags.color.none" = "Brak";
+"tags.new.title" = "Nowy tag";
+"tags.new.message" = "Wprowadź nazwę nowego taga.";
+"tags.new.messageWithColor" = "Wprowadź nazwę i wybierz kolor nowego taga.";
+"tags.new.add" = "Dodaj";
+"tags.prompt.placeholder" = "Nazwa taga";
+"tags.prompt.cancel" = "Anuluj";
+"tags.rename.title" = "Zmień nazwę „%@”";
+"tags.rename.noFiles" = "Żaden plik nie ma jeszcze tego taga.";
+"tags.rename.button" = "Zmień nazwę";
+"tags.delete.title" = "Usunąć tag „%@”?";
+"tags.delete.noFiles" = "Żaden plik nie ma tego taga.";
+"tags.delete.button" = "Usuń tag";
+
+/* Network shares: sidebar, Settings, sheets and alerts */
+"shares.action.connectToServer" = "Połącz z serwerem…";
+"shares.action.connect" = "Połącz";
+"shares.action.disconnect" = "Rozłącz";
+"shares.action.signIn" = "Zaloguj się…";
+"shares.action.edit" = "Edytuj…";
+"shares.action.remove" = "Usuń…";
+"shares.action.cancel" = "Anuluj";
+"shares.status.connected" = "Połączono";
+"shares.status.needsSignIn" = "Wymagane logowanie";
+"shares.status.available" = "Nie połączono";
+"shares.status.unreachable" = "Serwer nieosiągalny";
+"shares.status.checking" = "Sprawdzanie…";
+"shares.connect.address" = "Adres serwera:";
+"shares.connect.recent" = "Ostatnie";
+"shares.connect.failed" = "Nie można połączyć się z „%1$@”: %2$@";
+"shares.unreachable.message" = "Z tej sieci nie można połączyć się z „%@”.";
+"shares.unreachable.retry" = "Ponów";
+"shares.disconnect.unreachable" = "Serwer jest nieosiągalny.";
+"shares.disconnect.cancelled" = "Operacja została anulowana.";
+"shares.disconnect.refused" = "Serwer odrzucił żądanie.";
+"shares.disconnect.inUse" = "Udział jest w użyciu.";
+"shares.disconnect.failed" = "Nie można rozłączyć „%1$@”: %2$@";
+"shares.remove.title" = "Usunąć „%@” z paska bocznego?";
+"shares.remove.message" = "Udział pozostaje połączony, dopóki go nie rozłączysz. Zapisane hasła pozostają w pęku kluczy.";
+"shares.remove.button" = "Usuń";
+"shares.edit.title" = "Edytuj „%@”";
+"shares.edit.address" = "Adres";
+"shares.edit.name" = "Nazwa";
+"shares.edit.user" = "Użytkownik";
+"shares.edit.reconnect" = "Łącz ponownie automatycznie";
+"shares.edit.guest" = "Połącz jako gość";
+"shares.edit.invalidAddress" = "Wprowadź prawidłowy adres smb://, afp://, nfs://, https:// lub http://.";
+"shares.edit.duplicate" = "Inny zapisany udział używa już tego adresu.";
+"shares.edit.save" = "Zachowaj";
+"shares.signIn.title" = "Zaloguj się do „%@”";
+"shares.signIn.username" = "Nazwa użytkownika";
+"shares.signIn.domainHint" = "W przypadku konta domenowego użyj DOMENA\\nazwa lub nazwa@domena.";
+"shares.signIn.password" = "Hasło";
+"shares.signIn.remember" = "Zapamiętaj w pęku kluczy";
+"shares.signIn.guest" = "Połącz jako gość";
+"shares.signIn.noGuest" = "Ten udział nie zezwala na dostęp gości.";
+"shares.signIn.rejected" = "Nazwa użytkownika lub hasło jest nieprawidłowe.";
 
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ znajduje się w %2$@.";

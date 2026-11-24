@@ -13,15 +13,15 @@ struct ShortcutsSettings: View {
         Form {
             Section {
                 VStack(alignment: .leading, spacing: 4) {
-                    LabeledContent(String(localized: "Global hotkey")) {
+                    LabeledContent(L10n.string("settings.shortcuts.globalHotkey", "Global hotkey")) {
                         HStack {
                             ShortcutRecorder(shortcut: preferences.preferences.globalShortcut, onRecord: recordHotKey)
-                            Button(String(localized: "Clear"), action: clearHotKey)
+                            Button(L10n.string("settings.shortcuts.clear", "Clear"), action: clearHotKey)
                                 .disabled(preferences.preferences.globalShortcut == nil)
                         }
                     }
                     if hotKeyFailedState.wrappedValue {
-                        Text(String(localized: "This shortcut is already in use"))
+                        L10n.text("settings.shortcuts.inUse", "This shortcut is already in use")
                             .font(.callout)
                             .foregroundStyle(.red)
                     }

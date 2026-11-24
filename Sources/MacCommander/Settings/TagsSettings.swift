@@ -14,15 +14,15 @@ struct TagsSettings: View {
                     row(tag)
                 }
             } header: {
-                Text(String(localized: "Tags"))
+                L10n.text("settings.section.tags", "Tags")
             } footer: {
-                Text(String(localized: "Renaming or deleting a tag changes every file in your home folder that Spotlight finds with it."))
+                L10n.text("settings.tags.footer", "Renaming or deleting a tag changes every file in your home folder that Spotlight finds with it.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
             HStack {
                 Spacer()
-                Button(String(localized: "New Tag…")) { TagActions.create(preferences) }
+                Button(L10n.string("tags.action.newTag", "New Tag…")) { TagActions.create(preferences) }
             }
         }
         .formStyle(.grouped)
@@ -36,19 +36,19 @@ struct TagsSettings: View {
             Text(tag.name).lineLimit(1)
             Spacer()
             if !standard {
-                Picker(String(localized: "Color"), selection: color(of: tag)) {
+                Picker(L10n.string("tags.action.color", "Color"), selection: color(of: tag)) {
                     ForEach(TagActions.colorChoices, id: \.self) { color in
                         Text(TagActions.colorName(color)).tag(color)
                     }
                 }
                 .labelsHidden()
                 .fixedSize()
-                Button(String(localized: "Rename…")) { TagActions.rename(tag, preferences) }
-                Button(String(localized: "Delete…")) { TagActions.delete(tag, preferences) }
+                Button(L10n.string("settings.tags.rename", "Rename…")) { TagActions.rename(tag, preferences) }
+                Button(L10n.string("settings.tags.delete", "Delete…")) { TagActions.delete(tag, preferences) }
             }
-            Toggle(String(localized: "Show in Sidebar"), isOn: shown(tag))
+            Toggle(L10n.string("settings.tags.showInSidebar", "Show in Sidebar"), isOn: shown(tag))
                 .toggleStyle(.checkbox)
-                .help(String(localized: "Show in Sidebar"))
+                .help(L10n.string("settings.tags.showInSidebar", "Show in Sidebar"))
                 .labelsHidden()
         }
     }

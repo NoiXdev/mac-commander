@@ -9,15 +9,15 @@ struct AppearanceSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle(String(localized: "Show checkbox column"), isOn: Bindable(settings).settings.showCheckboxColumn)
-                Toggle(String(localized: "Show hidden files"), isOn: Bindable(settings).settings.showHiddenFiles)
+                Toggle(L10n.string("settings.view.showCheckboxColumn", "Show checkbox column"), isOn: Bindable(settings).settings.showCheckboxColumn)
+                Toggle(L10n.string("settings.view.showHiddenFiles", "Show hidden files"), isOn: Bindable(settings).settings.showHiddenFiles)
             }
             Section {
                 VStack(alignment: .leading, spacing: 4) {
                     Toggle(
-                        String(localized: "Enable dual-pane mode"),
+                        L10n.string("settings.view.dualPane", "Enable dual-pane mode"),
                         isOn: Bindable(preferences).preferences.dualPaneEnabled)
-                    Text(String(localized: "Adds a second folder pane to windows (View ▸ Dual Pane, ⌘2)."))
+                    L10n.text("settings.view.dualPaneFooter", "Adds a second folder pane to windows (View ▸ Dual Pane, ⌘2).")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

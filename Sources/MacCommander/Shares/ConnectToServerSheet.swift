@@ -8,6 +8,9 @@ import SwiftUI
 /// address (`smb://bob@nas/Share`) is kept as the share's user; a password typed there is ignored.
 struct ConnectToServerSheet: View {
     static let recentLimit = 10
+    /// The address field's placeholder: an example URL, so it isn't translated. A `String`, so SwiftUI shows it
+    /// verbatim instead of looking it up.
+    static let addressExample = "smb://server/share"
 
     /// nil in the Settings window: a connected share isn't navigated to.
     let model: BrowserModel?
@@ -20,12 +23,12 @@ struct ConnectToServerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "Server Address:"))
-            TextField("smb://server/share", text: text)
+            L10n.text("shares.connect.address", "Server Address:")
+            TextField(Self.addressExample, text: text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 380)
             if !recent.isEmpty {
-                Text(String(localized: "Recent"))
+                L10n.text("shares.connect.recent", "Recent")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 List(recent, id: \.self) { address in
@@ -41,9 +44,9 @@ struct ConnectToServerSheet: View {
             }
             HStack {
                 Spacer()
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
+                Button(L10n.string("shares.action.cancel", "Cancel"), role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(String(localized: "Connect"), action: connect)
+                Button(L10n.string("shares.action.connect", "Connect"), action: connect)
                     .keyboardShortcut(.defaultAction)
                     .disabled(shareURL == nil)
             }

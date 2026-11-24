@@ -86,7 +86,7 @@ private func exists(_ url: URL) -> Bool { (try? FileManager.default.attributesOf
         #expect(exists(f.src.appendingPathComponent("dir/b.txt")))
     }
 
-    @Test func copyIntoSameFolderMakesCopyName() async throws {
+    @Test(.english) func copyIntoSameFolderMakesCopyName() async throws {
         let f = try Fixture()
         let a = try f.tmp.file("src/a.txt", contents: "A")
         let resolver = ScriptedResolver()

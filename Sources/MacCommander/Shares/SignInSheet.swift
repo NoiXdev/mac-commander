@@ -49,17 +49,17 @@ struct SignInSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "Sign in to “\(share.name)”"))
+            Text(L10n.format("shares.signIn.title", "Sign in to “%@”", share.name))
                 .font(.headline)
             Form {
                 VStack(alignment: .leading, spacing: 4) {
-                    TextField(String(localized: "Username"), text: username)
-                    Text(String(localized: "For a domain account use DOMAIN\\name or name@domain."))
+                    TextField(L10n.string("shares.signIn.username", "Username"), text: username)
+                    L10n.text("shares.signIn.domainHint", "For a domain account use DOMAIN\\name or name@domain.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                SecureField(String(localized: "Password"), text: password)
-                Toggle(String(localized: "Remember in Keychain"), isOn: remember)
+                SecureField(L10n.string("shares.signIn.password", "Password"), text: password)
+                Toggle(L10n.string("shares.signIn.remember", "Remember in Keychain"), isOn: remember)
                     .toggleStyle(.checkbox)
             }
             .disabled(busy)
@@ -70,16 +70,16 @@ struct SignInSheet: View {
             }
             HStack {
                 if busy { ProgressView().controlSize(.small) }
-                Button(String(localized: "Connect as Guest")) { attempt(asGuest: true) }
+                Button(L10n.string("shares.signIn.guest", "Connect as Guest")) { attempt(asGuest: true) }
                     .disabled(busy)
                 Spacer()
-                Button(String(localized: "Cancel"), role: .cancel) {
+                Button(L10n.string("shares.action.cancel", "Cancel"), role: .cancel) {
                     cancelled = true
                     password.wrappedValue = ""
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
-                Button(String(localized: "Connect")) { attempt(asGuest: false) }
+                Button(L10n.string("shares.action.connect", "Connect")) { attempt(asGuest: false) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(busy || trimmedUsername.isEmpty)
             }
@@ -113,8 +113,8 @@ struct SignInSheet: View {
             if outcome == .needsSignIn {
                 rejection =
                     asGuest
-                    ? String(localized: "This share doesn’t allow guest access.")
-                    : String(localized: "The user name or password is incorrect.")
+                    ? L10n.string("shares.signIn.noGuest", "This share doesn’t allow guest access.")
+                    : L10n.string("shares.signIn.rejected", "The user name or password is incorrect.")
                 return
             }
             dismiss()
