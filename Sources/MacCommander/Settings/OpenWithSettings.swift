@@ -54,6 +54,16 @@ struct OpenWithSettings: View {
 
     // MARK: Rows
 
+    /// Width of the longest listed ".ext" at the system font, so every row's app name starts at the same x and no
+    /// extension is truncated. Rows never get narrower than 60 pt.
+    private var extensionColumnWidth: CGFloat {
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        return rules.extensions
+            .map { (".\($0)" as NSString).size(withAttributes: [.font: font]).width }
+            .max()
+            .map { ceil($0) } ?? 0
+    }
+
     private func row(_ ext: String, _ rule: OpenWithRule) -> some View {
         // Until the lookup for this very rule is done, the row shows the stored name and no warning.
         let lookup = lookups[ext].flatMap { $0.rule == rule ? $0 : nil }
@@ -61,7 +71,8 @@ struct OpenWithSettings: View {
         return HStack {
             Text(verbatim: ".\(ext)")
                 .lineLimit(1)
-                .frame(width: 60, alignment: .leading)
+                .fixedSize()
+                .frame(minWidth: max(60, extensionColumnWidth), alignment: .leading)
             if missing {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(.yellow)
