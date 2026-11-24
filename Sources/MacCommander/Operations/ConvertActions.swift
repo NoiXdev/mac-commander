@@ -32,7 +32,7 @@ enum ConvertActions {
             item.isEnabled = false
             submenu.addItem(item)
         }
-        let item = NSMenuItem(title: String(localized: "Convert"), action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: L10n.string("convert.menu.title", "Convert"), action: nil, keyEquivalent: "")
         item.submenu = submenu
         return item
     }
@@ -52,13 +52,11 @@ enum ConvertActions {
         if !result.outputs.isEmpty { await model.selectAfterOperation(result.outputs) }
 
         var messages = result.failures.map { failure in
-            String(localized: "“\(failure.source.lastPathComponent)” couldn’t be converted: \(failure.message)")
+            L10n.format("convert.failed", "“%1$@” couldn’t be converted: %2$@", failure.source.lastPathComponent, failure.message)
         }
         if result.zeroFilledSectors > 0 {
             messages.append(
-                result.zeroFilledSectors == 1
-                    ? String(localized: "1 unreadable sector was written as zeros.")
-                    : String(localized: "\(result.zeroFilledSectors) unreadable sectors were written as zeros."))
+                L10n.plural("convert.zeroFilledSectors", count: result.zeroFilledSectors, one: "1 unreadable sector was written as zeros.", other: "%lld unreadable sectors were written as zeros."))
         }
         FileActions.showAlert(messages, window: window)
     }
@@ -84,17 +82,10 @@ enum ConvertActions {
         for (name, count) in audioTracks {
             let alert = NSAlert()
             alert.alertStyle = .informational
-            if count == 1 {
-                alert.messageText = String(localized: "“\(name)” has 1 audio track.")
-                alert.informativeText = String(
-                    localized: "An ISO can only hold the data track; the audio track will be left out.")
-            } else {
-                alert.messageText = String(localized: "“\(name)” has \(count) audio tracks.")
-                alert.informativeText = String(
-                    localized: "An ISO can only hold the data track; the audio tracks will be left out.")
-            }
-            alert.addButton(withTitle: String(localized: "Convert"))
-            alert.addButton(withTitle: String(localized: "Cancel"))
+            alert.messageText = L10n.plural("convert.audioTracks.title", count: count, one: "“%2$@” has 1 audio track.", other: "“%2$@” has %1$lld audio tracks.", name)
+            alert.informativeText = L10n.plural("convert.audioTracks.leftOut", count: count, one: "An ISO can only hold the data track; the audio track will be left out.", other: "An ISO can only hold the data track; the audio tracks will be left out.")
+            alert.addButton(withTitle: L10n.string("convert.audioTracks.convert", "Convert"))
+            alert.addButton(withTitle: L10n.string("convert.audioTracks.cancel", "Cancel"))
             let response: NSApplication.ModalResponse
             if let window, window.isVisible, window.attachedSheet == nil {
                 response = await alert.beginSheetModal(for: window)

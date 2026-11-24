@@ -380,5 +380,77 @@
 "fileList.unreadable.enterPassword" = "Wprowadź hasło…";
 "name.untitled" = "bez nazwy";
 
+/* Archives: password prompt and drag to other apps */
+"archive.password.title" = "Podaj hasło archiwum „%@”";
+"archive.password.incorrect" = "Wprowadzone hasło jest nieprawidłowe.";
+"archive.password.ok" = "OK";
+"archive.password.cancel" = "Anuluj";
+"archive.password.placeholder" = "Hasło";
+"archive.promise.failed" = "Nie można rozpakować „%1$@”: %2$@";
+
+/* File operations: alerts */
+"operation.terminal.notInstalled" = "Nie można otworzyć aplikacji %@: nie jest zainstalowana.";
+"operation.terminal.openFailed" = "Nie można otworzyć aplikacji %1$@: %2$@";
+"operation.compress.failed" = "Nie można skompresować rzeczy: %@";
+"operation.extract.intoItself" = "Nie można przenieść rzeczy „%@” do niej samej.";
+"operation.extract.failed" = "Nie można rozpakować „%1$@”: %2$@";
+"operation.extract.prompt" = "Rozpakuj";
+"operation.open.link" = "Nie można otworzyć „%@”: to jest dowiązanie.";
+"operation.open.failed" = "Nie można otworzyć „%1$@”: %2$@";
+"operation.trash.failed" = "Nie można przenieść „%1$@” do Kosza: %2$@";
+"operation.undo.itemChanged" = "Nie można odtworzyć rzeczy „%@”; została zmieniona lub w jej miejscu jest inna rzecz.";
+"operation.undo.failed" = "Nie można odtworzyć „%1$@”: %2$@";
+"operation.transfer.copyIntoItself" = "Nie można skopiować rzeczy „%@” na nią samą.";
+"operation.transfer.moveIntoItself" = "Nie można przenieść rzeczy „%@” do niej samej.";
+"operation.transfer.copyFailed" = "Nie można skopiować „%1$@”: %2$@";
+"operation.transfer.moveFailed" = "Nie można przenieść „%1$@”: %2$@";
+
+/* File operations: name conflicts */
+"operation.conflict.title" = "Rzecz o nazwie „%@” już istnieje w tym miejscu.";
+"operation.conflict.copying" = "Czy chcesz ją zastąpić rzeczą kopiowaną?";
+"operation.conflict.moving" = "Czy chcesz ją zastąpić rzeczą przenoszoną?";
+"operation.conflict.keepBoth" = "Pozostaw obie";
+"operation.conflict.replace" = "Zastąp";
+"operation.conflict.skip" = "Pomiń";
+"operation.conflict.stop" = "Zatrzymaj";
+"operation.conflict.applyToAll" = "Zastosuj do wszystkich";
+
+/* File operations: Open With menu and the operations strip */
+"operation.openWith.title" = "Otwórz w aplikacji";
+"operation.openWith.loading" = "Wczytuję…";
+"operation.openWith.defaultApp" = "%@ (domyślna)";
+"operation.openWith.other" = "Inne…";
+"operation.openWith.choosePrompt" = "Otwórz";
+"operation.strip.stop" = "Zatrzymaj";
+"operation.strip.bytes" = "%1$@ z %2$@";
+
+/* Convert: menu and alerts */
+"convert.menu.title" = "Konwertuj";
+"convert.failed" = "Nie można przekonwertować „%1$@”: %2$@";
+"convert.audioTracks.convert" = "Konwertuj";
+"convert.audioTracks.cancel" = "Anuluj";
+
+/* Get Info window */
+"info.window.title" = "Informacje o: %@";
+"info.label.kind" = "Rodzaj";
+"info.label.size" = "Wielkość";
+"info.label.created" = "Utworzono";
+"info.label.modified" = "Zmodyfikowano";
+"info.label.where" = "Gdzie";
+"info.label.tags" = "Tagi";
+"info.tags.edit" = "Dodaj lub usuń tagi";
+"info.tags.remove" = "Usuń „%@”";
+"info.size.calculating" = "Obliczam…";
+
+/* Preview panel */
+"preview.action.showSource" = "Pokaż źródło";
+"preview.selection.none" = "Brak zaznaczenia";
+"preview.archive.encrypted" = "Zaszyfrowane. Naciśnij spację, aby wprowadzić hasło.";
+"preview.render.tooLarge" = "Rzecz „%1$@” jest zbyt duża, aby ją wyświetlić (%2$@).";
+"preview.unpreviewable" = "Nie można wyświetlić podglądu „%@”.";
+"preview.mode.label" = "Pokaż";
+"preview.mode.rendered" = "Sformatowany";
+"preview.mode.source" = "Źródło";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ znajduje się w %2$@.";

@@ -380,5 +380,77 @@
 "fileList.unreadable.enterPassword" = "Enter Password…";
 "name.untitled" = "Untitled";
 
+/* Archives: password prompt and drag to other apps */
+"archive.password.title" = "Enter the password for “%@”";
+"archive.password.incorrect" = "The password you entered is incorrect.";
+"archive.password.ok" = "OK";
+"archive.password.cancel" = "Cancel";
+"archive.password.placeholder" = "Password";
+"archive.promise.failed" = "“%1$@” couldn’t be extracted: %2$@";
+
+/* File operations: alerts */
+"operation.terminal.notInstalled" = "Couldn’t open %@: the app isn’t installed.";
+"operation.terminal.openFailed" = "Couldn’t open %1$@: %2$@";
+"operation.compress.failed" = "The items couldn’t be compressed: %@";
+"operation.extract.intoItself" = "“%@” can’t be moved into itself.";
+"operation.extract.failed" = "“%1$@” couldn’t be extracted: %2$@";
+"operation.extract.prompt" = "Extract";
+"operation.open.link" = "“%@” couldn’t be opened: It’s a link.";
+"operation.open.failed" = "“%1$@” couldn’t be opened: %2$@";
+"operation.trash.failed" = "“%1$@” couldn’t be moved to the Trash: %2$@";
+"operation.undo.itemChanged" = "“%@” can’t be restored because it was changed or another item is in its place.";
+"operation.undo.failed" = "“%1$@” couldn’t be restored: %2$@";
+"operation.transfer.copyIntoItself" = "“%@” can’t be copied into itself.";
+"operation.transfer.moveIntoItself" = "“%@” can’t be moved into itself.";
+"operation.transfer.copyFailed" = "“%1$@” couldn’t be copied: %2$@";
+"operation.transfer.moveFailed" = "“%1$@” couldn’t be moved: %2$@";
+
+/* File operations: name conflicts */
+"operation.conflict.title" = "An item named “%@” already exists in this location.";
+"operation.conflict.copying" = "Do you want to replace it with the one you’re copying?";
+"operation.conflict.moving" = "Do you want to replace it with the one you’re moving?";
+"operation.conflict.keepBoth" = "Keep Both";
+"operation.conflict.replace" = "Replace";
+"operation.conflict.skip" = "Skip";
+"operation.conflict.stop" = "Stop";
+"operation.conflict.applyToAll" = "Apply to All";
+
+/* File operations: Open With menu and the operations strip */
+"operation.openWith.title" = "Open With";
+"operation.openWith.loading" = "Loading…";
+"operation.openWith.defaultApp" = "%@ (default)";
+"operation.openWith.other" = "Other…";
+"operation.openWith.choosePrompt" = "Open";
+"operation.strip.stop" = "Stop";
+"operation.strip.bytes" = "%1$@ of %2$@";
+
+/* Convert: menu and alerts */
+"convert.menu.title" = "Convert";
+"convert.failed" = "“%1$@” couldn’t be converted: %2$@";
+"convert.audioTracks.convert" = "Convert";
+"convert.audioTracks.cancel" = "Cancel";
+
+/* Get Info window */
+"info.window.title" = "%@ Info";
+"info.label.kind" = "Kind";
+"info.label.size" = "Size";
+"info.label.created" = "Created";
+"info.label.modified" = "Modified";
+"info.label.where" = "Where";
+"info.label.tags" = "Tags";
+"info.tags.edit" = "Add or remove tags";
+"info.tags.remove" = "Remove “%@”";
+"info.size.calculating" = "Calculating…";
+
+/* Preview panel */
+"preview.action.showSource" = "Show Source";
+"preview.selection.none" = "No Selection";
+"preview.archive.encrypted" = "Encrypted. Press Space to enter the password.";
+"preview.render.tooLarge" = "“%1$@” is too large to render (%2$@).";
+"preview.unpreviewable" = "“%@” can’t be previewed.";
+"preview.mode.label" = "Show";
+"preview.mode.rendered" = "Rendered";
+"preview.mode.source" = "Source";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ is in %2$@.";

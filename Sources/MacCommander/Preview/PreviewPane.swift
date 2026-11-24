@@ -1,4 +1,5 @@
 import AppKit
+import MacCommanderCore
 import SwiftUI
 
 /// The preview panel on the right of the file list: a header for the selected item and its preview.
@@ -23,13 +24,13 @@ struct PreviewPane: View {
     /// Rendered | Source, for rendered previews; a global setting.
     private var renderedSourcePicker: some View {
         Picker(
-            String(localized: "Show"),
+            L10n.string("preview.mode.label", "Show"),
             selection: Binding(
                 get: { controller.markdownShowsSource },
                 set: { controller.markdownShowsSource = $0 })
         ) {
-            Text(String(localized: "Rendered")).tag(false)
-            Text(String(localized: "Source")).tag(true)
+            L10n.text("preview.mode.rendered", "Rendered").tag(false)
+            L10n.text("preview.mode.source", "Source").tag(true)
         }
         .pickerStyle(.segmented)
         .labelsHidden()

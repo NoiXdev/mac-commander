@@ -380,5 +380,77 @@
 "fileList.unreadable.enterPassword" = "Passwort eingeben …";
 "name.untitled" = "Ohne Titel";
 
+/* Archives: password prompt and drag to other apps */
+"archive.password.title" = "Gib das Passwort für „%@“ ein";
+"archive.password.incorrect" = "Das eingegebene Passwort ist falsch.";
+"archive.password.ok" = "OK";
+"archive.password.cancel" = "Abbrechen";
+"archive.password.placeholder" = "Passwort";
+"archive.promise.failed" = "„%1$@“ konnte nicht entpackt werden: %2$@";
+
+/* File operations: alerts */
+"operation.terminal.notInstalled" = "%@ konnte nicht geöffnet werden: Die App ist nicht installiert.";
+"operation.terminal.openFailed" = "%1$@ konnte nicht geöffnet werden: %2$@";
+"operation.compress.failed" = "Die Objekte konnten nicht komprimiert werden: %@";
+"operation.extract.intoItself" = "„%@“ kann nicht in sich selbst bewegt werden.";
+"operation.extract.failed" = "„%1$@“ konnte nicht entpackt werden: %2$@";
+"operation.extract.prompt" = "Entpacken";
+"operation.open.link" = "„%@“ konnte nicht geöffnet werden: Das ist ein Link.";
+"operation.open.failed" = "„%1$@“ konnte nicht geöffnet werden: %2$@";
+"operation.trash.failed" = "„%1$@“ konnte nicht in den Papierkorb gelegt werden: %2$@";
+"operation.undo.itemChanged" = "„%@“ kann nicht wiederhergestellt werden, da es geändert wurde oder ein anderes Objekt an seiner Stelle liegt.";
+"operation.undo.failed" = "„%1$@“ konnte nicht wiederhergestellt werden: %2$@";
+"operation.transfer.copyIntoItself" = "„%@“ kann nicht in sich selbst kopiert werden.";
+"operation.transfer.moveIntoItself" = "„%@“ kann nicht in sich selbst bewegt werden.";
+"operation.transfer.copyFailed" = "„%1$@“ konnte nicht kopiert werden: %2$@";
+"operation.transfer.moveFailed" = "„%1$@“ konnte nicht bewegt werden: %2$@";
+
+/* File operations: name conflicts */
+"operation.conflict.title" = "An diesem Ort existiert bereits ein Objekt mit dem Namen „%@“.";
+"operation.conflict.copying" = "Soll es durch das Objekt ersetzt werden, das du kopierst?";
+"operation.conflict.moving" = "Möchtest du es durch das Objekt ersetzen, das du bewegst?";
+"operation.conflict.keepBoth" = "Beide behalten";
+"operation.conflict.replace" = "Ersetzen";
+"operation.conflict.skip" = "Überspringen";
+"operation.conflict.stop" = "Stoppen";
+"operation.conflict.applyToAll" = "Für alle";
+
+/* File operations: Open With menu and the operations strip */
+"operation.openWith.title" = "Öffnen mit";
+"operation.openWith.loading" = "Laden …";
+"operation.openWith.defaultApp" = "%@ (Standard)";
+"operation.openWith.other" = "Andere …";
+"operation.openWith.choosePrompt" = "Öffnen";
+"operation.strip.stop" = "Stoppen";
+"operation.strip.bytes" = "%1$@ von %2$@";
+
+/* Convert: menu and alerts */
+"convert.menu.title" = "Konvertieren";
+"convert.failed" = "„%1$@“ konnte nicht konvertiert werden: %2$@";
+"convert.audioTracks.convert" = "Konvertieren";
+"convert.audioTracks.cancel" = "Abbrechen";
+
+/* Get Info window */
+"info.window.title" = "Infos zu: %@";
+"info.label.kind" = "Art";
+"info.label.size" = "Größe";
+"info.label.created" = "Erstellt";
+"info.label.modified" = "Geändert";
+"info.label.where" = "Ort";
+"info.label.tags" = "Tags";
+"info.tags.edit" = "Tags hinzufügen oder entfernen";
+"info.tags.remove" = "„%@“ entfernen";
+"info.size.calculating" = "Berechnen …";
+
+/* Preview panel */
+"preview.action.showSource" = "Quelltext anzeigen";
+"preview.selection.none" = "Keine Auswahl";
+"preview.archive.encrypted" = "Verschlüsselt. Drücke die Leertaste, um das Passwort einzugeben.";
+"preview.render.tooLarge" = "„%1$@“ ist zu groß für die Darstellung (%2$@).";
+"preview.unpreviewable" = "Für „%@“ ist keine Vorschau verfügbar.";
+"preview.mode.label" = "Anzeigen";
+"preview.mode.rendered" = "Formatiert";
+"preview.mode.source" = "Quelltext";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "In %2$@ liegt %1$@.";

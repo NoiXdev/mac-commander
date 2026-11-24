@@ -25,7 +25,7 @@ enum PreviewAction: Equatable {
 
     var title: String {
         switch self {
-        case .showSource: String(localized: "Show Source")
+        case .showSource: L10n.string("preview.action.showSource", "Show Source")
         }
     }
 }
@@ -195,8 +195,8 @@ final class PreviewController {
             header = nil
             content = .empty(
                 selection.isEmpty
-                    ? String(localized: "No Selection")
-                    : String(localized: "\(selection.count) items"))
+                    ? L10n.string("preview.selection.none", "No Selection")
+                    : L10n.plural("preview.selection.items", count: selection.count, one: "1 item", other: "%lld items"))
             return
         }
         let generation = generation
@@ -256,7 +256,7 @@ final class PreviewController {
             guard isCurrent(generation, selection) else { return }
             switch error {
             case .passwordRequired, .incorrectPassword:
-                content = .empty(String(localized: "Encrypted. Press Space to enter the password."))
+                content = .empty(L10n.string("preview.archive.encrypted", "Encrypted. Press Space to enter the password."))
             case .cancelled:
                 break
             default:
@@ -303,7 +303,7 @@ final class PreviewController {
             case .tooLarge(let bytes):
                 let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
                 content = .message(
-                    String(localized: "“\(name)” is too large to render (\(size))."),
+                    L10n.format("preview.render.tooLarge", "“%1$@” is too large to render (%2$@).", name, size),
                     actions: [.showSource(url)])
             case .unreadable:
                 showUnpreviewable(name)
@@ -422,7 +422,7 @@ final class PreviewController {
     }
 
     private func showUnpreviewable(_ name: String) {
-        content = .message(String(localized: "“\(name)” can’t be previewed."), actions: [])
+        content = .message(L10n.format("preview.unpreviewable", "“%@” can’t be previewed.", name), actions: [])
     }
 
     // MARK: - Actions

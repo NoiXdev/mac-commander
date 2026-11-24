@@ -290,5 +290,133 @@
             <string>%lld Objekte komprimieren</string>
         </dict>
     </dict>
+    <key>operation.alert.itemsFailed</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt konnte nicht verarbeitet werden.</string>
+            <key>other</key>
+            <string>%lld Objekte konnten nicht verarbeitet werden.</string>
+        </dict>
+    </dict>
+    <key>operation.strip.files</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>%2$lld von 1 Datei</string>
+            <key>other</key>
+            <string>%2$lld von %1$lld Dateien</string>
+        </dict>
+    </dict>
+    <key>convert.zeroFilledSectors</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 nicht lesbarer Sektor wurde mit Nullen gefüllt.</string>
+            <key>other</key>
+            <string>%lld nicht lesbare Sektoren wurden mit Nullen gefüllt.</string>
+        </dict>
+    </dict>
+    <key>convert.audioTracks.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>„%2$@“ hat 1 Audiospur.</string>
+            <key>other</key>
+            <string>„%2$@“ hat %1$lld Audiospuren.</string>
+        </dict>
+    </dict>
+    <key>convert.audioTracks.leftOut</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Ein ISO-Image kann nur die Datenspur enthalten; die Audiospur wird weggelassen.</string>
+            <key>other</key>
+            <string>Ein ISO-Image kann nur die Datenspur enthalten; die Audiospuren werden weggelassen.</string>
+        </dict>
+    </dict>
+    <key>info.size.folder</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>%3$@ für 1 Objekt (%4$@ Bytes)</string>
+            <key>other</key>
+            <string>%3$@ für %2$@ Objekte (%4$@ Bytes)</string>
+        </dict>
+    </dict>
+    <key>info.size.file</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>%2$@ (1 Byte)</string>
+            <key>other</key>
+            <string>%2$@ (%3$@ Bytes)</string>
+        </dict>
+    </dict>
+    <key>preview.selection.items</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt</string>
+            <key>other</key>
+            <string>%lld Objekte</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

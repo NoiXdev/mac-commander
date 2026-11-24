@@ -362,5 +362,165 @@
             <string>Kompresuj %lld rzeczy</string>
         </dict>
     </dict>
+    <key>operation.alert.itemsFailed</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 rzecz nie mogła zostać przetworzona.</string>
+            <key>few</key>
+            <string>%lld rzeczy nie mogły zostać przetworzone.</string>
+            <key>many</key>
+            <string>%lld rzeczy nie mogło zostać przetworzonych.</string>
+            <key>other</key>
+            <string>%lld rzeczy nie mogło zostać przetworzone.</string>
+        </dict>
+    </dict>
+    <key>operation.strip.files</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>%2$lld z 1 pliku</string>
+            <key>few</key>
+            <string>%2$lld z %1$lld plików</string>
+            <key>many</key>
+            <string>%2$lld z %1$lld plików</string>
+            <key>other</key>
+            <string>%2$lld z %1$lld pliku</string>
+        </dict>
+    </dict>
+    <key>convert.zeroFilledSectors</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 nieczytelny sektor został zapisany jako zera.</string>
+            <key>few</key>
+            <string>%lld nieczytelne sektory zostały zapisane jako zera.</string>
+            <key>many</key>
+            <string>%lld nieczytelnych sektorów zostało zapisanych jako zera.</string>
+            <key>other</key>
+            <string>%lld nieczytelnego sektora zostało zapisane jako zera.</string>
+        </dict>
+    </dict>
+    <key>convert.audioTracks.title</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>„%2$@” ma 1 ścieżkę audio.</string>
+            <key>few</key>
+            <string>„%2$@” ma %1$lld ścieżki audio.</string>
+            <key>many</key>
+            <string>„%2$@” ma %1$lld ścieżek audio.</string>
+            <key>other</key>
+            <string>„%2$@” ma %1$lld ścieżki audio.</string>
+        </dict>
+    </dict>
+    <key>convert.audioTracks.leftOut</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Obraz ISO może zawierać tylko ścieżkę danych; ścieżka audio zostanie pominięta.</string>
+            <key>few</key>
+            <string>Obraz ISO może zawierać tylko ścieżkę danych; ścieżki audio zostaną pominięte.</string>
+            <key>many</key>
+            <string>Obraz ISO może zawierać tylko ścieżkę danych; ścieżki audio zostaną pominięte.</string>
+            <key>other</key>
+            <string>Obraz ISO może zawierać tylko ścieżkę danych; ścieżki audio zostaną pominięte.</string>
+        </dict>
+    </dict>
+    <key>info.size.folder</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>%3$@ dla 1 rzeczy (%4$@ B)</string>
+            <key>few</key>
+            <string>%3$@ dla %2$@ rzeczy (%4$@ B)</string>
+            <key>many</key>
+            <string>%3$@ dla %2$@ rzeczy (%4$@ B)</string>
+            <key>other</key>
+            <string>%3$@ dla %2$@ rzeczy (%4$@ B)</string>
+        </dict>
+    </dict>
+    <key>info.size.file</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>%2$@ (1 B)</string>
+            <key>few</key>
+            <string>%2$@ (%3$@ B)</string>
+            <key>many</key>
+            <string>%2$@ (%3$@ B)</string>
+            <key>other</key>
+            <string>%2$@ (%3$@ B)</string>
+        </dict>
+    </dict>
+    <key>preview.selection.items</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 rzecz</string>
+            <key>few</key>
+            <string>%lld rzeczy</string>
+            <key>many</key>
+            <string>%lld rzeczy</string>
+            <key>other</key>
+            <string>%lld rzeczy</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

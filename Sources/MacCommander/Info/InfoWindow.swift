@@ -72,17 +72,17 @@ struct InfoWindow: View {
                     .lineLimit(3)
             }
             Grid(alignment: .topLeading, horizontalSpacing: 10, verticalSpacing: 6) {
-                row(String(localized: "Kind"), info?.kind ?? "")
-                row(String(localized: "Size"), sizeText)
-                row(String(localized: "Created"), info?.created.map { $0.formatted(Self.dateStyle) } ?? "")
-                row(String(localized: "Modified"), info?.modified.map { $0.formatted(Self.dateStyle) } ?? "")
-                row(String(localized: "Where"), info?.parent ?? "")
+                row(L10n.string("info.label.kind", "Kind"), info?.kind ?? "")
+                row(L10n.string("info.label.size", "Size"), sizeText)
+                row(L10n.string("info.label.created", "Created"), info?.created.map { $0.formatted(Self.dateStyle) } ?? "")
+                row(L10n.string("info.label.modified", "Modified"), info?.modified.map { $0.formatted(Self.dateStyle) } ?? "")
+                row(L10n.string("info.label.where", "Where"), info?.parent ?? "")
                 tagsRow
             }
         }
         .padding(20)
         .frame(width: 420, alignment: .leading)
-        .navigationTitle(String(localized: "\(info?.name ?? url.lastPathComponent) Info"))
+        .navigationTitle(L10n.format("info.window.title", "%@ Info", info?.name ?? url.lastPathComponent))
         .task(id: url) { await load() }
     }
 
@@ -100,7 +100,7 @@ struct InfoWindow: View {
     /// Chips with a remove button, then "+" for the Tags menu. Every edit is written, then the info reloaded.
     private var tagsRow: some View {
         GridRow(alignment: .firstTextBaseline) {
-            Text(String(localized: "Tags"))
+            L10n.text("info.label.tags", "Tags")
                 .foregroundStyle(.secondary)
                 .gridColumnAlignment(.trailing)
             TagChipFlow(spacing: 4) {
@@ -113,7 +113,7 @@ struct InfoWindow: View {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderless)
-                .help(String(localized: "Add or remove tags"))
+                .help(L10n.string("info.tags.edit", "Add or remove tags"))
                 .disabled(info == nil)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -131,7 +131,7 @@ struct InfoWindow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help(String(localized: "Remove “\(tag.name)”"))
+            .help(L10n.format("info.tags.remove", "Remove “%@”", tag.name))
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
@@ -177,12 +177,10 @@ struct InfoWindow: View {
             sizeText = loaded.fileSize.map(Self.fileSizeText) ?? "--"
             return
         }
-        sizeText = String(localized: "Calculating…")
+        sizeText = L10n.string("info.size.calculating", "Calculating…")
         do {
             let size = try await FolderSizeCalculator.size(of: url)
-            let count = size.items.formatted()
-            let items = size.items == 1 ? String(localized: "1 item") : String(localized: "\(count) items")
-            sizeText = String(localized: "\(Self.byteString(size.bytes)) for \(items) (\(size.bytes.formatted()) bytes)")
+            sizeText = L10n.plural("info.size.folder", count: size.items, one: "%3$@ for 1 item (%4$@ bytes)", other: "%3$@ for %2$@ items (%4$@ bytes)", size.items.formatted(), Self.byteString(size.bytes), size.bytes.formatted())
         } catch is CancellationError {
             sizeText = ""
         } catch {
@@ -200,7 +198,7 @@ struct InfoWindow: View {
     }
 
     private static func fileSizeText(_ bytes: Int64) -> String {
-        "\(byteString(bytes)) (\(bytes.formatted()) bytes)"
+        L10n.plural("info.size.file", count: Int(bytes), one: "%2$@ (1 byte)", other: "%2$@ (%3$@ bytes)", byteString(bytes), bytes.formatted())
     }
 }
 

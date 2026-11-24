@@ -262,3 +262,15 @@ public enum ArchiveExtractor {
         return .unreadable(message: L10n.format("archive.error.itemMissing", "“%@” isn’t in the archive.", name))
     }
 }
+
+extension ArchiveExtractor {
+    /// The error a failed file promise of the entry `name` completes with. The receiver (Finder) shows only its
+    /// description, and the cause is often bsdtar's own untranslated text, so the cause goes inside a sentence
+    /// naming the entry. The description is a plain user-info string, so it survives the trip to the receiver.
+    public static func promiseError(name: String, _ error: any Error) -> NSError {
+        let text = L10n.format("archive.promise.failed", "“%1$@” couldn’t be extracted: %2$@", name, error.localizedDescription)
+        return NSError(
+            domain: NSCocoaErrorDomain, code: CocoaError.fileWriteUnknown.rawValue,
+            userInfo: [NSLocalizedDescriptionKey: text])
+    }
+}

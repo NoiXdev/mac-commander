@@ -7,10 +7,10 @@ enum OpenWithMenu {
     /// The submenu shows "Loading…" until the applications are known: content types, Launch Services and
     /// app icons are looked up off the main actor, since the files may be on a network volume.
     static func make(for urls: [URL]) -> NSMenuItem {
-        let item = NSMenuItem(title: String(localized: "Open With"), action: nil, keyEquivalent: "")
+        let item = NSMenuItem(title: L10n.string("operation.openWith.title", "Open With"), action: nil, keyEquivalent: "")
         let menu = NSMenu()
         menu.autoenablesItems = false
-        let loading = NSMenuItem(title: String(localized: "Loading…"), action: nil, keyEquivalent: "")
+        let loading = NSMenuItem(title: L10n.string("operation.openWith.loading", "Loading…"), action: nil, keyEquivalent: "")
         loading.isEnabled = false
         menu.addItem(loading)
         item.submenu = menu
@@ -41,7 +41,7 @@ enum OpenWithMenu {
         menu.removeAllItems()
         if let choices {
             if let app = choices.defaultApp {
-                menu.addItem(appItem(app, title: app.name + " " + String(localized: "(default)"), urls: urls))
+                menu.addItem(appItem(app, title: L10n.format("operation.openWith.defaultApp", "%@ (default)", app.name), urls: urls))
                 if !choices.others.isEmpty { menu.addItem(.separator()) }
             }
             var seen = Set<String>()
@@ -50,7 +50,7 @@ enum OpenWithMenu {
             }
             if menu.numberOfItems > 0 { menu.addItem(.separator()) }
         }
-        menu.addItem(ActionMenuItem(String(localized: "Other…")) { chooseApp(for: urls) })
+        menu.addItem(ActionMenuItem(L10n.string("operation.openWith.other", "Other…")) { chooseApp(for: urls) })
     }
 
     /// Launch Services is queried once per content type, not per item: a huge selection of a few types
@@ -122,7 +122,7 @@ enum OpenWithMenu {
         panel.allowedContentTypes = [.application]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.prompt = String(localized: "Open")
+        panel.prompt = L10n.string("operation.openWith.choosePrompt", "Open")
         let handle: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let app = panel.url else { return }
             open(urls, with: app)

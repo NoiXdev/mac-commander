@@ -89,7 +89,8 @@ final class ArchiveEntryDragProvider: NSFilePromiseProvider {
 /// Writes archive entry promises: extracts the entry to exactly the promised URL (never overwriting; an
 /// existing item fails the promise) off the main thread, at most two at a time. The password is the
 /// session's remembered one; an encrypted archive without one (or with a wrong one) asks for it app-modally
-/// and tries again. Cancel fails the promise with `userCancelled`; other errors are shown by the receiver.
+/// and tries again. Cancel fails the promise with `userCancelled`; other errors are shown by the receiver, inside
+/// a sentence naming the entry (`ArchiveExtractor.promiseError`).
 final class ArchiveDragDelegate: NSObject, NSFilePromiseProviderDelegate, Sendable {
     static let shared = ArchiveDragDelegate()
 
@@ -146,7 +147,7 @@ final class ArchiveDragDelegate: NSObject, NSFilePromiseProviderDelegate, Sendab
                         for: archive, tried: password, incorrect: error == .incorrectPassword)
                 else { return CocoaError(.userCancelled) }
             } catch {
-                return error
+                return ArchiveExtractor.promiseError(name: (entry as NSString).lastPathComponent, error)
             }
         }
     }

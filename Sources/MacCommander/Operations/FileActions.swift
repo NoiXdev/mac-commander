@@ -44,14 +44,14 @@ enum FileActions {
             workspace.urlForApplication(withBundleIdentifier: $0.bundleIdentifier) != nil
         }
         guard let appURL = workspace.urlForApplication(withBundleIdentifier: app.bundleIdentifier) else {
-            showAlert([String(localized: "Couldn’t open \(app.displayName): the app isn’t installed.")], window: window)
+            showAlert([L10n.format("operation.terminal.notInstalled", "Couldn’t open %@: the app isn’t installed.", app.displayName)], window: window)
             return
         }
         workspace.open(folders, withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
             guard let error else { return }
             let message = error.localizedDescription
             Task { @MainActor in
-                showAlert([String(localized: "Couldn’t open \(app.displayName): \(message)")], window: window)
+                showAlert([L10n.format("operation.terminal.openFailed", "Couldn’t open %1$@: %2$@", app.displayName, message)], window: window)
             }
         }
     }
@@ -71,7 +71,7 @@ enum FileActions {
         } catch is CancellationError {
             // Cancelled from the operations strip: nothing to report.
         } catch {
-            showAlert([String(localized: "The items couldn’t be compressed: \(error.localizedDescription)")], window: window)
+            showAlert([L10n.format("operation.compress.failed", "The items couldn’t be compressed: %@", error.localizedDescription)], window: window)
         }
     }
 
@@ -140,9 +140,9 @@ enum FileActions {
                     let detail =
                         switch error {
                         case .failed(_, let message): message
-                        case .intoItself(let item): String(localized: "“\(item)” can’t be moved into itself.")
+                        case .intoItself(let item): L10n.format("operation.extract.intoItself", "“%@” can’t be moved into itself.", item)
                         }
-                    showAlert([String(localized: "“\(name)” couldn’t be extracted: \(detail)")], window: window)
+                    showAlert([L10n.format("operation.extract.failed", "“%1$@” couldn’t be extracted: %2$@", name, detail)], window: window)
                 }
                 return
             } catch is CancellationError {
@@ -158,12 +158,12 @@ enum FileActions {
                 case .cancelled:
                     return
                 case .unsupported(let message), .unreadable(let message):
-                    showAlert([String(localized: "“\(name)” couldn’t be extracted: \(message)")], window: window)
+                    showAlert([L10n.format("operation.extract.failed", "“%1$@” couldn’t be extracted: %2$@", name, message)], window: window)
                     return
                 }
             } catch {
                 showAlert(
-                    [String(localized: "“\(name)” couldn’t be extracted: \(error.localizedDescription)")], window: window)
+                    [L10n.format("operation.extract.failed", "“%1$@” couldn’t be extracted: %2$@", name, error.localizedDescription)], window: window)
                 return
             }
         }
@@ -183,7 +183,7 @@ enum FileActions {
         // A symlink would be followed out of the cache, e.g. to `~/.zshrc`.
         let links = items.filter { !$0.isDirectory && $0.isSymlink }
         showAlert(
-            links.map { String(localized: "“\($0.name)” couldn’t be opened: It’s a link.") }, window: window)
+            links.map { L10n.format("operation.open.link", "“%@” couldn’t be opened: It’s a link.", $0.name) }, window: window)
         let candidates = items.filter { !$0.isDirectory && !$0.isSymlink }
         let nested = candidates.filter { ArchiveFormats.isArchive($0.url) }
         let files = candidates.filter { !ArchiveFormats.isArchive($0.url) }
@@ -224,7 +224,7 @@ enum FileActions {
                 case .cancelled:
                     return nil
                 case .unsupported(let message), .unreadable(let message):
-                    showAlert([String(localized: "“\(name)” couldn’t be opened: \(message)")], window: window)
+                    showAlert([L10n.format("operation.open.failed", "“%1$@” couldn’t be opened: %2$@", name, message)], window: window)
                     return nil
                 }
             }
@@ -238,7 +238,7 @@ enum FileActions {
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
-        panel.prompt = String(localized: "Extract")
+        panel.prompt = L10n.string("operation.extract.prompt", "Extract")
         panel.directoryURL = directory
         let response: NSApplication.ModalResponse
         if let window, window.isVisible, window.attachedSheet == nil {
@@ -299,7 +299,7 @@ enum FileActions {
         guard !items.isEmpty else { return }
         let result = await model.operations.trash(items.map(\.url))
         let messages = result.failures.map { failure in
-            String(localized: "“\(failure.url.lastPathComponent)” couldn’t be moved to the Trash: \(failure.message)")
+            L10n.format("operation.trash.failed", "“%1$@” couldn’t be moved to the Trash: %2$@", failure.url.lastPathComponent, failure.message)
         }
         showAlert(messages, window: window)
     }
@@ -315,10 +315,10 @@ enum FileActions {
                 NSSound.beep()
             case .itemChanged(let name):
                 showAlert(
-                    [String(localized: "“\(name)” can’t be restored because it was changed or another item is in its place.")],
+                    [L10n.format("operation.undo.itemChanged", "“%@” can’t be restored because it was changed or another item is in its place.", name)],
                     window: window)
             case .failed(let name, let message):
-                showAlert([String(localized: "“\(name)” couldn’t be restored: \(message)")], window: window)
+                showAlert([L10n.format("operation.undo.failed", "“%1$@” couldn’t be restored: %2$@", name, message)], window: window)
             }
         }
     }
@@ -338,13 +338,13 @@ enum FileActions {
     private static func message(for error: TransferError, mode: TransferMode) -> String {
         switch (error, mode) {
         case (.intoItself(let name), .copy):
-            String(localized: "“\(name)” can’t be copied into itself.")
+            L10n.format("operation.transfer.copyIntoItself", "“%@” can’t be copied into itself.", name)
         case (.intoItself(let name), .move):
-            String(localized: "“\(name)” can’t be moved into itself.")
+            L10n.format("operation.transfer.moveIntoItself", "“%@” can’t be moved into itself.", name)
         case (.failed(let name, let message), .copy):
-            String(localized: "“\(name)” couldn’t be copied: \(message)")
+            L10n.format("operation.transfer.copyFailed", "“%1$@” couldn’t be copied: %2$@", name, message)
         case (.failed(let name, let message), .move):
-            String(localized: "“\(name)” couldn’t be moved: \(message)")
+            L10n.format("operation.transfer.moveFailed", "“%1$@” couldn’t be moved: %2$@", name, message)
         }
     }
 
@@ -357,7 +357,7 @@ enum FileActions {
         if messages.count == 1 {
             alert.messageText = first
         } else {
-            alert.messageText = String(localized: "\(messages.count) items couldn’t be processed.")
+            alert.messageText = L10n.plural("operation.alert.itemsFailed", count: messages.count, one: "1 item couldn’t be processed.", other: "%lld items couldn’t be processed.")
             alert.informativeText = messages.joined(separator: "\n")
         }
         if let window, window.isVisible, window.attachedSheet == nil {

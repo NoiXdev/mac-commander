@@ -537,3 +537,30 @@ private func quarantine(_ url: URL) -> String? {
     guard getxattr(url.path, "com.apple.quarantine", &buffer, size, 0, XATTR_NOFOLLOW) == size else { return nil }
     return String(decoding: buffer, as: UTF8.self)
 }
+
+/// A failed archive drag to Finder completes its file promise with `promiseError`. Finder shows only the
+/// error's description, so bsdtar's raw text must arrive inside a translated sentence naming the entry.
+@Suite struct ArchivePromiseErrorTests {
+    @Test(.english) func wrapsTheCauseInASentenceNamingTheEntry() {
+        let error = ArchiveExtractor.promiseError(
+            name: "report.txt", ArchiveError.unreadable(message: "Truncated input file (needed 512 bytes)"))
+        #expect(error.localizedDescription == "“report.txt” couldn’t be extracted: Truncated input file (needed 512 bytes)")
+    }
+
+    @Test func keepsTheRawToolTextInsideTheTranslatedSentence() {
+        L10n.$localeOverride.withValue("de") {
+            let error = ArchiveExtractor.promiseError(
+                name: "Bericht.txt", ArchiveError.unsupported(message: "Unrecognized archive format"))
+            #expect(error.localizedDescription == "„Bericht.txt“ konnte nicht entpackt werden: Unrecognized archive format")
+        }
+    }
+
+    /// The error crosses to the receiving app, so its text must survive secure coding.
+    @Test(.english) func survivesSecureCoding() throws {
+        let error = ArchiveExtractor.promiseError(name: "a.zip", CocoaError(.fileWriteFileExists))
+        let data = try NSKeyedArchiver.archivedData(withRootObject: error, requiringSecureCoding: true)
+        let decoded = try #require(try NSKeyedUnarchiver.unarchivedObject(ofClass: NSError.self, from: data))
+        #expect(decoded.localizedDescription == error.localizedDescription)
+        #expect(decoded.localizedDescription.hasPrefix("“a.zip” couldn’t be extracted: "))
+    }
+}

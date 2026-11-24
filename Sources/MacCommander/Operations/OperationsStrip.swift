@@ -88,8 +88,8 @@ private struct OperationRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.borderless)
-            .help(String(localized: "Stop"))
-            .accessibilityLabel(String(localized: "Stop"))
+            .help(L10n.string("operation.strip.stop", "Stop"))
+            .accessibilityLabel(L10n.string("operation.strip.stop", "Stop"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -98,11 +98,11 @@ private struct OperationRow: View {
     private static func byteText(_ progress: TransferProgress) -> String {
         let completed = ByteCountFormatter.string(fromByteCount: progress.completedBytes, countStyle: .file)
         let total = ByteCountFormatter.string(fromByteCount: progress.totalBytes, countStyle: .file)
-        return String(localized: "\(completed) of \(total)")
+        return L10n.format("operation.strip.bytes", "%1$@ of %2$@", completed, total)
     }
 
     /// A conversion reports thousandths of a file as bytes; its text counts the files.
     private static func fileText(_ progress: TransferProgress) -> String {
-        String(localized: "\(progress.completedItems) of \(progress.totalItems) files")
+        L10n.plural("operation.strip.files", count: progress.totalItems, one: "%2$lld of 1 file", other: "%2$lld of %1$lld files", progress.completedItems)
     }
 }

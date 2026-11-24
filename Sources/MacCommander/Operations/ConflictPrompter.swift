@@ -34,19 +34,19 @@ final class ConflictPrompter {
         let alert = NSAlert()
         alert.alertStyle = .warning
         let name = conflict.existing.lastPathComponent
-        alert.messageText = String(localized: "An item named “\(name)” already exists in this location.")
+        alert.messageText = L10n.format("operation.conflict.title", "An item named “%@” already exists in this location.", name)
         alert.informativeText =
             conflict.mode == .copy
-            ? String(localized: "Do you want to replace it with the one you’re copying?")
-            : String(localized: "Do you want to replace it with the one you’re moving?")
-        alert.addButton(withTitle: String(localized: "Keep Both"))
-        alert.addButton(withTitle: String(localized: "Replace"))
-        alert.addButton(withTitle: String(localized: "Skip"))
-        let stop = alert.addButton(withTitle: String(localized: "Stop"))
+            ? L10n.string("operation.conflict.copying", "Do you want to replace it with the one you’re copying?")
+            : L10n.string("operation.conflict.moving", "Do you want to replace it with the one you’re moving?")
+        alert.addButton(withTitle: L10n.string("operation.conflict.keepBoth", "Keep Both"))
+        alert.addButton(withTitle: L10n.string("operation.conflict.replace", "Replace"))
+        alert.addButton(withTitle: L10n.string("operation.conflict.skip", "Skip"))
+        let stop = alert.addButton(withTitle: L10n.string("operation.conflict.stop", "Stop"))
         stop.keyEquivalent = "\u{1b}"
         if conflict.moreItemsFollow {
             alert.showsSuppressionButton = true
-            alert.suppressionButton?.title = String(localized: "Apply to All")
+            alert.suppressionButton?.title = L10n.string("operation.conflict.applyToAll", "Apply to All")
         }
 
         let response: NSApplication.ModalResponse

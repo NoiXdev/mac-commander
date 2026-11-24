@@ -380,5 +380,77 @@
 "fileList.unreadable.enterPassword" = "Saisir le mot de passe…";
 "name.untitled" = "sans titre";
 
+/* Archives: password prompt and drag to other apps */
+"archive.password.title" = "Saisissez le mot de passe de « %@ »";
+"archive.password.incorrect" = "Le mot de passe saisi est incorrect.";
+"archive.password.ok" = "OK";
+"archive.password.cancel" = "Annuler";
+"archive.password.placeholder" = "Mot de passe";
+"archive.promise.failed" = "Impossible d’extraire « %1$@ » : %2$@";
+
+/* File operations: alerts */
+"operation.terminal.notInstalled" = "Impossible d’ouvrir %@ : l’app n’est pas installée.";
+"operation.terminal.openFailed" = "Impossible d’ouvrir %1$@ : %2$@";
+"operation.compress.failed" = "Impossible de compresser les éléments : %@";
+"operation.extract.intoItself" = "Impossible de placer « %@ » dans lui-même.";
+"operation.extract.failed" = "Impossible d’extraire « %1$@ » : %2$@";
+"operation.extract.prompt" = "Extraire";
+"operation.open.link" = "Impossible d’ouvrir « %@ » : c’est un lien.";
+"operation.open.failed" = "Impossible d’ouvrir « %1$@ » : %2$@";
+"operation.trash.failed" = "Impossible de placer « %1$@ » dans la corbeille : %2$@";
+"operation.undo.itemChanged" = "Impossible de restaurer « %@ » car il a été modifié ou un autre élément occupe sa place.";
+"operation.undo.failed" = "Impossible de restaurer « %1$@ » : %2$@";
+"operation.transfer.copyIntoItself" = "Impossible de copier « %@ » sur lui-même.";
+"operation.transfer.moveIntoItself" = "Impossible de placer « %@ » dans lui-même.";
+"operation.transfer.copyFailed" = "Impossible de copier « %1$@ » : %2$@";
+"operation.transfer.moveFailed" = "Impossible de déplacer « %1$@ » : %2$@";
+
+/* File operations: name conflicts */
+"operation.conflict.title" = "Un élément nommé « %@ » existe déjà à cet emplacement.";
+"operation.conflict.copying" = "Souhaitez-vous le remplacer par celui que vous copiez ?";
+"operation.conflict.moving" = "Souhaitez-vous le remplacer par l’élément que vous déplacez ?";
+"operation.conflict.keepBoth" = "Garder les deux";
+"operation.conflict.replace" = "Remplacer";
+"operation.conflict.skip" = "Ignorer";
+"operation.conflict.stop" = "Arrêter";
+"operation.conflict.applyToAll" = "Appliquer à tous";
+
+/* File operations: Open With menu and the operations strip */
+"operation.openWith.title" = "Ouvrir avec";
+"operation.openWith.loading" = "Chargement…";
+"operation.openWith.defaultApp" = "%@ (par défaut)";
+"operation.openWith.other" = "Autre…";
+"operation.openWith.choosePrompt" = "Ouvrir";
+"operation.strip.stop" = "Arrêter";
+"operation.strip.bytes" = "%1$@ sur %2$@";
+
+/* Convert: menu and alerts */
+"convert.menu.title" = "Convertir";
+"convert.failed" = "Impossible de convertir « %1$@ » : %2$@";
+"convert.audioTracks.convert" = "Convertir";
+"convert.audioTracks.cancel" = "Annuler";
+
+/* Get Info window */
+"info.window.title" = "Infos sur %@";
+"info.label.kind" = "Type";
+"info.label.size" = "Taille";
+"info.label.created" = "Création";
+"info.label.modified" = "Modifié";
+"info.label.where" = "Emplacement";
+"info.label.tags" = "Tags";
+"info.tags.edit" = "Ajouter ou supprimer des tags";
+"info.tags.remove" = "Supprimer « %@ »";
+"info.size.calculating" = "Calcul…";
+
+/* Preview panel */
+"preview.action.showSource" = "Afficher la source";
+"preview.selection.none" = "Aucune sélection";
+"preview.archive.encrypted" = "Chiffré. Appuyez sur Espace pour saisir le mot de passe.";
+"preview.render.tooLarge" = "« %1$@ » est trop volumineux pour être affiché (%2$@).";
+"preview.unpreviewable" = "Impossible d’afficher l’aperçu de « %@ ».";
+"preview.mode.label" = "Afficher";
+"preview.mode.rendered" = "Rendu";
+"preview.mode.source" = "Source";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ se trouve dans %2$@.";
