@@ -6,9 +6,11 @@ public enum SidebarSection: String, CaseIterable, Codable, Sendable {
 }
 
 public struct Preferences: Codable, Equatable, Sendable {
-    public static let defaultNewFileName = "untitled.txt"
+    /// The language's default name for a new file ("untitled.txt", "Neue Datei.txt", …).
+    public static var builtInNewFileName: String { L10n.string("name.newFile", "untitled.txt") }
 
-    public var newFileName = Preferences.defaultNewFileName
+    /// What the user typed in Settings. Empty means the built-in name, which follows the language.
+    public var newFileName = ""
     /// nil means the home folder.
     public var newWindowFolderPath: String?
     public var hiddenSidebarSections: Set<SidebarSection> = []
@@ -25,7 +27,7 @@ public struct Preferences: Codable, Equatable, Sendable {
     public var knownTags: [FileTag] = []
 
     public init(
-        newFileName: String = Preferences.defaultNewFileName, newWindowFolderPath: String? = nil,
+        newFileName: String = "", newWindowFolderPath: String? = nil,
         hiddenSidebarSections: Set<SidebarSection> = [], hiddenTags: Set<String> = [],
         didShowFullDiskAccessHint: Bool = false, dualPaneEnabled: Bool = false
     ) {
@@ -47,6 +49,8 @@ public struct Preferences: Codable, Equatable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let d = Preferences()
         newFileName = (try? c.decodeIfPresent(String.self, forKey: .newFileName)) ?? d.newFileName
+        // Older versions stored the English default; it now means "use the built-in name".
+        if newFileName == "untitled.txt" { newFileName = "" }
         newWindowFolderPath = try? c.decodeIfPresent(String.self, forKey: .newWindowFolderPath)
         didShowFullDiskAccessHint =
             (try? c.decodeIfPresent(Bool.self, forKey: .didShowFullDiskAccessHint)) ?? d.didShowFullDiskAccessHint
@@ -102,9 +106,9 @@ public struct Preferences: Codable, Equatable, Sendable {
         return !name.contains("/") && !name.contains(":")
     }
 
-    /// `newFileName` when valid, else `untitled.txt`.
+    /// `newFileName` when valid, else the built-in name of the current language.
     public var effectiveNewFileName: String {
-        Self.isValidFileName(newFileName) ? newFileName : Self.defaultNewFileName
+        Self.isValidFileName(newFileName) ? newFileName : Self.builtInNewFileName
     }
 
     /// The chosen folder when set and existing, else home. `exists` may block (network volumes): call off main.

@@ -326,7 +326,7 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         await removeOffMain(big)
     }
 
-    @Test func createEmptyFileSelectsAndRequestsRename() async throws {
+    @Test(.english) func createEmptyFileSelectsAndRequestsRename() async throws {
         let dir = try TemporaryDirectory()
         let model = BrowserModel(start: dir.url, settings: makeStore())
         await model.reload()
@@ -339,7 +339,7 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(model.items.contains { $0.url == url })
     }
 
-    @Test func createFolderSelectsAndRequestsRename() async throws {
+    @Test(.english) func createFolderSelectsAndRequestsRename() async throws {
         let dir = try TemporaryDirectory()
         let model = BrowserModel(start: dir.url, settings: makeStore())
         await model.reload()
@@ -476,7 +476,7 @@ private final class StallingPathQueries: PathQueriesProvider, @unchecked Sendabl
         #expect(recorder.opened.isEmpty)
     }
 
-    @Test func navigatingAwayDuringCreateReloadLeavesSelectionAlone() async throws {
+    @Test(.english) func navigatingAwayDuringCreateReloadLeavesSelectionAlone() async throws {
         let dir = try TemporaryDirectory()
         let first = try dir.folder("first")
         let other = try dir.folder("other")

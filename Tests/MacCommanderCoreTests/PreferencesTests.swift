@@ -4,7 +4,7 @@ import Testing
 @testable import MacCommanderCore
 
 @MainActor
-struct PreferencesTests {
+@Suite(.english) struct PreferencesTests {
     private func suite() -> (UserDefaults, String) {
         let name = UUID().uuidString
         return (UserDefaults(suiteName: name)!, name)
@@ -26,7 +26,7 @@ struct PreferencesTests {
         let json = #"{"newFileName": 5, "hiddenSidebarSections": ["tags","bogus"]}"#
         defaults.set(Data(json.utf8), forKey: PreferencesStore.key)
         let store = PreferencesStore(defaults: defaults)
-        #expect(store.preferences.newFileName == "untitled.txt")
+        #expect(store.preferences.newFileName == "")
         #expect(store.preferences.hiddenSidebarSections == [.tags])
     }
 
@@ -52,6 +52,25 @@ struct PreferencesTests {
             #expect(Preferences(newFileName: bad).effectiveNewFileName == "untitled.txt")
         }
         #expect(Preferences(newFileName: "notes.md").effectiveNewFileName == "notes.md")
+    }
+
+    @Test func oldDefaultFileNameDecodesAsBuiltIn() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(Data(#"{"newFileName": "untitled.txt"}"#.utf8), forKey: PreferencesStore.key)
+        let prefs = PreferencesStore(defaults: defaults).preferences
+        #expect(prefs.newFileName == "")
+        #expect(prefs.effectiveNewFileName == "untitled.txt")
+        L10n.$localeOverride.withValue("de") {
+            #expect(prefs.effectiveNewFileName == "Neue Datei.txt")
+        }
+    }
+
+    @Test func customFileNameIsKept() {
+        let prefs = Preferences(newFileName: "notes.md")
+        L10n.$localeOverride.withValue("de") {
+            #expect(prefs.effectiveNewFileName == "notes.md")
+        }
     }
 
     @Test func createEmptyFileNamed() throws {

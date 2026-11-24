@@ -55,9 +55,12 @@ struct GeneralSettings: View {
                 VStack(alignment: .leading, spacing: 4) {
                     TextField(
                         String(localized: "Default name for new files"),
-                        text: Bindable(preferences).preferences.newFileName)
-                    if !Preferences.isValidFileName(preferences.preferences.newFileName) {
-                        Text(String(localized: "Not a valid file name; “untitled.txt” is used."))
+                        text: Bindable(preferences).preferences.newFileName,
+                        prompt: Text(Preferences.builtInNewFileName))
+                    if !preferences.preferences.newFileName.isEmpty,
+                        !Preferences.isValidFileName(preferences.preferences.newFileName)
+                    {
+                        Text(L10n.format("settings.general.newFileName.invalid", "Not a valid file name; “%@” is used.", Preferences.builtInNewFileName))
                             .font(.callout)
                             .foregroundStyle(.red)
                     }

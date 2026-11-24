@@ -3,7 +3,7 @@ import Foundation
 public enum ItemCreator {
     public static func createFolder(in directory: URL) throws -> URL {
         for _ in 0..<100 {
-            let name = NameGenerator.uniqueName(base: "untitled folder", pathExtension: nil, in: directory)
+            let name = NameGenerator.uniqueName(base: L10n.string("name.newFolder", "untitled folder"), pathExtension: nil, in: directory)
             let url = directory.appendingPathComponent(name, isDirectory: true)
             do {
                 try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
@@ -17,7 +17,7 @@ public enum ItemCreator {
     }
 
     public static func createEmptyFile(in directory: URL) throws -> URL {
-        try createEmptyFile(in: directory, named: "untitled.txt")
+        try createEmptyFile(in: directory, named: Preferences.builtInNewFileName)
     }
 
     /// `named` is split at the last dot unless that is the first character (`.env`, `Makefile` have no extension).

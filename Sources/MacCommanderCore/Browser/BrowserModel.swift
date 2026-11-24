@@ -585,7 +585,7 @@ public final class BrowserModel {
     }
 
     /// The name for new files (the app wires it to the preferences).
-    @ObservationIgnored public var newFileName: @MainActor () -> String = { "untitled.txt" }
+    @ObservationIgnored public var newFileName: @MainActor () -> String = { Preferences.builtInNewFileName }
 
     /// Throws `CocoaError(.fileWriteNoPermission)` inside an archive, which is read-only.
     public func createEmptyFile(in directory: URL? = nil) async throws -> URL {

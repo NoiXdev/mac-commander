@@ -106,7 +106,7 @@ struct FileUndoStackTests {
         #expect(try f.read(a) == "A")
     }
 
-    @Test func undoCreatedTrashesItems() async throws {
+    @Test(.english) func undoCreatedTrashesItems() async throws {
         let f = try Fixture()
         let folder = try f.tmp.folder("src/untitled folder")
         f.stack.push(FileUndoRecord(action: .created([folder]), title: "New Folder"))

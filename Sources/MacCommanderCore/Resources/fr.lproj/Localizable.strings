@@ -12,6 +12,7 @@
 "settings.general.language.system" = "Système";
 "settings.general.language.footer" = "Prend effet après un redémarrage.";
 "settings.general.language.relaunch" = "Relancer MacCommander";
+"settings.general.newFileName.invalid" = "Nom de fichier non valide ; « %@ » est utilisé.";
 
 /* File list: folder load errors */
 "fileList.error.noPermission" = "Vous n’avez pas l’autorisation de voir le contenu de « %@ ».";
@@ -84,6 +85,9 @@
 
 /* Generated names */
 "name.archive" = "Archive";
+"name.newFolder" = "dossier sans titre";
+"name.newFile" = "sans titre.txt";
+"name.copySuffix" = "copie";
 
 /* Convert */
 "convert.target.jpeg" = "Image JPEG";

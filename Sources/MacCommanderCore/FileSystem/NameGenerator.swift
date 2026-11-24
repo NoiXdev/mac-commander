@@ -10,14 +10,20 @@ public enum NameGenerator {
 
     /// Finder-style duplicate name: `name copy.ext`, `name copy 2.ext`, … Always a copy name, even if `name` is free.
     /// Duplicating a copy continues its numbering (`report copy.txt` → `report copy 2.txt`) instead of stacking.
+    /// `copyWord` is written into the new name. Both it and the English "copy" count as a copy when continuing.
     public static func copyName(
-        for name: String, isDirectory: Bool, in directory: URL, fileManager: FileManager = .default
+        for name: String, isDirectory: Bool, in directory: URL,
+        copyWord: String = L10n.string("name.copySuffix", "copy"), fileManager: FileManager = .default
     ) -> String {
         let (stem, ext) = split(name, isDirectory: isDirectory)
         var base = stem
         var start = 1
-        if let range = stem.range(of: #" copy( [0-9]+)?$"#, options: .regularExpression) {
-            let suffix = stem[range].dropFirst(" copy".count).trimmingCharacters(in: .whitespaces)
+        let words = copyWord == "copy" ? ["copy"] : [copyWord, "copy"]
+        let alternatives = words.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|")
+        if let range = stem.range(of: " (?:\(alternatives))( [0-9]+)?$", options: .regularExpression) {
+            let matched = stem[range].dropFirst()
+            let word = words.first { matched.hasPrefix($0) } ?? copyWord
+            let suffix = matched.dropFirst(word.count).trimmingCharacters(in: .whitespaces)
             // A number at or beyond Int.max can't be continued: the stem then counts as a plain name.
             if suffix.isEmpty {
                 base = String(stem[..<range.lowerBound])
@@ -28,7 +34,7 @@ public enum NameGenerator {
             }
         }
         return firstFreeName(
-            base: base + " copy", pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
+            base: base + " " + copyWord, pathExtension: ext, startingAt: start, in: directory, fileManager: fileManager)
     }
 
     /// Finder "Keep Both" name: `name` itself when free, otherwise `name 2.ext`, `name 3.ext`, …

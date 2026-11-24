@@ -2,7 +2,7 @@ import Testing
 import Foundation
 @testable import MacCommanderCore
 
-@Suite struct NameGeneratorTests {
+@Suite(.english) struct NameGeneratorTests {
     @Test func firstNameIsPlain() throws {
         let dir = try TemporaryDirectory()
         #expect(NameGenerator.uniqueName(base: "untitled", pathExtension: "txt", in: dir.url) == "untitled.txt")
@@ -40,6 +40,22 @@ import Foundation
         try tmp.folder("my.folder")
         #expect(NameGenerator.copyName(for: "my.folder", isDirectory: true, in: tmp.url) == "my.folder copy")
         #expect(NameGenerator.copyName(for: ".zshrc", isDirectory: false, in: tmp.url) == ".zshrc copy")
+    }
+
+    @Test func copyNameUsesTheLanguagesWord() throws {
+        let tmp = try TemporaryDirectory()
+        try tmp.file("Bericht.txt")
+        L10n.$localeOverride.withValue("de") {
+            #expect(NameGenerator.copyName(for: "Bericht.txt", isDirectory: false, in: tmp.url) == "Bericht Kopie.txt")
+        }
+    }
+
+    @Test func copyNameContinuesAnEnglishCopyAfterASwitch() throws {
+        let tmp = try TemporaryDirectory()
+        L10n.$localeOverride.withValue("de") {
+            #expect(NameGenerator.copyName(for: "report copy.txt", isDirectory: false, in: tmp.url) == "report Kopie 2.txt")
+            #expect(NameGenerator.copyName(for: "report Kopie 3.txt", isDirectory: false, in: tmp.url) == "report Kopie 4.txt")
+        }
     }
 
     @Test func keepBothNames() throws {

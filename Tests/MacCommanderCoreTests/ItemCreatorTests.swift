@@ -2,7 +2,19 @@ import Testing
 import Foundation
 @testable import MacCommanderCore
 
-@Suite struct ItemCreatorTests {
+@Suite(.english) struct ItemCreatorTests {
+    @Test func newFolderUsesTheLanguagesName() throws {
+        let dir = try TemporaryDirectory()
+        let url = try L10n.$localeOverride.withValue("de") { try ItemCreator.createFolder(in: dir.url) }
+        #expect(url.lastPathComponent == "Neuer Ordner")
+    }
+
+    @Test func newFileUsesTheLanguagesName() throws {
+        let dir = try TemporaryDirectory()
+        let url = try L10n.$localeOverride.withValue("de") { try ItemCreator.createEmptyFile(in: dir.url) }
+        #expect(url.lastPathComponent == "Neue Datei.txt")
+    }
+
     @Test func createFolderTwice() throws {
         let dir = try TemporaryDirectory()
         let first = try ItemCreator.createFolder(in: dir.url)
