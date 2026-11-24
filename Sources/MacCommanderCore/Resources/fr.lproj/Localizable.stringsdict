@@ -258,5 +258,37 @@
             <string>Il sera retiré de %lld fichiers.</string>
         </dict>
     </dict>
+    <key>fileList.menu.quickLook</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Coup d’œil sur %lld élément</string>
+            <key>other</key>
+            <string>Coup d’œil sur %lld éléments</string>
+        </dict>
+    </dict>
+    <key>fileList.menu.compress</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Compresser %lld élément</string>
+            <key>other</key>
+            <string>Compresser %lld éléments</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

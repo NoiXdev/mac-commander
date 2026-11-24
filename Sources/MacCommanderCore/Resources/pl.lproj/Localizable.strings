@@ -107,7 +107,7 @@
 "operation.compress.titleOne" = "Kompresowanie „%@”";
 "operation.convert.titleOne" = "Konwertowanie „%@”…";
 "operation.extract.titleOne" = "Rozpakowywanie „%@”";
-"operation.undo.duplicate" = "Duplikuj";
+"operation.undo.duplicate" = "Powiel";
 "operation.undo.trash" = "Przenieś do Kosza";
 "operation.undo.compress" = "Kompresuj";
 "operation.undo.convert" = "Konwertuj";
@@ -115,8 +115,8 @@
 "operation.undo.rename" = "Zmień nazwę";
 "operation.undo.newFolder" = "Nowy folder";
 "operation.undo.newFile" = "Nowy plik";
-"operation.undo.copyOne" = "Kopiowanie „%@”";
-"operation.undo.moveOne" = "Przenoszenie „%@”";
+"operation.undo.copyOne" = "Kopiuj „%@”";
+"operation.undo.moveOne" = "Przenieś „%@”";
 "operation.convert.cancelled" = "Anulowano";
 "operation.compress.nothing" = "Nie ma nic do skompresowania.";
 "operation.compress.differentFolders" = "Rzeczy można skompresować razem tylko wtedy, gdy znajdują się w tym samym folderze.";
@@ -263,6 +263,122 @@
 "shares.signIn.guest" = "Połącz jako gość";
 "shares.signIn.noGuest" = "Ten udział nie zezwala na dostęp gości.";
 "shares.signIn.rejected" = "Nazwa użytkownika lub hasło jest nieprawidłowe.";
+
+/* Menu bar */
+"menu.file.open" = "Otwórz";
+"menu.file.newFolder" = "Nowy folder";
+"menu.file.newEmptyFile" = "Nowy pusty plik";
+"menu.file.duplicate" = "Powiel";
+"menu.file.copyToOtherPane" = "Kopiuj do drugiego panelu";
+"menu.file.moveToOtherPane" = "Przenieś do drugiego panelu";
+"menu.file.moveToTrash" = "Przenieś do Kosza";
+"menu.file.getInfo" = "Informacje";
+"menu.edit.moveItemHere" = "Przenieś rzeczy tutaj";
+"menu.edit.copyPath" = "Kopiuj ścieżkę";
+"menu.edit.copyFolderPath" = "Kopiuj ścieżkę folderu";
+"menu.edit.find" = "Znajdź…";
+"menu.edit.undo" = "Cofnij";
+"menu.edit.undoNamed" = "Cofnij %@";
+"menu.go.title" = "Idź";
+"menu.go.back" = "Wróć";
+"menu.go.forward" = "Dalej";
+"menu.go.enclosingFolder" = "Folder obejmujący";
+"menu.go.goToFolder" = "Idź do folderu…";
+"menu.go.connectToServer" = "Połącz z serwerem…";
+"menu.go.home" = "Folder domowy";
+"menu.go.desktop" = "Biurko";
+"menu.go.downloads" = "Pobrane rzeczy";
+"menu.go.applications" = "Aplikacje";
+"menu.view.refresh" = "Odśwież";
+"menu.view.showPreview" = "Pokaż podgląd";
+"menu.view.hidePreview" = "Ukryj podgląd";
+"menu.view.showHiddenFiles" = "Pokaż ukryte pliki";
+"menu.view.showCheckboxColumn" = "Pokaż kolumnę pól wyboru";
+"menu.view.singlePane" = "Jeden panel";
+"menu.view.dualPane" = "Dwa panele";
+"menu.view.swapPanes" = "Zamień panele";
+"menu.view.sameFolderInOtherPane" = "Ten sam folder w drugim panelu";
+
+/* App alerts */
+"app.quit.title" = "Anulować trwające operacje i zakończyć?";
+"app.quit.quit" = "Zakończ";
+"app.quit.dontQuit" = "Nie kończ";
+"app.fullDiskAccess.title" = "Przyznać aplikacji MacCommander pełny dostęp do dysku?";
+"app.fullDiskAccess.message" = "MacCommander działa bez niego, ale macOS będzie prosić o pozwolenie osobno dla każdego folderu, a niektóre miejsca (np. dane Mail lub Safari) pozostaną ukryte. Dostęp możesz przyznać w Ustawieniach systemowych › Prywatność i ochrona › Pełny dostęp do dysku.";
+"app.fullDiskAccess.openSettings" = "Otwórz Ustawienia systemowe";
+"app.fullDiskAccess.notNow" = "Nie teraz";
+
+/* Network shares: launch alerts */
+"shares.saveFailed" = "MacCommander nie może zapisać udziałów sieciowych: %@";
+"shares.rememberPrompt.title" = "Zapamiętać ten udział?";
+"shares.rememberPrompt.message" = "MacCommander może zachować „%@” na pasku bocznym i automatycznie łączyć ponownie.";
+"shares.rememberPrompt.remember" = "Zapamiętaj";
+"shares.rememberPrompt.notNow" = "Nie teraz";
+
+/* Browser window: toolbar, path bar, sheets */
+"browser.toolbar.search" = "Szukaj";
+"browser.toolbar.back" = "Wróć";
+"browser.toolbar.forward" = "Dalej";
+"browser.toolbar.newFolder" = "Nowy folder";
+"browser.toolbar.dualPane" = "Dwa panele";
+"browser.toolbar.preview" = "Podgląd";
+"browser.toolbar.toggleHiddenFiles" = "Pokaż lub ukryj ukryte pliki";
+"browser.pathBar.tag" = "Tag: %@";
+"browser.pathBar.searching" = "Wyszukiwanie „%1$@” w %2$@";
+"browser.pathBar.copyPath" = "Kopiuj ścieżkę";
+"browser.search.truncated" = "Ponad 10 000 wyników; zawęź wyszukiwanie.";
+"browser.goToFolder.prompt" = "Idź do folderu:";
+"browser.goToFolder.notFound" = "Nie można znaleźć folderu.";
+"browser.goToFolder.cancel" = "Anuluj";
+"browser.goToFolder.go" = "Idź";
+"browser.transfer.cancel" = "Anuluj";
+"browser.transfer.ok" = "OK";
+"browser.transfer.invalidPath" = "Wpisz pełną ścieżkę folderu, zaczynającą się od / lub ~.";
+"browser.transfer.noFolder" = "Pod tą ścieżką nie ma folderu.";
+
+/* File list: context menu */
+"fileList.menu.open" = "Otwórz";
+"fileList.menu.quickLookOne" = "Szybki przegląd „%@”";
+"fileList.menu.rename" = "Zmień nazwę";
+"fileList.menu.duplicate" = "Powiel";
+"fileList.menu.copy" = "Kopiuj";
+"fileList.menu.cut" = "Wytnij";
+"fileList.menu.paste" = "Wklej";
+"fileList.menu.copyToOtherPane" = "Kopiuj do drugiego panelu";
+"fileList.menu.moveToOtherPane" = "Przenieś do drugiego panelu";
+"fileList.menu.moveToTrash" = "Przenieś do Kosza";
+"fileList.menu.compressOne" = "Kompresuj „%@”";
+"fileList.menu.getInfo" = "Informacje";
+"fileList.menu.copyPath" = "Kopiuj ścieżkę";
+"fileList.menu.copyFolderPath" = "Kopiuj ścieżkę folderu";
+"fileList.menu.revealInFinder" = "Pokaż w Finderze";
+"fileList.menu.openInTerminal" = "Otwórz w Terminalu";
+"fileList.menu.newFolder" = "Nowy folder";
+"fileList.menu.newEmptyFile" = "Nowy pusty plik";
+"fileList.menu.sortBy" = "Sortuj wg";
+"fileList.menu.showHiddenFiles" = "Pokaż ukryte pliki";
+"fileList.menu.showCheckboxColumn" = "Pokaż kolumnę pól wyboru";
+"fileList.menu.extractAll" = "Rozpakuj wszystko…";
+"fileList.menu.extractAllHere" = "Rozpakuj wszystko tutaj";
+"fileList.menu.extractToFolder" = "Rozpakuj do „%@”";
+"fileList.menu.extractTo" = "Rozpakuj do…";
+"fileList.menu.openWithArchiveUtility" = "Otwórz w aplikacji Narzędzie archiwizujące";
+"fileList.menu.browseContents" = "Przeglądaj zawartość";
+
+/* File list: rows, placeholders and empty states */
+"fileList.cloud.notDownloaded" = "Niepobrane";
+"fileList.cloud.downloading" = "Pobieram";
+"fileList.date.today" = "Dzisiaj o %@";
+"fileList.date.yesterday" = "Wczoraj o %@";
+"fileList.empty.noItems" = "Brak rzeczy";
+"fileList.empty.searching" = "Wyszukiwanie…";
+"fileList.empty.noResults" = "Brak wyników";
+"fileList.disconnected.title" = "Rozłączono";
+"fileList.disconnected.reconnect" = "Połącz ponownie";
+"fileList.disconnected.signIn" = "Zaloguj się…";
+"fileList.unreadable.openPrivacySettings" = "Otwórz ustawienia prywatności";
+"fileList.unreadable.enterPassword" = "Wprowadź hasło…";
+"name.untitled" = "bez nazwy";
 
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ znajduje się w %2$@.";

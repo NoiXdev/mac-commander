@@ -56,13 +56,13 @@ struct PaneTransferSheet: View {
                         .controlSize(.small)
                 }
                 Spacer()
-                Button(String(localized: "Cancel"), role: .cancel) {
+                Button(L10n.string("browser.transfer.cancel", "Cancel"), role: .cancel) {
                     check?.cancel()
                     check = nil
                     onCancel()
                 }
                 .keyboardShortcut(.cancelAction)
-                Button(String(localized: "OK"), action: confirm)
+                Button(L10n.string("browser.transfer.ok", "OK"), action: confirm)
                     .keyboardShortcut(.defaultAction)
                     .disabled(check != nil)
             }
@@ -85,7 +85,7 @@ struct PaneTransferSheet: View {
             let url = PaneTransfer.parseDestination(
                 text.wrappedValue, home: FileManager.default.homeDirectoryForCurrentUser)
         else {
-            error = String(localized: "Enter a full folder path, starting with / or ~.")
+            error = L10n.string("browser.transfer.invalidPath", "Enter a full folder path, starting with / or ~.")
             return
         }
         error = nil
@@ -98,7 +98,7 @@ struct PaneTransferSheet: View {
             guard !Task.isCancelled else { return }
             check = nil
             guard isFolder else {
-                error = String(localized: "There’s no folder at this path.")
+                error = L10n.string("browser.transfer.noFolder", "There’s no folder at this path.")
                 return
             }
             onConfirm(url)

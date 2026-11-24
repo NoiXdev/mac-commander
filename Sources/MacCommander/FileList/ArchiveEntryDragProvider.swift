@@ -104,7 +104,7 @@ final class ArchiveDragDelegate: NSObject, NSFilePromiseProviderDelegate, Sendab
     }()
 
     func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, fileNameForType fileType: String) -> String {
-        (filePromiseProvider as? ArchiveEntryDragProvider)?.entryName ?? String(localized: "Untitled")
+        (filePromiseProvider as? ArchiveEntryDragProvider)?.entryName ?? L10n.string("name.untitled", "Untitled")
     }
 
     func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {

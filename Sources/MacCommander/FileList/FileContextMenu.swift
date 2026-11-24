@@ -34,7 +34,7 @@ enum FileContextMenu {
         // Inside an archive (read-only): Extract All… replaces New, Paste and Get Info.
         let archive = model.archiveLocation?.archive
         if let archive {
-            menu.addItem(ActionMenuItem(String(localized: "Extract All…")) {
+            menu.addItem(ActionMenuItem(L10n.string("fileList.menu.extractAll", "Extract All…")) {
                 Task { @MainActor in
                     guard
                         let destination = await FileActions.chooseExtractionFolder(
@@ -52,7 +52,7 @@ enum FileContextMenu {
         }
         menu.addItem(.separator())
 
-        let sortItem = NSMenuItem(title: String(localized: "Sort By"), action: nil, keyEquivalent: "")
+        let sortItem = NSMenuItem(title: L10n.string("fileList.menu.sortBy", "Sort By"), action: nil, keyEquivalent: "")
         let sortMenu = NSMenu()
         // Location only while searching; a stored Location sort shows as Name outside a search.
         let stored = settings.settings.sortOrder.column
@@ -70,22 +70,22 @@ enum FileContextMenu {
         menu.addItem(sortItem)
 
         menu.addItem(ActionMenuItem(
-            String(localized: "Show Hidden Files"), state: settings.settings.showHiddenFiles ? .on : .off
+            L10n.string("fileList.menu.showHiddenFiles", "Show Hidden Files"), state: settings.settings.showHiddenFiles ? .on : .off
         ) {
             settings.settings.showHiddenFiles.toggle()
         })
         menu.addItem(ActionMenuItem(
-            String(localized: "Show Checkbox Column"), state: settings.settings.showCheckboxColumn ? .on : .off
+            L10n.string("fileList.menu.showCheckboxColumn", "Show Checkbox Column"), state: settings.settings.showCheckboxColumn ? .on : .off
         ) {
             settings.settings.showCheckboxColumn.toggle()
         })
         guard archive == nil else { return menu }
         menu.addItem(.separator())
         let folderURL = model.currentURL
-        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo([folderURL], open: openInfo) })
-        menu.addItem(ActionMenuItem(String(localized: "Copy Folder Path")) { FileActions.copyPaths([folderURL]) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.getInfo", "Get Info")) { FileActions.getInfo([folderURL], open: openInfo) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.copyFolderPath", "Copy Folder Path")) { FileActions.copyPaths([folderURL]) })
         // During a search the current folder is hidden behind the results, but it's still where the user is.
-        menu.addItem(ActionMenuItem(String(localized: "Open in Terminal")) {
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.openInTerminal", "Open in Terminal")) {
             FileActions.openInTerminal([folderURL], chosen: terminalApp(), window: window)
         })
         return menu
@@ -105,15 +105,15 @@ enum FileContextMenu {
         guard !items.isEmpty else { return menu }
 
         let urls = all.map(\.url)
-        menu.addItem(ActionMenuItem(String(localized: "Open")) {
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.open", "Open")) {
             // Like ⌘↓: a single item opens (folders navigate); with several, only the files open.
             let toOpen = all.count == 1 ? all : all.filter { !$0.isDirectory }
             Task { @MainActor in await FileActions.open(toOpen, model: model, window: window) }
         })
         let quickLookTitle =
             all.count == 1
-            ? String(localized: "Quick Look “\(all[0].name)”")
-            : String(localized: "Quick Look \(all.count) items")
+            ? L10n.format("fileList.menu.quickLookOne", "Quick Look “%@”", all[0].name)
+            : L10n.plural("fileList.menu.quickLook", count: all.count, one: "Quick Look 1 item", other: "Quick Look %lld items")
         if let location = model.archiveLocation {
             // Entries inside an archive (read-only): Open, Quick Look and the extract actions only. The
             // right-click selected exactly these items; Quick Look extracts their files first.
@@ -137,21 +137,21 @@ enum FileContextMenu {
         if all.count == 1 {
             let url = all[0].url
             // The list starts inline editing for `pendingRename`.
-            menu.addItem(ActionMenuItem(String(localized: "Rename")) { model.pendingRename = url })
+            menu.addItem(ActionMenuItem(L10n.string("fileList.menu.rename", "Rename")) { model.pendingRename = url })
         }
-        menu.addItem(ActionMenuItem(String(localized: "Duplicate")) {
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.duplicate", "Duplicate")) {
             Task { @MainActor in await FileActions.duplicate(items, model: model, window: window) }
         })
         menu.addItem(.separator())
 
         let folder = all.count == 1 && all[0].isDirectory ? all[0].url : nil
-        menu.addItem(ActionMenuItem(String(localized: "Copy")) { FileActions.copy(items, clipboard: clipboard) })
-        menu.addItem(ActionMenuItem(String(localized: "Cut")) { FileActions.cut(items, clipboard: clipboard) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.copy", "Copy")) { FileActions.copy(items, clipboard: clipboard) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.cut", "Cut")) { FileActions.cut(items, clipboard: clipboard) })
         if let paneCommands { addPaneTransferActions(to: menu, commands: paneCommands, isInArchive: false) }
         let paste = pasteItem(into: folder ?? model.currentURL, model: model, clipboard: clipboard, window: window)
         if folder == nil, model.isSearching { paste.isEnabled = false }
         menu.addItem(paste)
-        menu.addItem(ActionMenuItem(String(localized: "Move to Trash")) {
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.moveToTrash", "Move to Trash")) {
             Task { @MainActor in await FileActions.moveToTrash(items, model: model, window: window) }
         })
         menu.addItem(.separator())
@@ -160,8 +160,8 @@ enum FileContextMenu {
         if Set(items.map { $0.url.deletingLastPathComponent().standardizedFileURL }).count == 1 {
             let title =
                 items.count == 1
-                ? String(localized: "Compress “\(items[0].name)”")
-                : String(localized: "Compress \(items.count) Items")
+                ? L10n.format("fileList.menu.compressOne", "Compress “%@”", items[0].name)
+                : L10n.plural("fileList.menu.compress", count: items.count, one: "Compress 1 Item", other: "Compress %lld Items")
             menu.addItem(ActionMenuItem(title) {
                 Task { @MainActor in await FileActions.compress(items, model: model, window: window) }
             })
@@ -177,11 +177,11 @@ enum FileContextMenu {
         })
         menu.addItem(.separator())
 
-        menu.addItem(ActionMenuItem(String(localized: "Get Info")) { FileActions.getInfo(urls, open: openInfo) })
-        menu.addItem(ActionMenuItem(String(localized: "Copy Path")) { FileActions.copyPath(all) })
-        menu.addItem(ActionMenuItem(String(localized: "Reveal in Finder")) { FileActions.revealInFinder(urls) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.getInfo", "Get Info")) { FileActions.getInfo(urls, open: openInfo) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.copyPath", "Copy Path")) { FileActions.copyPath(all) })
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.revealInFinder", "Reveal in Finder")) { FileActions.revealInFinder(urls) })
         let terminalFolders = TerminalApp.folders(for: all)
-        menu.addItem(ActionMenuItem(String(localized: "Open in Terminal")) {
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.openInTerminal", "Open in Terminal")) {
             FileActions.openInTerminal(terminalFolders, chosen: terminalApp(), window: window)
         })
         menu.addItem(.separator())
@@ -194,11 +194,11 @@ enum FileContextMenu {
     /// Move is disabled for them (archives are read-only).
     private static func addPaneTransferActions(to menu: NSMenu, commands: PaneCommands, isInArchive: Bool) {
         let canTransfer = commands.canTransfer()
-        let copy = ActionMenuItem(String(localized: "Copy to Other Pane")) {
+        let copy = ActionMenuItem(L10n.string("fileList.menu.copyToOtherPane", "Copy to Other Pane")) {
             if !commands.requestTransfer(false) { NSSound.beep() }
         }
         copy.isEnabled = canTransfer
-        let move = ActionMenuItem(String(localized: "Move to Other Pane")) {
+        let move = ActionMenuItem(L10n.string("fileList.menu.moveToOtherPane", "Move to Other Pane")) {
             if !commands.requestTransfer(true) { NSSound.beep() }
         }
         move.isEnabled = canTransfer && !isInArchive
@@ -214,16 +214,16 @@ enum FileContextMenu {
     ) {
         let url = file.url
         if ArchiveFormats.isArchive(url) {
-            menu.addItem(ActionMenuItem(String(localized: "Extract All Here")) {
+            menu.addItem(ActionMenuItem(L10n.string("fileList.menu.extractAllHere", "Extract All Here")) {
                 Task { @MainActor in
                     await FileActions.extractAll(url, into: url.deletingLastPathComponent(), model: model, window: window)
                 }
             })
-            menu.addItem(ActionMenuItem(String(localized: "Open with Archive Utility")) {
+            menu.addItem(ActionMenuItem(L10n.string("fileList.menu.openWithArchiveUtility", "Open with Archive Utility")) {
                 FileActions.openWithArchiveUtility(url)
             })
         } else if ArchiveFormats.isBrowsable(url), !file.isPackage {
-            menu.addItem(ActionMenuItem(String(localized: "Browse Contents")) {
+            menu.addItem(ActionMenuItem(L10n.string("fileList.menu.browseContents", "Browse Contents")) {
                 Task { @MainActor in await model.browseContents(file) }
             })
         }
@@ -239,7 +239,7 @@ enum FileContextMenu {
         let entries = { PathUtilities.topLevel(urls).compactMap { ArchivePath.inner(of: $0, in: archive) } }
         let parent = archive.deletingLastPathComponent()
         // The folder name at once; its Finder name follows from off the main actor (it may be on a network volume).
-        let extractHere = ActionMenuItem(String(localized: "Extract to “\(parent.lastPathComponent)”")) {
+        let extractHere = ActionMenuItem(L10n.format("fileList.menu.extractToFolder", "Extract to “%@”", parent.lastPathComponent)) {
             Task { @MainActor in
                 await FileActions.extract(entries(), from: archive, into: parent, model: model, window: window)
             }
@@ -247,9 +247,9 @@ enum FileContextMenu {
         menu.addItem(extractHere)
         Task { @MainActor in
             let parentName = await PathQueries.displayName(parent)
-            extractHere.title = String(localized: "Extract to “\(parentName)”")
+            extractHere.title = L10n.format("fileList.menu.extractToFolder", "Extract to “%@”", parentName)
         }
-        menu.addItem(ActionMenuItem(String(localized: "Extract To…")) {
+        menu.addItem(ActionMenuItem(L10n.string("fileList.menu.extractTo", "Extract To…")) {
             Task { @MainActor in
                 guard let destination = await FileActions.chooseExtractionFolder(startingAt: parent, window: window)
                 else { return }
@@ -269,7 +269,7 @@ enum FileContextMenu {
     private static func pasteItem(
         into destination: URL, model: BrowserModel, clipboard: FileClipboard, window: NSWindow?
     ) -> NSMenuItem {
-        let item = ActionMenuItem(String(localized: "Paste")) {
+        let item = ActionMenuItem(L10n.string("fileList.menu.paste", "Paste")) {
             Task { @MainActor in
                 await FileActions.paste(
                     into: destination, forceMove: false, model: model, clipboard: clipboard, window: window)
@@ -282,10 +282,10 @@ enum FileContextMenu {
     /// New Folder and New Empty File, in `folder` (nil = the current folder). The list expands
     /// the folder when the new item's rename starts.
     private static func addNewItemActions(to menu: NSMenu, model: BrowserModel, in folder: URL?, isEnabled: Bool) {
-        let newFolder = ActionMenuItem(String(localized: "New Folder")) {
+        let newFolder = ActionMenuItem(L10n.string("fileList.menu.newFolder", "New Folder")) {
             Task { @MainActor in await BrowserActions.newFolder(model, in: folder) }
         }
-        let newFile = ActionMenuItem(String(localized: "New Empty File")) {
+        let newFile = ActionMenuItem(L10n.string("fileList.menu.newEmptyFile", "New Empty File")) {
             Task { @MainActor in await BrowserActions.newFile(model, in: folder) }
         }
         for item in [newFolder, newFile] {

@@ -19,13 +19,10 @@ enum FullDiskAccessHint {
     static func present(preferences: PreferencesStore) {
         let alert = NSAlert()
         alert.alertStyle = .informational
-        alert.messageText = String(localized: "Give MacCommander Full Disk Access?")
-        alert.informativeText = String(
-            localized:
-                "MacCommander works without it, but macOS will ask for permission folder by folder, and some locations (like Mail or Safari data) stay hidden. You can grant access in System Settings › Privacy & Security › Full Disk Access."
-        )
-        alert.addButton(withTitle: String(localized: "Open System Settings"))
-        alert.addButton(withTitle: String(localized: "Not Now"))
+        alert.messageText = L10n.string("app.fullDiskAccess.title", "Give MacCommander Full Disk Access?")
+        alert.informativeText = L10n.string("app.fullDiskAccess.message", "MacCommander works without it, but macOS will ask for permission folder by folder, and some locations (like Mail or Safari data) stay hidden. You can grant access in System Settings › Privacy & Security › Full Disk Access.")
+        alert.addButton(withTitle: L10n.string("app.fullDiskAccess.openSettings", "Open System Settings"))
+        alert.addButton(withTitle: L10n.string("app.fullDiskAccess.notNow", "Not Now"))
         let response = alert.runModal()
         preferences.preferences.didShowFullDiskAccessHint = true
         if response == .alertFirstButtonReturn {

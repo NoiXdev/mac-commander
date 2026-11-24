@@ -37,10 +37,10 @@ struct PathBar: View {
     private static func description(of search: SearchQuery) -> String {
         switch search.scope {
         case .tag(let name):
-            return String(localized: "Tag: \(name)")
+            return L10n.format("browser.pathBar.tag", "Tag: %@", name)
         case .folder(let url):
             let folder = url.path == "/" ? "/" : url.lastPathComponent
-            return String(localized: "Searching “\(search.text)” in \(folder)")
+            return L10n.format("browser.pathBar.searching", "Searching “%1$@” in %2$@", search.text, folder)
         }
     }
 
@@ -68,7 +68,7 @@ struct PathBar: View {
                     .contextMenu {
                         // A folder inside an archive has no path on disk.
                         if !isVirtual {
-                            Button(String(localized: "Copy Path")) { FileActions.copyPaths([url]) }
+                            Button(L10n.string("browser.pathBar.copyPath", "Copy Path")) { FileActions.copyPaths([url]) }
                         }
                     }
                     .id(index)

@@ -90,16 +90,16 @@ struct LoadErrorView: View {
     @ViewBuilder private var placeholder: some View {
         if case .shareDisconnected = error {
             ContentUnavailableView {
-                Label(String(localized: "Disconnected"), systemImage: "network.slash")
+                Label(L10n.string("fileList.disconnected.title", "Disconnected"), systemImage: "network.slash")
             } description: {
                 Text(error.message)
             } actions: {
                 HStack {
                     if let reconnect {
-                        Button(String(localized: "Reconnect"), action: reconnect)
+                        Button(L10n.string("fileList.disconnected.reconnect", "Reconnect"), action: reconnect)
                     }
                     if let signIn {
-                        Button(String(localized: "Sign In…"), action: signIn)
+                        Button(L10n.string("fileList.disconnected.signIn", "Sign In…"), action: signIn)
                     }
                 }
             }
@@ -113,12 +113,12 @@ struct LoadErrorView: View {
             Label(error.message, systemImage: isPermissionError || needsPassword ? "lock" : "exclamationmark.triangle")
         } actions: {
             if isPermissionError, let url = Self.privacySettingsURL {
-                Button(String(localized: "Open Privacy Settings")) {
+                Button(L10n.string("fileList.unreadable.openPrivacySettings", "Open Privacy Settings")) {
                     PathQueries.openWithDefaultApp(url)
                 }
             }
             if needsPassword, let enterPassword {
-                Button(String(localized: "Enter Password…"), action: enterPassword)
+                Button(L10n.string("fileList.unreadable.enterPassword", "Enter Password…"), action: enterPassword)
             }
         }
     }

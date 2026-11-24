@@ -258,5 +258,37 @@
             <string>Es wird von %lld Dateien entfernt.</string>
         </dict>
     </dict>
+    <key>fileList.menu.quickLook</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Schnellansicht von 1 Objekt</string>
+            <key>other</key>
+            <string>Schnellansicht von %lld Objekten</string>
+        </dict>
+    </dict>
+    <key>fileList.menu.compress</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>1 Objekt komprimieren</string>
+            <key>other</key>
+            <string>%lld Objekte komprimieren</string>
+        </dict>
+    </dict>
 </dict>
 </plist>

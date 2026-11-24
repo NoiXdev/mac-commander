@@ -47,7 +47,7 @@ final class FileListController: NSViewController {
     var spinnerTask: Task<Void, Never>?
     static let spinnerDelay: Duration = .milliseconds(300)
     /// Shown for a listed folder without items.
-    private let emptyLabel = PassthroughLabel(labelWithString: String(localized: "No items"))
+    private let emptyLabel = PassthroughLabel(labelWithString: L10n.string("fileList.empty.noItems", "No items"))
 
     var roots: [FileNode] = []
     /// Folders the user expanded, restored by URL after reloads.
@@ -466,12 +466,12 @@ final class FileListController: NSViewController {
         if model.isSearching {
             text = !model.items.isEmpty
                 ? nil
-                : model.searchIsRunning ? String(localized: "Searching…") : String(localized: "No Results")
+                : model.searchIsRunning ? L10n.string("fileList.empty.searching", "Searching…") : L10n.string("fileList.empty.noResults", "No Results")
         } else {
             let isEmptyFolder =
                 !model.isLoading && model.loadError == nil && model.items.isEmpty
                 && model.listedURL != nil && model.listedURL == model.currentURL
-            text = isEmptyFolder ? String(localized: "No items") : nil
+            text = isEmptyFolder ? L10n.string("fileList.empty.noItems", "No items") : nil
         }
         if let text, emptyLabel.stringValue != text { emptyLabel.stringValue = text }
         if emptyLabel.isHidden != (text == nil) { emptyLabel.isHidden = text == nil }

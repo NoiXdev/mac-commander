@@ -233,13 +233,13 @@
             <key>NSStringFormatValueTypeKey</key>
             <string>lld</string>
             <key>one</key>
-            <string>Kopiowanie 1 rzeczy</string>
+            <string>Kopiuj 1 rzecz</string>
             <key>few</key>
-            <string>Kopiowanie %lld rzeczy</string>
+            <string>Kopiuj %lld rzeczy</string>
             <key>many</key>
-            <string>Kopiowanie %lld rzeczy</string>
+            <string>Kopiuj %lld rzeczy</string>
             <key>other</key>
-            <string>Kopiowanie %lld rzeczy</string>
+            <string>Kopiuj %lld rzeczy</string>
         </dict>
     </dict>
     <key>operation.undo.move</key>
@@ -253,13 +253,13 @@
             <key>NSStringFormatValueTypeKey</key>
             <string>lld</string>
             <key>one</key>
-            <string>Przenoszenie 1 rzeczy</string>
+            <string>Przenieś 1 rzecz</string>
             <key>few</key>
-            <string>Przenoszenie %lld rzeczy</string>
+            <string>Przenieś %lld rzeczy</string>
             <key>many</key>
-            <string>Przenoszenie %lld rzeczy</string>
+            <string>Przenieś %lld rzeczy</string>
             <key>other</key>
-            <string>Przenoszenie %lld rzeczy</string>
+            <string>Przenieś %lld rzeczy</string>
         </dict>
     </dict>
     <key>tags.error.filesNotChanged</key>
@@ -320,6 +320,46 @@
             <string>Usunięcie obejmie %lld plików.</string>
             <key>other</key>
             <string>Usunięcie obejmie %lld pliku.</string>
+        </dict>
+    </dict>
+    <key>fileList.menu.quickLook</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Szybki przegląd 1 rzeczy</string>
+            <key>few</key>
+            <string>Szybki przegląd %lld rzeczy</string>
+            <key>many</key>
+            <string>Szybki przegląd %lld rzeczy</string>
+            <key>other</key>
+            <string>Szybki przegląd %lld rzeczy</string>
+        </dict>
+    </dict>
+    <key>fileList.menu.compress</key>
+    <dict>
+        <key>NSStringLocalizedFormatKey</key>
+        <string>%#@count@</string>
+        <key>count</key>
+        <dict>
+            <key>NSStringFormatSpecTypeKey</key>
+            <string>NSStringPluralRuleType</string>
+            <key>NSStringFormatValueTypeKey</key>
+            <string>lld</string>
+            <key>one</key>
+            <string>Kompresuj 1 rzecz</string>
+            <key>few</key>
+            <string>Kompresuj %lld rzeczy</string>
+            <key>many</key>
+            <string>Kompresuj %lld rzeczy</string>
+            <key>other</key>
+            <string>Kompresuj %lld rzeczy</string>
         </dict>
     </dict>
 </dict>

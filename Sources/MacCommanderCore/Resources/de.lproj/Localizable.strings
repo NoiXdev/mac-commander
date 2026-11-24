@@ -264,5 +264,121 @@
 "shares.signIn.noGuest" = "Diese Freigabe erlaubt keinen Gastzugriff.";
 "shares.signIn.rejected" = "Benutzername oder Passwort ist falsch.";
 
+/* Menu bar */
+"menu.file.open" = "Öffnen";
+"menu.file.newFolder" = "Neuer Ordner";
+"menu.file.newEmptyFile" = "Neue leere Datei";
+"menu.file.duplicate" = "Duplizieren";
+"menu.file.copyToOtherPane" = "In anderen Bereich kopieren";
+"menu.file.moveToOtherPane" = "In anderen Bereich bewegen";
+"menu.file.moveToTrash" = "In den Papierkorb legen";
+"menu.file.getInfo" = "Informationen";
+"menu.edit.moveItemHere" = "Objekt hierherbewegen";
+"menu.edit.copyPath" = "Pfad kopieren";
+"menu.edit.copyFolderPath" = "Ordnerpfad kopieren";
+"menu.edit.find" = "Suchen …";
+"menu.edit.undo" = "Widerrufen";
+"menu.edit.undoNamed" = "%@ widerrufen";
+"menu.go.title" = "Gehe zu";
+"menu.go.back" = "Zurück";
+"menu.go.forward" = "Vorwärts";
+"menu.go.enclosingFolder" = "Übergeordneter Ordner";
+"menu.go.goToFolder" = "Gehe zu Ordner …";
+"menu.go.connectToServer" = "Mit Server verbinden …";
+"menu.go.home" = "Benutzerordner";
+"menu.go.desktop" = "Schreibtisch";
+"menu.go.downloads" = "Downloads";
+"menu.go.applications" = "Programme";
+"menu.view.refresh" = "Aktualisieren";
+"menu.view.showPreview" = "Vorschau einblenden";
+"menu.view.hidePreview" = "Vorschau ausblenden";
+"menu.view.showHiddenFiles" = "Versteckte Dateien anzeigen";
+"menu.view.showCheckboxColumn" = "Spalte mit Markierungsfeldern anzeigen";
+"menu.view.singlePane" = "Ein Bereich";
+"menu.view.dualPane" = "Zwei Bereiche";
+"menu.view.swapPanes" = "Bereiche tauschen";
+"menu.view.sameFolderInOtherPane" = "Gleicher Ordner im anderen Bereich";
+
+/* App alerts */
+"app.quit.title" = "Laufende Vorgänge abbrechen und beenden?";
+"app.quit.quit" = "Beenden";
+"app.quit.dontQuit" = "Nicht beenden";
+"app.fullDiskAccess.title" = "MacCommander Festplattenvollzugriff geben?";
+"app.fullDiskAccess.message" = "MacCommander funktioniert auch ohne, aber macOS fragt dann Ordner für Ordner nach der Erlaubnis, und manche Orte (etwa die Daten von Mail oder Safari) bleiben verborgen. Du kannst den Zugriff unter Systemeinstellungen › Datenschutz & Sicherheit › Festplattenvollzugriff erteilen.";
+"app.fullDiskAccess.openSettings" = "Systemeinstellungen öffnen";
+"app.fullDiskAccess.notNow" = "Nicht jetzt";
+
+/* Network shares: launch alerts */
+"shares.saveFailed" = "MacCommander kann deine Netzwerkfreigaben nicht sichern: %@";
+"shares.rememberPrompt.title" = "Diese Freigabe merken?";
+"shares.rememberPrompt.message" = "MacCommander kann „%@“ in der Seitenleiste behalten und automatisch wieder verbinden.";
+"shares.rememberPrompt.remember" = "Merken";
+"shares.rememberPrompt.notNow" = "Nicht jetzt";
+
+/* Browser window: toolbar, path bar, sheets */
+"browser.toolbar.search" = "Suchen";
+"browser.toolbar.back" = "Zurück";
+"browser.toolbar.forward" = "Vorwärts";
+"browser.toolbar.newFolder" = "Neuer Ordner";
+"browser.toolbar.dualPane" = "Zwei Bereiche";
+"browser.toolbar.preview" = "Vorschau";
+"browser.toolbar.toggleHiddenFiles" = "Versteckte Dateien ein-/ausblenden";
+"browser.pathBar.tag" = "Tag: %@";
+"browser.pathBar.searching" = "Suche nach „%1$@“ in %2$@";
+"browser.pathBar.copyPath" = "Pfad kopieren";
+"browser.search.truncated" = "Mehr als 10.000 Ergebnisse; verfeinere deine Suche.";
+"browser.goToFolder.prompt" = "Gehe zu Ordner:";
+"browser.goToFolder.notFound" = "Der Ordner wurde nicht gefunden.";
+"browser.goToFolder.cancel" = "Abbrechen";
+"browser.goToFolder.go" = "Öffnen";
+"browser.transfer.cancel" = "Abbrechen";
+"browser.transfer.ok" = "OK";
+"browser.transfer.invalidPath" = "Gib einen vollständigen Ordnerpfad ein, der mit / oder ~ beginnt.";
+"browser.transfer.noFolder" = "Unter diesem Pfad gibt es keinen Ordner.";
+
+/* File list: context menu */
+"fileList.menu.open" = "Öffnen";
+"fileList.menu.quickLookOne" = "Schnellansicht von „%@“";
+"fileList.menu.rename" = "Umbenennen";
+"fileList.menu.duplicate" = "Duplizieren";
+"fileList.menu.copy" = "Kopieren";
+"fileList.menu.cut" = "Ausschneiden";
+"fileList.menu.paste" = "Einsetzen";
+"fileList.menu.copyToOtherPane" = "In anderen Bereich kopieren";
+"fileList.menu.moveToOtherPane" = "In anderen Bereich bewegen";
+"fileList.menu.moveToTrash" = "In den Papierkorb legen";
+"fileList.menu.compressOne" = "„%@“ komprimieren";
+"fileList.menu.getInfo" = "Informationen";
+"fileList.menu.copyPath" = "Pfad kopieren";
+"fileList.menu.copyFolderPath" = "Ordnerpfad kopieren";
+"fileList.menu.revealInFinder" = "Im Finder zeigen";
+"fileList.menu.openInTerminal" = "In Terminal öffnen";
+"fileList.menu.newFolder" = "Neuer Ordner";
+"fileList.menu.newEmptyFile" = "Neue leere Datei";
+"fileList.menu.sortBy" = "Sortieren nach";
+"fileList.menu.showHiddenFiles" = "Versteckte Dateien anzeigen";
+"fileList.menu.showCheckboxColumn" = "Spalte mit Markierungsfeldern anzeigen";
+"fileList.menu.extractAll" = "Alles entpacken …";
+"fileList.menu.extractAllHere" = "Alles hier entpacken";
+"fileList.menu.extractToFolder" = "Nach „%@“ entpacken";
+"fileList.menu.extractTo" = "Entpacken nach …";
+"fileList.menu.openWithArchiveUtility" = "Mit Archivierungsprogramm öffnen";
+"fileList.menu.browseContents" = "Inhalt anzeigen";
+
+/* File list: rows, placeholders and empty states */
+"fileList.cloud.notDownloaded" = "Nicht geladen";
+"fileList.cloud.downloading" = "Laden …";
+"fileList.date.today" = "Heute, %@";
+"fileList.date.yesterday" = "Gestern, %@";
+"fileList.empty.noItems" = "Keine Objekte";
+"fileList.empty.searching" = "Wird gesucht …";
+"fileList.empty.noResults" = "Keine Ergebnisse";
+"fileList.disconnected.title" = "Verbindung getrennt";
+"fileList.disconnected.reconnect" = "Erneut verbinden";
+"fileList.disconnected.signIn" = "Anmelden …";
+"fileList.unreadable.openPrivacySettings" = "Datenschutzeinstellungen öffnen";
+"fileList.unreadable.enterPassword" = "Passwort eingeben …";
+"name.untitled" = "Ohne Titel";
+
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "In %2$@ liegt %1$@.";

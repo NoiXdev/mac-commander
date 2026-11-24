@@ -115,9 +115,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !operations.operations.isEmpty {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = String(localized: "Cancel running operations and quit?")
-            alert.addButton(withTitle: String(localized: "Quit"))
-            alert.addButton(withTitle: String(localized: "Don't Quit"))
+            alert.messageText = L10n.string("app.quit.title", "Cancel running operations and quit?")
+            alert.addButton(withTitle: L10n.string("app.quit.quit", "Quit"))
+            alert.addButton(withTitle: L10n.string("app.quit.dontQuit", "Don't Quit"))
             guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
         }
         shares.stop()
@@ -169,7 +169,7 @@ final class NetworkShares {
         if let error = store.persistenceError {
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = String(localized: "MacCommander can’t save your network shares: \(error)")
+            alert.messageText = L10n.format("shares.saveFailed", "MacCommander can’t save your network shares: %@", error)
             LaunchAlertQueue.shared.enqueue { alert.runModal() }
         }
         prompter.start()
@@ -226,11 +226,10 @@ final class RememberSharePrompter {
         LaunchAlertQueue.shared.enqueue { [self] in
             let alert = NSAlert()
             alert.alertStyle = .informational
-            alert.messageText = String(localized: "Remember this share?")
-            alert.informativeText = String(
-                localized: "MacCommander can keep “\(mounted.url.displayName)” in the sidebar and reconnect it automatically.")
-            alert.addButton(withTitle: String(localized: "Remember"))
-            alert.addButton(withTitle: String(localized: "Not Now"))
+            alert.messageText = L10n.string("shares.rememberPrompt.title", "Remember this share?")
+            alert.informativeText = L10n.format("shares.rememberPrompt.message", "MacCommander can keep “%@” in the sidebar and reconnect it automatically.", mounted.url.displayName)
+            alert.addButton(withTitle: L10n.string("shares.rememberPrompt.remember", "Remember"))
+            alert.addButton(withTitle: L10n.string("shares.rememberPrompt.notNow", "Not Now"))
             let response = alert.runModal()
             isPresenting = false
             if response == .alertFirstButtonReturn {

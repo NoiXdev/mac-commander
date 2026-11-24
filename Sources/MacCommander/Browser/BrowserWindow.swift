@@ -218,7 +218,7 @@ struct BrowserWindow: View {
                 }
                 OperationsStrip()
             }
-            .searchable(text: searchText(layout), placement: .toolbar, prompt: String(localized: "Search"))
+            .searchable(text: searchText(layout), placement: .toolbar, prompt: L10n.string("browser.toolbar.search", "Search"))
             .searchFocused($searchFieldFocused)
         }
         // On the split view, which exists exactly while the layout does (not on the Group's branches, whose
@@ -254,14 +254,14 @@ struct BrowserWindow: View {
                 Button {
                     Task { await model.goBack() }
                 } label: {
-                    Label(String(localized: "Back"), systemImage: "chevron.left")
+                    Label(L10n.string("browser.toolbar.back", "Back"), systemImage: "chevron.left")
                 }
                 // Back also closes a shown search (Ruling P6-1), even without history.
                 .disabled(!model.history.canGoBack && !model.isSearching)
                 Button {
                     Task { await model.goForward() }
                 } label: {
-                    Label(String(localized: "Forward"), systemImage: "chevron.right")
+                    Label(L10n.string("browser.toolbar.forward", "Forward"), systemImage: "chevron.right")
                 }
                 .disabled(!model.history.canGoForward)
             }
@@ -269,7 +269,7 @@ struct BrowserWindow: View {
                 Button {
                     Task { await BrowserActions.newFolder(model) }
                 } label: {
-                    Label(String(localized: "New Folder"), systemImage: "folder.badge.plus")
+                    Label(L10n.string("browser.toolbar.newFolder", "New Folder"), systemImage: "folder.badge.plus")
                 }
                 // Archives are read-only; a shown search hides the folder the new one would land in.
                 .disabled(model.archiveLocation != nil || model.isSearching)
@@ -277,21 +277,21 @@ struct BrowserWindow: View {
                     Button {
                         layout.toggleMode()
                     } label: {
-                        Label(String(localized: "Dual Pane"), systemImage: "rectangle.split.2x1")
+                        Label(L10n.string("browser.toolbar.dualPane", "Dual Pane"), systemImage: "rectangle.split.2x1")
                     }
-                    .help(String(localized: "Dual Pane"))
+                    .help(L10n.string("browser.toolbar.dualPane", "Dual Pane"))
                 }
                 Button {
                     settings.settings.togglePreview(dualPane: isDual)
                 } label: {
-                    Label(String(localized: "Preview"), systemImage: "sidebar.right")
+                    Label(L10n.string("browser.toolbar.preview", "Preview"), systemImage: "sidebar.right")
                 }
-                .help(String(localized: "Preview"))
+                .help(L10n.string("browser.toolbar.preview", "Preview"))
                 Button {
                     settings.settings.showHiddenFiles.toggle()
                 } label: {
                     Label(
-                        String(localized: "Toggle Hidden Files"),
+                        L10n.string("browser.toolbar.toggleHiddenFiles", "Toggle Hidden Files"),
                         systemImage: settings.settings.showHiddenFiles ? "eye" : "eye.slash")
                 }
             }

@@ -15,34 +15,34 @@ struct BrowserCommands: Commands {
     var body: some Commands {
         // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
         CommandGroup(after: .newItem) {
-            Button("Open") { openSelection() }
+            Button(L10n.string("menu.file.open", "Open")) { openSelection() }
                 .keyboardShortcut("o")
                 .disabled(model?.selection.isEmpty != false)
             Divider()
             // Not during a search: the new item would land in the folder the results hide.
-            Button("New Folder") { run { await BrowserActions.newFolder($0) } }
+            Button(L10n.string("menu.file.newFolder", "New Folder")) { run { await BrowserActions.newFolder($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(model == nil || isInArchive || model?.isSearching == true)
-            Button("New Empty File") { run { await BrowserActions.newFile($0) } }
+            Button(L10n.string("menu.file.newEmptyFile", "New Empty File")) { run { await BrowserActions.newFile($0) } }
                 .keyboardShortcut("n", modifiers: [.command, .option])
                 .disabled(model == nil || isInArchive || model?.isSearching == true)
             Divider()
-            Button("Duplicate") { send(#selector(FileOutlineView.duplicate(_:))) }
+            Button(L10n.string("menu.file.duplicate", "Duplicate")) { send(#selector(FileOutlineView.duplicate(_:))) }
                 .keyboardShortcut("d")
                 .disabled(model?.selection.isEmpty != false || isInArchive)
             if preferences.preferences.dualPaneEnabled {
                 // Into the other pane's folder, after a confirmation sheet (also F5/F6 in the list).
-                Button(String(localized: "Copy to Other Pane")) { layout?.requestTransfer(move: false) }
+                Button(L10n.string("menu.file.copyToOtherPane", "Copy to Other Pane")) { layout?.requestTransfer(move: false) }
                     .keyboardShortcut("5")
                     .disabled(!canRequestTransfer(move: false))
-                Button(String(localized: "Move to Other Pane")) { layout?.requestTransfer(move: true) }
+                Button(L10n.string("menu.file.moveToOtherPane", "Move to Other Pane")) { layout?.requestTransfer(move: true) }
                     .keyboardShortcut("6")
                     .disabled(!canRequestTransfer(move: true))
             }
-            Button("Move to Trash") { send(#selector(FileOutlineView.moveToTrash(_:))) }
+            Button(L10n.string("menu.file.moveToTrash", "Move to Trash")) { send(#selector(FileOutlineView.moveToTrash(_:))) }
                 .keyboardShortcut(.delete)
                 .disabled(model?.selection.isEmpty != false || isInArchive)
-            Button("Get Info") { send(#selector(FileOutlineView.getInfo(_:))) }
+            Button(L10n.string("menu.file.getInfo", "Get Info")) { send(#selector(FileOutlineView.getInfo(_:))) }
                 .keyboardShortcut("i")
                 .disabled(model?.selection.isEmpty != false || isInArchive)
         }
@@ -50,87 +50,87 @@ struct BrowserCommands: Commands {
         // No printing: this also frees ⇧⌘P (Page Setup…) for Show/Hide Preview.
         CommandGroup(replacing: .printItem) {}
         CommandGroup(after: .pasteboard) {
-            Button("Move Item Here") { send(#selector(FileOutlineView.pasteAsMove(_:))) }
+            Button(L10n.string("menu.edit.moveItemHere", "Move Item Here")) { send(#selector(FileOutlineView.pasteAsMove(_:))) }
                 .keyboardShortcut("v", modifiers: [.command, .option])
                 .disabled(model == nil || isInArchive)
-            Button("Copy Path") { send(#selector(FileOutlineView.copyPath(_:))) }
+            Button(L10n.string("menu.edit.copyPath", "Copy Path")) { send(#selector(FileOutlineView.copyPath(_:))) }
                 .keyboardShortcut("c", modifiers: [.command, .option])
                 .disabled(model?.selection.isEmpty != false || isInArchive)
-            Button("Copy Folder Path") { if let model { FileActions.copyPaths([model.currentURL]) } }
+            Button(L10n.string("menu.edit.copyFolderPath", "Copy Folder Path")) { if let model { FileActions.copyPaths([model.currentURL]) } }
                 .keyboardShortcut("c", modifiers: [.command, .option, .shift])
                 .disabled(model == nil || isInArchive)
             Divider()
             // Placed before the standard text-editing group, so it takes ⌘F ahead of a text field's Find.
-            Button("Find…") { searchFocused?.wrappedValue = true }
+            Button(L10n.string("menu.edit.find", "Find…")) { searchFocused?.wrappedValue = true }
                 .keyboardShortcut("f")
                 .disabled(searchFocused == nil)
         }
-        CommandMenu("Go") {
-            Button("Back") { run { await $0.goBack() } }
+        CommandMenu(L10n.string("menu.go.title", "Go")) {
+            Button(L10n.string("menu.go.back", "Back")) { run { await $0.goBack() } }
                 .keyboardShortcut("[")
                 // Back also closes a shown search (Ruling P6-1), even without history.
                 .disabled(model?.history.canGoBack != true && model?.isSearching != true)
-            Button("Forward") { run { await $0.goForward() } }
+            Button(L10n.string("menu.go.forward", "Forward")) { run { await $0.goForward() } }
                 .keyboardShortcut("]")
                 .disabled(model?.history.canGoForward != true)
-            Button("Enclosing Folder") { run { await $0.goUp() } }
+            Button(L10n.string("menu.go.enclosingFolder", "Enclosing Folder")) { run { await $0.goUp() } }
                 .keyboardShortcut(.upArrow)
                 .disabled(model == nil)
             Divider()
-            Button("Go to Folder…") { goToFolder?.wrappedValue = true }
+            Button(L10n.string("menu.go.goToFolder", "Go to Folder…")) { goToFolder?.wrappedValue = true }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
                 .disabled(goToFolder == nil)
-            Button(String(localized: "Connect to Server…")) { shareSheets?.showConnectToServer = true }
+            Button(L10n.string("menu.go.connectToServer", "Connect to Server…")) { shareSheets?.showConnectToServer = true }
                 .keyboardShortcut("k")
                 // Not while another sheet of the window is up (Connect to Server, sign-in, Edit, Go to Folder).
                 .disabled(
                     shareSheets == nil || shareSheets?.isPresentingSheet == true || goToFolder?.wrappedValue == true
                         || layout?.pendingTransfer != nil)
-            Button("Home") { go(FileManager.default.homeDirectoryForCurrentUser) }
+            Button(L10n.string("menu.go.home", "Home")) { go(FileManager.default.homeDirectoryForCurrentUser) }
                 .keyboardShortcut("h", modifiers: [.command, .shift])
-            Button("Desktop") { go(home("Desktop")) }
+            Button(L10n.string("menu.go.desktop", "Desktop")) { go(home("Desktop")) }
                 .keyboardShortcut("d", modifiers: [.command, .shift])
-            Button("Downloads") { go(home("Downloads")) }
+            Button(L10n.string("menu.go.downloads", "Downloads")) { go(home("Downloads")) }
                 .keyboardShortcut("l", modifiers: [.command, .option])
-            Button("Applications") { go(URL(fileURLWithPath: "/Applications", isDirectory: true)) }
+            Button(L10n.string("menu.go.applications", "Applications")) { go(URL(fileURLWithPath: "/Applications", isDirectory: true)) }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
         }
         CommandGroup(after: .toolbar) {
-            Button("Refresh") { run { await $0.reload() } }
+            Button(L10n.string("menu.view.refresh", "Refresh")) { run { await $0.reload() } }
                 .keyboardShortcut("r")
                 .disabled(model == nil)
             Divider()
             // The setting of the focused window's mode (single- and dual-pane windows each have their own).
             Button(
                 settings.settings.showsPreview(dualPane: isDual)
-                    ? String(localized: "Hide Preview") : String(localized: "Show Preview")
+                    ? L10n.string("menu.view.hidePreview", "Hide Preview") : L10n.string("menu.view.showPreview", "Show Preview")
             ) {
                 settings.settings.togglePreview(dualPane: isDual)
             }
             .keyboardShortcut("p", modifiers: [.command, .shift])
-            Toggle("Show Hidden Files", isOn: Binding(
+            Toggle(L10n.string("menu.view.showHiddenFiles", "Show Hidden Files"), isOn: Binding(
                 get: { settings.settings.showHiddenFiles },
                 set: { settings.settings.showHiddenFiles = $0 }))
                 .keyboardShortcut(".", modifiers: [.command, .shift])
-            Toggle("Show Checkbox Column", isOn: Binding(
+            Toggle(L10n.string("menu.view.showCheckboxColumn", "Show Checkbox Column"), isOn: Binding(
                 get: { settings.settings.showCheckboxColumn },
                 set: { settings.settings.showCheckboxColumn = $0 }))
             if preferences.preferences.dualPaneEnabled {
                 Divider()
-                Toggle(String(localized: "Single Pane"), isOn: Binding(
+                Toggle(L10n.string("menu.view.singlePane", "Single Pane"), isOn: Binding(
                     get: { layout?.isDual == false },
                     set: { if $0 { layout?.showSingle() } }))
                     .keyboardShortcut("1")
                     // Not while the transfer sheet is up: it targets the other pane.
                     .disabled(layout == nil || layout?.pendingTransfer != nil)
-                Toggle(String(localized: "Dual Pane"), isOn: Binding(
+                Toggle(L10n.string("menu.view.dualPane", "Dual Pane"), isOn: Binding(
                     get: { layout?.isDual == true },
                     set: { if $0 { layout?.showDual() } }))
                     .keyboardShortcut("2")
                     .disabled(layout == nil)
-                Button(String(localized: "Swap Panes")) { runLayout { await $0.swapFolders() } }
+                Button(L10n.string("menu.view.swapPanes", "Swap Panes")) { runLayout { await $0.swapFolders() } }
                     .disabled(layout?.isDual != true || layout?.pendingTransfer != nil)
-                Button(String(localized: "Same Folder in Other Pane")) {
+                Button(L10n.string("menu.view.sameFolderInOtherPane", "Same Folder in Other Pane")) {
                     runLayout { await $0.showActiveFolderInOtherPane() }
                 }
                 .disabled(layout?.canShowActiveFolderInOtherPane != true || layout?.pendingTransfer != nil)

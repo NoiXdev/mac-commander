@@ -96,8 +96,8 @@ final class FileNameCellView: NSTableCellView {
         let symbol: String?
         let tip: String?
         switch status {
-        case .notDownloaded: (symbol, tip) = ("icloud.and.arrow.down", String(localized: "Not downloaded"))
-        case .downloading: (symbol, tip) = ("arrow.down.circle", String(localized: "Downloading"))
+        case .notDownloaded: (symbol, tip) = ("icloud.and.arrow.down", L10n.string("fileList.cloud.notDownloaded", "Not downloaded"))
+        case .downloading: (symbol, tip) = ("arrow.down.circle", L10n.string("fileList.cloud.downloading", "Downloading"))
         case .current, nil: (symbol, tip) = (nil, nil)
         }
         cloudView.image = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: tip) }
@@ -226,11 +226,11 @@ enum FileListFormat {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) {
             let time = date.formatted(timeStyle)
-            return String(localized: "Today at \(time)")
+            return L10n.format("fileList.date.today", "Today at %@", time)
         }
         if calendar.isDateInYesterday(date) {
             let time = date.formatted(timeStyle)
-            return String(localized: "Yesterday at \(time)")
+            return L10n.format("fileList.date.yesterday", "Yesterday at %@", time)
         }
         return date.formatted(dateStyle)
     }

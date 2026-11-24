@@ -1,4 +1,5 @@
 import AppKit
+import MacCommanderCore
 import Quartz
 
 /// File commands that arrive at the outline view through the responder chain (menu bar and keyboard).
@@ -145,9 +146,9 @@ final class FileOutlineView: NSOutlineView, NSMenuItemValidation {
         let enabled = commandHandler?.canPerform(command) ?? false
         if command == .undo {
             if enabled, let title = commandHandler?.undoTitle {
-                menuItem.title = String(localized: "Undo \(title)")
+                menuItem.title = L10n.format("menu.edit.undoNamed", "Undo %@", title)
             } else {
-                menuItem.title = String(localized: "Undo")
+                menuItem.title = L10n.string("menu.edit.undo", "Undo")
             }
         }
         return enabled

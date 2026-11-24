@@ -20,7 +20,7 @@ struct GoToFolderSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Go to the folder:")
+            L10n.text("browser.goToFolder.prompt", "Go to the folder:")
             TextField("", text: text)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 380)
@@ -30,18 +30,18 @@ struct GoToFolderSheet: View {
                     check = nil
                 }
             if failed {
-                Text("The folder can't be found.")
+                L10n.text("browser.goToFolder.notFound", "The folder can't be found.")
                     .font(.callout)
                     .foregroundStyle(.red)
             }
             HStack {
                 Spacer()
-                Button("Cancel", role: .cancel) {
+                Button(L10n.string("browser.goToFolder.cancel", "Cancel"), role: .cancel) {
                     check?.cancel()
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Go", action: go)
+                Button(L10n.string("browser.goToFolder.go", "Go"), action: go)
                     .keyboardShortcut(.defaultAction)
                     .disabled(check != nil)
             }

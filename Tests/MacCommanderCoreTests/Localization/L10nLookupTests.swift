@@ -64,6 +64,36 @@ import Testing
         L10n.plural("tags.delete.files", count: count, one: "It is removed from 1 file.", other: "It is removed from %lld files.")
     }
 
+    /// The Quick Look and Compress items of the file list's context menu. `FileContextMenu` is in the app target,
+    /// so this looks the keys up with the same English the call sites pass.
+    @Test(arguments: [
+        (1, "Szybki przegląd 1 rzeczy", "Kompresuj 1 rzecz"),
+        (2, "Szybki przegląd 2 rzeczy", "Kompresuj 2 rzeczy"),
+        (5, "Szybki przegląd 5 rzeczy", "Kompresuj 5 rzeczy"),
+        (22, "Szybki przegląd 22 rzeczy", "Kompresuj 22 rzeczy"),
+    ])
+    func polishContextMenuCountForms(count: Int, quickLook: String, compress: String) {
+        L10n.$localeOverride.withValue("pl") {
+            #expect(Self.quickLookCount(count) == quickLook)
+            #expect(Self.compressCount(count) == compress)
+        }
+    }
+
+    @Test(.english) func englishContextMenuCountForms() {
+        #expect(Self.quickLookCount(1) == "Quick Look 1 item")
+        #expect(Self.quickLookCount(3) == "Quick Look 3 items")
+        #expect(Self.compressCount(1) == "Compress 1 Item")
+        #expect(Self.compressCount(3) == "Compress 3 Items")
+    }
+
+    private static func quickLookCount(_ count: Int) -> String {
+        L10n.plural("fileList.menu.quickLook", count: count, one: "Quick Look 1 item", other: "Quick Look %lld items")
+    }
+
+    private static func compressCount(_ count: Int) -> String {
+        L10n.plural("fileList.menu.compress", count: count, one: "Compress 1 Item", other: "Compress %lld Items")
+    }
+
     @Test func formatFillsPositionalPlaceholdersInTheTranslationsOrder() {
         L10n.$localeOverride.withValue("de") {
             #expect(L10n.format("test.location", "%1$@ is in %2$@.", "Bericht", "Dokumente") == "In Dokumente liegt Bericht.")

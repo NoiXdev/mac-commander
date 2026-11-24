@@ -127,7 +127,7 @@ struct PaneFooter: View {
         VStack(spacing: 0) {
             if model.isSearching, model.searchTruncated {
                 Divider()
-                Text(String(localized: "More than 10,000 results; refine your search."))
+                L10n.text("browser.search.truncated", "More than 10,000 results; refine your search.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)

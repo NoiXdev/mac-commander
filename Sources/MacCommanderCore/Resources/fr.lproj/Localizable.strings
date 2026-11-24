@@ -12,7 +12,7 @@
 "settings.general.language.system" = "Système";
 "settings.general.language.footer" = "Prend effet après un redémarrage.";
 "settings.general.language.relaunch" = "Relancer MacCommander";
-"settings.general.newFileName.invalid" = "Nom de fichier non valide ; « %@ » est utilisé.";
+"settings.general.newFileName.invalid" = "Nom de fichier non valide ; « %@ » est utilisé.";
 
 /* Settings > View */
 "settings.view.showCheckboxColumn" = "Afficher la colonne de cases à cocher";
@@ -263,6 +263,122 @@
 "shares.signIn.guest" = "Se connecter en tant qu’invité";
 "shares.signIn.noGuest" = "Ce partage n’accepte pas les invités.";
 "shares.signIn.rejected" = "Le nom d’utilisateur ou le mot de passe est incorrect.";
+
+/* Menu bar */
+"menu.file.open" = "Ouvrir";
+"menu.file.newFolder" = "Nouveau dossier";
+"menu.file.newEmptyFile" = "Nouveau fichier vide";
+"menu.file.duplicate" = "Dupliquer";
+"menu.file.copyToOtherPane" = "Copier dans l’autre panneau";
+"menu.file.moveToOtherPane" = "Déplacer dans l’autre panneau";
+"menu.file.moveToTrash" = "Placer dans la corbeille";
+"menu.file.getInfo" = "Lire les informations";
+"menu.edit.moveItemHere" = "Déplacer l’élément ici";
+"menu.edit.copyPath" = "Copier le chemin";
+"menu.edit.copyFolderPath" = "Copier le chemin du dossier";
+"menu.edit.find" = "Rechercher…";
+"menu.edit.undo" = "Annuler";
+"menu.edit.undoNamed" = "Annuler %@";
+"menu.go.title" = "Aller";
+"menu.go.back" = "Précédent";
+"menu.go.forward" = "Suivant";
+"menu.go.enclosingFolder" = "Dossier parent";
+"menu.go.goToFolder" = "Aller au dossier…";
+"menu.go.connectToServer" = "Se connecter au serveur…";
+"menu.go.home" = "Départ";
+"menu.go.desktop" = "Bureau";
+"menu.go.downloads" = "Téléchargements";
+"menu.go.applications" = "Applications";
+"menu.view.refresh" = "Actualiser";
+"menu.view.showPreview" = "Afficher l’aperçu";
+"menu.view.hidePreview" = "Masquer l’aperçu";
+"menu.view.showHiddenFiles" = "Afficher les fichiers masqués";
+"menu.view.showCheckboxColumn" = "Afficher la colonne de cases à cocher";
+"menu.view.singlePane" = "Panneau unique";
+"menu.view.dualPane" = "Double panneau";
+"menu.view.swapPanes" = "Permuter les panneaux";
+"menu.view.sameFolderInOtherPane" = "Même dossier dans l’autre panneau";
+
+/* App alerts */
+"app.quit.title" = "Annuler les opérations en cours et quitter ?";
+"app.quit.quit" = "Quitter";
+"app.quit.dontQuit" = "Ne pas quitter";
+"app.fullDiskAccess.title" = "Accorder l’accès complet au disque à MacCommander ?";
+"app.fullDiskAccess.message" = "MacCommander fonctionne sans, mais macOS demandera l’autorisation dossier par dossier, et certains emplacements (comme les données de Mail ou de Safari) resteront masqués. Vous pouvez accorder l’accès dans Réglages Système › Confidentialité et sécurité › Accès complet au disque.";
+"app.fullDiskAccess.openSettings" = "Ouvrir Réglages Système";
+"app.fullDiskAccess.notNow" = "Plus tard";
+
+/* Network shares: launch alerts */
+"shares.saveFailed" = "MacCommander ne peut pas enregistrer vos partages réseau : %@";
+"shares.rememberPrompt.title" = "Mémoriser ce partage ?";
+"shares.rememberPrompt.message" = "MacCommander peut garder « %@ » dans la barre latérale et le reconnecter automatiquement.";
+"shares.rememberPrompt.remember" = "Mémoriser";
+"shares.rememberPrompt.notNow" = "Plus tard";
+
+/* Browser window: toolbar, path bar, sheets */
+"browser.toolbar.search" = "Rechercher";
+"browser.toolbar.back" = "Précédent";
+"browser.toolbar.forward" = "Suivant";
+"browser.toolbar.newFolder" = "Nouveau dossier";
+"browser.toolbar.dualPane" = "Double panneau";
+"browser.toolbar.preview" = "Aperçu";
+"browser.toolbar.toggleHiddenFiles" = "Afficher ou masquer les fichiers masqués";
+"browser.pathBar.tag" = "Tag : %@";
+"browser.pathBar.searching" = "Recherche de « %1$@ » dans %2$@";
+"browser.pathBar.copyPath" = "Copier le chemin";
+"browser.search.truncated" = "Plus de 10 000 résultats ; affinez votre recherche.";
+"browser.goToFolder.prompt" = "Aller au dossier :";
+"browser.goToFolder.notFound" = "Le dossier est introuvable.";
+"browser.goToFolder.cancel" = "Annuler";
+"browser.goToFolder.go" = "Aller";
+"browser.transfer.cancel" = "Annuler";
+"browser.transfer.ok" = "OK";
+"browser.transfer.invalidPath" = "Saisissez le chemin complet d’un dossier, commençant par / ou ~.";
+"browser.transfer.noFolder" = "Aucun dossier ne se trouve à ce chemin.";
+
+/* File list: context menu */
+"fileList.menu.open" = "Ouvrir";
+"fileList.menu.quickLookOne" = "Coup d’œil sur « %@ »";
+"fileList.menu.rename" = "Renommer";
+"fileList.menu.duplicate" = "Dupliquer";
+"fileList.menu.copy" = "Copier";
+"fileList.menu.cut" = "Couper";
+"fileList.menu.paste" = "Coller";
+"fileList.menu.copyToOtherPane" = "Copier dans l’autre panneau";
+"fileList.menu.moveToOtherPane" = "Déplacer dans l’autre panneau";
+"fileList.menu.moveToTrash" = "Placer dans la corbeille";
+"fileList.menu.compressOne" = "Compresser « %@ »";
+"fileList.menu.getInfo" = "Lire les informations";
+"fileList.menu.copyPath" = "Copier le chemin";
+"fileList.menu.copyFolderPath" = "Copier le chemin du dossier";
+"fileList.menu.revealInFinder" = "Afficher dans le Finder";
+"fileList.menu.openInTerminal" = "Ouvrir dans Terminal";
+"fileList.menu.newFolder" = "Nouveau dossier";
+"fileList.menu.newEmptyFile" = "Nouveau fichier vide";
+"fileList.menu.sortBy" = "Trier par";
+"fileList.menu.showHiddenFiles" = "Afficher les fichiers masqués";
+"fileList.menu.showCheckboxColumn" = "Afficher la colonne de cases à cocher";
+"fileList.menu.extractAll" = "Tout extraire…";
+"fileList.menu.extractAllHere" = "Tout extraire ici";
+"fileList.menu.extractToFolder" = "Extraire dans « %@ »";
+"fileList.menu.extractTo" = "Extraire vers…";
+"fileList.menu.openWithArchiveUtility" = "Ouvrir avec Utilitaire d’archive";
+"fileList.menu.browseContents" = "Parcourir le contenu";
+
+/* File list: rows, placeholders and empty states */
+"fileList.cloud.notDownloaded" = "Pas téléchargé";
+"fileList.cloud.downloading" = "Téléchargement";
+"fileList.date.today" = "aujourd’hui à %@";
+"fileList.date.yesterday" = "hier à %@";
+"fileList.empty.noItems" = "Aucun élément";
+"fileList.empty.searching" = "Recherche…";
+"fileList.empty.noResults" = "Aucun résultat";
+"fileList.disconnected.title" = "Déconnecté";
+"fileList.disconnected.reconnect" = "Se reconnecter";
+"fileList.disconnected.signIn" = "S’identifier…";
+"fileList.unreadable.openPrivacySettings" = "Ouvrir les réglages de confidentialité";
+"fileList.unreadable.enterPassword" = "Saisir le mot de passe…";
+"name.untitled" = "sans titre";
 
 /* Seeds for the lookup tests; no source uses them. */
 "test.location" = "%1$@ se trouve dans %2$@.";
