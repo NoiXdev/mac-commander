@@ -1,6 +1,7 @@
 /* Settings window sidebar */
 "settings.section.general" = "Ogólne";
 "settings.section.view" = "Widok";
+"settings.section.openWith" = "Otwórz w aplikacji";
 "settings.section.terminal" = "Terminal";
 "settings.section.shortcuts" = "Skróty";
 "settings.section.sidebar" = "Pasek boczny";
@@ -30,6 +31,18 @@
 "settings.general.fileViewer.footer" = "„Pokaż w Finderze” w innych aplikacjach otwiera okno aplikacji MacCommander. Foldery otwierane ze Spotlight lub z Docka nadal otwierają się w Finderze.";
 "settings.general.fullDiskAccess.label" = "Pełny dostęp do dysku:";
 "settings.general.fullDiskAccess.button" = "Pełny dostęp do dysku…";
+
+/* Settings > Open With */
+"settings.openWith.rules.header" = "Reguły";
+"settings.openWith.rules.footer" = "Reguły działają tylko w aplikacji MacCommander. Bez reguły pliki otwierają się w aplikacji przypisanej przez macOS.";
+"settings.openWith.remove" = "Usuń";
+"settings.openWith.notInstalled" = "Niezainstalowana";
+"settings.openWith.notInstalled.help" = "Pliki z tym rozszerzeniem otwierają się w aplikacji przypisanej przez macOS, dopóki nie wybierzesz innej aplikacji.";
+"settings.openWith.changeApp" = "Wybierz inną aplikację";
+"settings.openWith.extension" = "Rozszerzenie";
+"settings.openWith.extensionPlaceholder" = "php";
+"settings.openWith.chooseApp" = "Wybierz aplikację…";
+"settings.openWith.panelPrompt" = "Wybierz";
 
 /* Settings > Terminal */
 "settings.terminal.app" = "Aplikacja terminala:";

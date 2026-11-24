@@ -1,6 +1,7 @@
 /* Settings window sidebar */
 "settings.section.general" = "General";
 "settings.section.view" = "View";
+"settings.section.openWith" = "Open With";
 "settings.section.terminal" = "Terminal";
 "settings.section.shortcuts" = "Shortcuts";
 "settings.section.sidebar" = "Sidebar";
@@ -30,6 +31,18 @@
 "settings.general.fileViewer.footer" = "Other apps’ “Show in Finder” opens a MacCommander window. Folders opened from Spotlight or the Dock still open in the Finder.";
 "settings.general.fullDiskAccess.label" = "Full Disk Access:";
 "settings.general.fullDiskAccess.button" = "Full Disk Access…";
+
+/* Settings > Open With */
+"settings.openWith.rules.header" = "Rules";
+"settings.openWith.rules.footer" = "Rules apply only in MacCommander. Without a rule, files open with the app macOS assigns.";
+"settings.openWith.remove" = "Remove";
+"settings.openWith.notInstalled" = "Not installed";
+"settings.openWith.notInstalled.help" = "Files with this extension open with the app macOS assigns until you choose another app.";
+"settings.openWith.changeApp" = "Choose another app";
+"settings.openWith.extension" = "Extension";
+"settings.openWith.extensionPlaceholder" = "php";
+"settings.openWith.chooseApp" = "Choose App…";
+"settings.openWith.panelPrompt" = "Choose";
 
 /* Settings > Terminal */
 "settings.terminal.app" = "Terminal app:";

@@ -35,6 +35,7 @@ struct SettingsView: View {
                 switch selection ?? .general {
                 case .general: GeneralSettings()
                 case .view: AppearanceSettings()
+                case .openWith: OpenWithSettings()
                 case .terminal: TerminalSettings()
                 case .shortcuts: ShortcutsSettings()
                 case .sidebar: SidebarSettings()
