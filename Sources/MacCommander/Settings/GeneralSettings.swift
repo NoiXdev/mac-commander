@@ -2,10 +2,11 @@ import AppKit
 import MacCommanderCore
 import SwiftUI
 
-/// General settings: the folder new windows open, the default name for new files, "Show in Finder", and the
-/// Full Disk Access hint.
+/// General settings: the folder new windows open, the default name for new files, "Show in Finder", the update
+/// check and the Full Disk Access hint.
 struct GeneralSettings: View {
     @Environment(PreferencesStore.self) private var preferences
+    @Environment(UpdateCheckModel.self) private var updates
     /// The Settings window, so the folder panel can be a sheet on it.
     private let windowState = State(initialValue: WindowBox())
     /// The global `NSFileViewer` value, re-read each time the pane appears (another app may have changed it).
@@ -74,6 +75,17 @@ struct GeneralSettings: View {
                     L10n.text("settings.general.fileViewer.footer", "Other apps’ “Show in Finder” opens a MacCommander window. Folders opened from Spotlight or the Dock still open in the Finder.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+            }
+            Section {
+                Toggle(
+                    L10n.string("settings.general.updates.automatic", "Check for updates automatically"),
+                    isOn: Bindable(preferences).preferences.updateCheckEnabled)
+                LabeledContent(L10n.string("settings.general.updates.label", "Updates:")) {
+                    Button(L10n.string("settings.general.updates.checkNow", "Check Now")) {
+                        Task { await updates.check(manual: true, preferences: preferences) }
+                    }
+                    .disabled(updates.isChecking)
                 }
             }
             Section {

@@ -31,6 +31,9 @@
 "settings.general.fileViewer.footer" = "„Im Finder zeigen“ in anderen Apps öffnet ein MacCommander-Fenster. Ordner, die du über Spotlight oder das Dock öffnest, werden weiterhin im Finder geöffnet.";
 "settings.general.fullDiskAccess.label" = "Festplattenvollzugriff:";
 "settings.general.fullDiskAccess.button" = "Festplattenvollzugriff …";
+"settings.general.updates.automatic" = "Automatisch nach Updates suchen";
+"settings.general.updates.label" = "Updates:";
+"settings.general.updates.checkNow" = "Jetzt suchen";
 
 /* Settings > Open With */
 "settings.openWith.rules.header" = "Regeln";
@@ -311,6 +314,7 @@
 "menu.view.dualPane" = "Zwei Bereiche";
 "menu.view.swapPanes" = "Bereiche tauschen";
 "menu.view.sameFolderInOtherPane" = "Gleicher Ordner im anderen Bereich";
+"menu.app.checkForUpdates" = "Nach Updates suchen …";
 
 /* App alerts */
 "app.quit.title" = "Laufende Vorgänge abbrechen und beenden?";
@@ -329,6 +333,22 @@
 "shares.rememberPrompt.message" = "MacCommander kann „%@“ in der Seitenleiste behalten und automatisch wieder verbinden.";
 "shares.rememberPrompt.remember" = "Merken";
 "shares.rememberPrompt.notNow" = "Nicht jetzt";
+
+/* Update check */
+"update.available.title" = "MacCommander %@ ist verfügbar";
+"update.available.message" = "Du hast Version %@.";
+"update.available.homebrew" = "Mit Homebrew installiert: Führe brew upgrade --cask maccommander aus";
+"update.available.openReleasePage" = "Release-Seite öffnen";
+"update.available.later" = "Später";
+"update.upToDate.title" = "MacCommander ist auf dem neuesten Stand";
+"update.upToDate.message" = "Du hast die neueste Version, %@.";
+"update.failed.title" = "MacCommander konnte nicht nach Updates suchen";
+"update.failed.offline" = "Du bist anscheinend offline.";
+"update.failed.rateLimited" = "GitHubs Limit für Update-Abfragen ist erreicht. Versuche es später noch einmal.";
+"update.failed.httpStatus" = "GitHub hat mit Status %lld geantwortet.";
+"update.failed.malformed" = "Die Antwort von GitHub konnte nicht gelesen werden.";
+"update.failed.unknownVersion" = "Dieser Build hat keine Versionsnummer zum Vergleichen.";
+"update.ok" = "OK";
 
 /* Browser window: toolbar, path bar, sheets */
 "browser.toolbar.search" = "Suchen";

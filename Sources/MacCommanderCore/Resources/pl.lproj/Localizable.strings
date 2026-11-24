@@ -31,6 +31,9 @@
 "settings.general.fileViewer.footer" = "„Pokaż w Finderze” w innych aplikacjach otwiera okno aplikacji MacCommander. Foldery otwierane ze Spotlight lub z Docka nadal otwierają się w Finderze.";
 "settings.general.fullDiskAccess.label" = "Pełny dostęp do dysku:";
 "settings.general.fullDiskAccess.button" = "Pełny dostęp do dysku…";
+"settings.general.updates.automatic" = "Automatycznie sprawdzaj uaktualnienia";
+"settings.general.updates.label" = "Uaktualnienia:";
+"settings.general.updates.checkNow" = "Sprawdź teraz";
 
 /* Settings > Open With */
 "settings.openWith.rules.header" = "Reguły";
@@ -311,6 +314,7 @@
 "menu.view.dualPane" = "Dwa panele";
 "menu.view.swapPanes" = "Zamień panele";
 "menu.view.sameFolderInOtherPane" = "Ten sam folder w drugim panelu";
+"menu.app.checkForUpdates" = "Sprawdź uaktualnienia…";
 
 /* App alerts */
 "app.quit.title" = "Anulować trwające operacje i zakończyć?";
@@ -329,6 +333,22 @@
 "shares.rememberPrompt.message" = "MacCommander może zachować „%@” na pasku bocznym i automatycznie łączyć ponownie.";
 "shares.rememberPrompt.remember" = "Zapamiętaj";
 "shares.rememberPrompt.notNow" = "Nie teraz";
+
+/* Update check */
+"update.available.title" = "Dostępna jest aplikacja MacCommander %@";
+"update.available.message" = "Masz wersję %@.";
+"update.available.homebrew" = "Zainstalowano przez Homebrew: uruchom brew upgrade --cask maccommander";
+"update.available.openReleasePage" = "Otwórz stronę wydania";
+"update.available.later" = "Później";
+"update.upToDate.title" = "Aplikacja MacCommander jest aktualna";
+"update.upToDate.message" = "Masz najnowszą wersję, %@.";
+"update.failed.title" = "Nie można sprawdzić uaktualnień aplikacji MacCommander";
+"update.failed.offline" = "Wygląda na to, że jesteś offline.";
+"update.failed.rateLimited" = "Osiągnięto limit GitHuba dla sprawdzania uaktualnień. Spróbuj ponownie później.";
+"update.failed.httpStatus" = "GitHub odpowiedział kodem stanu %lld.";
+"update.failed.malformed" = "Nie można odczytać odpowiedzi GitHuba.";
+"update.failed.unknownVersion" = "Ta kompilacja nie ma numeru wersji do porównania.";
+"update.ok" = "OK";
 
 /* Browser window: toolbar, path bar, sheets */
 "browser.toolbar.search" = "Szukaj";

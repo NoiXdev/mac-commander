@@ -31,6 +31,9 @@
 "settings.general.fileViewer.footer" = "« Afficher dans le Finder » dans les autres apps ouvre une fenêtre MacCommander. Les dossiers ouverts depuis Spotlight ou le Dock s’ouvrent toujours dans le Finder.";
 "settings.general.fullDiskAccess.label" = "Accès complet au disque :";
 "settings.general.fullDiskAccess.button" = "Accès complet au disque…";
+"settings.general.updates.automatic" = "Rechercher automatiquement les mises à jour";
+"settings.general.updates.label" = "Mises à jour :";
+"settings.general.updates.checkNow" = "Rechercher maintenant";
 
 /* Settings > Open With */
 "settings.openWith.rules.header" = "Règles";
@@ -311,6 +314,7 @@
 "menu.view.dualPane" = "Double panneau";
 "menu.view.swapPanes" = "Permuter les panneaux";
 "menu.view.sameFolderInOtherPane" = "Même dossier dans l’autre panneau";
+"menu.app.checkForUpdates" = "Rechercher les mises à jour…";
 
 /* App alerts */
 "app.quit.title" = "Annuler les opérations en cours et quitter ?";
@@ -329,6 +333,22 @@
 "shares.rememberPrompt.message" = "MacCommander peut garder « %@ » dans la barre latérale et le reconnecter automatiquement.";
 "shares.rememberPrompt.remember" = "Mémoriser";
 "shares.rememberPrompt.notNow" = "Plus tard";
+
+/* Update check */
+"update.available.title" = "MacCommander %@ est disponible";
+"update.available.message" = "Vous avez la version %@.";
+"update.available.homebrew" = "Installé avec Homebrew : exécutez brew upgrade --cask maccommander";
+"update.available.openReleasePage" = "Ouvrir la page de la version";
+"update.available.later" = "Plus tard";
+"update.upToDate.title" = "MacCommander est à jour";
+"update.upToDate.message" = "Vous avez la dernière version, %@.";
+"update.failed.title" = "Impossible de rechercher les mises à jour de MacCommander";
+"update.failed.offline" = "Vous semblez être hors ligne.";
+"update.failed.rateLimited" = "La limite de GitHub pour la recherche de mises à jour est atteinte. Réessayez plus tard.";
+"update.failed.httpStatus" = "GitHub a répondu avec le statut %lld.";
+"update.failed.malformed" = "La réponse de GitHub n’a pas pu être lue.";
+"update.failed.unknownVersion" = "Cette compilation n’a pas de numéro de version à comparer.";
+"update.ok" = "OK";
 
 /* Browser window: toolbar, path bar, sheets */
 "browser.toolbar.search" = "Rechercher";

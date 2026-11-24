@@ -5,6 +5,8 @@ import SwiftUI
 struct BrowserCommands: Commands {
     let settings: ViewSettingsStore
     let preferences: PreferencesStore
+    /// The app's one update check, shared with Settings and the launch check.
+    let updates: UpdateCheckModel
     /// The focused window's active pane.
     @FocusedValue(\.browserModel) private var model
     @FocusedValue(\.paneLayout) private var layout
@@ -13,6 +15,13 @@ struct BrowserCommands: Commands {
     @FocusedValue(\.searchFocused) private var searchFocused
 
     var body: some Commands {
+        // Directly under About MacCommander.
+        CommandGroup(after: .appInfo) {
+            Button(L10n.string("menu.app.checkForUpdates", "Check for Updates…")) {
+                Task { await updates.check(manual: true, preferences: preferences) }
+            }
+            .disabled(updates.isChecking)
+        }
         // The default New Window (⌘N) from WindowGroup stays; a new window starts at home.
         CommandGroup(after: .newItem) {
             Button(L10n.string("menu.file.open", "Open")) { openSelection() }

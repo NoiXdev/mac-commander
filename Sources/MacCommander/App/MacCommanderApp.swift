@@ -34,7 +34,7 @@ struct MacCommanderApp: App {
         }
         .handlesExternalEvents(matching: [])
         .commands {
-            BrowserCommands(settings: settings, preferences: preferences)
+            BrowserCommands(settings: settings, preferences: preferences, updates: appDelegate.updates)
         }
 
         // One window per item; opening the same URL again focuses the existing window.
@@ -54,6 +54,7 @@ struct MacCommanderApp: App {
                 .environment(appDelegate.shares.manager)
                 .environment(appDelegate.router)
                 .environment(appDelegate.hotKeys)
+                .environment(appDelegate.updates)
         }
         .windowResizability(.contentMinSize)
     }
@@ -65,7 +66,8 @@ struct MacCommanderApp: App {
 /// whose running operations it cancels at quit.
 /// Starts the tag catalog (`TagCatalog.shared`) and the ffmpeg check (`FFmpegLocator.shared`) at launch.
 /// Hands opened folders and items to the `OpenRequestRouter`. Owns the global hotkey and registers the stored
-/// one at launch.
+/// one at launch. Owns the update check (one for the menu, Settings and the launch check) and starts the launch
+/// check when it's due.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// How long quitting waits for cancelled operations, the purge and the share list's last write.
@@ -76,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let operations = FileOperationCenter()
     let router = OpenRequestRouter()
     let hotKeys = HotKeyCenter()
+    let updates = UpdateCheckModel()
     /// Set once quitting was answered (the work finished or the timeout passed).
     private var didReplyToTerminate = false
 
@@ -104,6 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         TagCatalog.shared.start(standard: TagMenu.standardTags(), known: preferences.preferences.knownTags)
         // The Convert menu is built from the cached result and never waits for the check.
         Task { _ = await FFmpegLocator.shared.status() }
+        // Starts its own task and returns at once; only an available update shows an alert, queued.
+        updates.checkAutomaticallyIfDue(preferences: preferences)
     }
 
     /// With operations running, quitting asks first and then cancels them all. Quitting waits
