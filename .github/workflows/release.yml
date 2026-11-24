@@ -84,8 +84,8 @@ jobs:
     outputs:
       sha256: ${{ steps.dmg.outputs.sha256 }}
     # Same label as ci.yml, so the gate and the shipped build read the same
-    # compiler. Apple Silicon: scripts/build-app.sh builds for the host
-    # architecture only, so the shipped app is arm64-only.
+    # compiler. scripts/build-app.sh -c release builds a universal app
+    # (arm64 + x86_64, joined with lipo), as the Homebrew tap requires.
     runs-on: macos-latest
     env:
       TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -114,7 +114,9 @@ jobs:
         # The release must never be mislabelled, so the tag wins: its
         # version, without a pre-release suffix (CFBundleShortVersionString
         # is three integers), goes into the runner's copy only — nothing is
-        # committed. CFBundleVersion takes the workflow run number so every
+        # committed. The full version, suffix included, goes into the custom
+        # NXReleaseVersion key: the update check reads it, so a beta is never
+        # mistaken for its final release. CFBundleVersion takes the workflow run number so every
         # shipped build has a distinct, increasing build number.
         run: |
           set -euo pipefail
@@ -123,7 +125,9 @@ jobs:
           plist=Resources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $short" "$plist"
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $GITHUB_RUN_NUMBER" "$plist"
-          echo "CFBundleShortVersionString=$short CFBundleVersion=$GITHUB_RUN_NUMBER"
+          /usr/libexec/PlistBuddy -c "Set :NXReleaseVersion $version" "$plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :NXReleaseVersion string $version" "$plist"
+          echo "CFBundleShortVersionString=$short NXReleaseVersion=$version CFBundleVersion=$GITHUB_RUN_NUMBER"
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
       - name: Import signing certificate
@@ -226,8 +230,8 @@ jobs:
         run: rm -f "$RUNNER_TEMP/apple_api_key.p8"
 
       - name: Checksum the DMG
-        # Printed and exposed as a job output for whoever needs it later
-        # (a Homebrew cask, a download page); nothing consumes it yet.
+        # Printed and exposed as a job output: the `tap` job below hands it to
+        # the Homebrew cask.
         id: dmg
         run: |
           set -uo pipefail
@@ -258,3 +262,55 @@ jobs:
     with:
       tag: ${{ github.event.inputs.tag || github.ref_name }}
     secrets: inherit
+
+  tap:
+    name: Bump the Homebrew cask
+    needs: build
+    # Homebrew has no concept of a prerelease: whatever lands in the tap is
+    # what `brew upgrade` hands every user. Pre-releases therefore skip this
+    # and are installed from the releases page instead, the same rule the
+    # tap's own README states.
+    if: ${{ !contains(github.event.inputs.tag || github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch the bump
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          SHA: ${{ needs.build.outputs.sha256 }}
+        run: |
+          set -uo pipefail
+          [ -n "$SHA" ] || { echo "::error::the build job produced no checksum" >&2; exit 1; }
+          for attempt in 1 2 3; do
+            if gh workflow run bump.yml --repo NoiXdev/homebrew-tap \
+              -f kind=cask \
+              -f name=maccommander \
+              -f version="${TAG#v}" \
+              -f sha256="$SHA"; then
+              echo "Dispatched on attempt $attempt."
+              exit 0
+            fi
+            echo "Dispatch attempt $attempt failed."
+            sleep 10
+          done
+          exit 1
+
+      # This job runs after the release is already public. A silent failure
+      # here leaves the tap pointing at the previous version, so say exactly
+      # what to run by hand. See SETUP.md in NoiXdev/homebrew-tap.
+      - name: Explain how to finish the bump by hand
+        if: failure()
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+          SHA: ${{ needs.build.outputs.sha256 }}
+        run: |
+          echo "::error::The tap was not bumped. The release is already published,"
+          echo "::error::so 'brew install --cask maccommander' still installs the previous version."
+          echo "Run it by hand with a token that may dispatch workflows in the tap:"
+          echo ""
+          echo "  gh workflow run bump.yml --repo NoiXdev/homebrew-tap \\"
+          echo "    -f kind=cask -f name=maccommander \\"
+          echo "    -f version=${TAG#v} -f sha256=${SHA}"
+          echo ""
+          echo "A 403 here means TAP_TOKEN cannot dispatch in NoiXdev/homebrew-tap."
+          echo "See SETUP.md in that repository for what the token needs."
